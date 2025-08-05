@@ -65,26 +65,9 @@ public final class UIConstants {
     public static final float[] DASH_PATTERN = {5.0f, 5.0f};
     public static final Color ROI_COLOR = new Color(255, 255, 0, 180); // Semi-transparent yellow
     public static final Color ROI_SELECTION_COLOR = new Color(255, 0, 0, 200); // Semi-transparent red
-    // Vessel segmentation constants
-    public static final int VESSEL_THRESHOLD = 220;
-    public static final double MIN_VESSEL_SIZE = 50.0;  // minimum area in pixels
-    public static final double MAX_VESSEL_SIZE = Double.MAX_VALUE;  // no maximum limit
-    public static final double GAUSSIAN_BLUR_SIGMA = 2.0;  // Blur parameter to reduce noise
+    
+    // ROI type colors (UI display only)
     public static final Color VESSEL_ROI_COLOR = Color.RED;  // Vessels displayed in red
-    
-    // Nuclear segmentation constants (StarDist)
-    public static final String DEFAULT_STARDIST_MODEL = "Versatile (H&E nuclei)";
-    public static final float DEFAULT_PROB_THRESHOLD = 0.5f;  // Probability threshold for nucleus detection
-    public static final float DEFAULT_NMS_THRESHOLD = 0.4f;   // Non-maximum suppression threshold
-    public static final float DEFAULT_PERCENTILE_LOW = 1.0f;  // Bottom percentile for normalization
-    public static final float DEFAULT_PERCENTILE_HIGH = 99.8f; // Top percentile for normalization
-    public static final int DEFAULT_N_TILES = 1;              // Number of tiles for processing
-    public static final double MIN_NUCLEUS_SIZE = 10.0;       // Minimum nucleus area in pixels
-    public static final double MAX_NUCLEUS_SIZE = 1000.0;     // Maximum nucleus area in pixels
     public static final Color NUCLEUS_ROI_COLOR = new Color(0, 255, 0, 128); // Semi-transparent green
-    
-    // Segmentation workflow constants
-    public static final int SEGMENTATION_PROGRESS_UPDATE_INTERVAL = 100; // milliseconds
-    public static final boolean DEFAULT_SHOW_SEGMENTATION_PROGRESS = false;
-    public static final boolean DEFAULT_VERBOSE_SEGMENTATION = false;
+    public static final Color CYTOPLASM_ROI_COLOR = new Color(0, 0, 255, 128); // Semi-transparent blue
 }

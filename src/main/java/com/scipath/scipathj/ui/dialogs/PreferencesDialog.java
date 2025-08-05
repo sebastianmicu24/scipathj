@@ -145,14 +145,23 @@ public class PreferencesDialog extends JDialog {
             
             super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
             
-            if (value instanceof ThemeManager.Theme theme) {
+            if (value instanceof ThemeManager.Theme) {
+                ThemeManager.Theme theme = (ThemeManager.Theme) value;
                 setText(theme.getDisplayName());
                 
                 // Add theme-specific icons
-                FontIcon icon = switch (theme) {
-                    case LIGHT -> FontIcon.of(FontAwesomeSolid.SUN, 16);
-                    case DARK -> FontIcon.of(FontAwesomeSolid.MOON, 16);
-                };
+                FontIcon icon;
+                switch (theme) {
+                    case LIGHT:
+                        icon = FontIcon.of(FontAwesomeSolid.SUN, 16);
+                        break;
+                    case DARK:
+                        icon = FontIcon.of(FontAwesomeSolid.MOON, 16);
+                        break;
+                    default:
+                        icon = FontIcon.of(FontAwesomeSolid.SUN, 16);
+                        break;
+                }
                 setIcon(icon);
             }
             

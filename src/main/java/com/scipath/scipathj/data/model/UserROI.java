@@ -17,7 +17,11 @@ public class UserROI {
         SQUARE("Square"),
         CIRCLE("Circle"),
         POLYGON("Polygon"),
-        COMPLEX_SHAPE("Complex Shape"); // For vessel ROIs with complex shapes
+        COMPLEX_SHAPE("Complex Shape"), // For vessel ROIs with complex shapes
+        NUCLEUS("Nucleus"),
+        CYTOPLASM("Cytoplasm"),
+        CELL("Cell"),
+        VESSEL("Vessel");
         
         private final String displayName;
         

@@ -272,19 +272,42 @@ public class ROIOverlay extends JComponent {
          * Determine the ROI category based on the ROI properties
          */
         private MainSettings.ROICategory determineROICategory(UserROI roi) {
-            // Check if this is a vessel ROI (has complex shape or is named as vessel)
-            if (roi.hasComplexShape() || roi.getName().toLowerCase().contains("vessel")) {
-                return MainSettings.ROICategory.VESSEL;
+            // First check the ROI type enum
+            UserROI.ROIType roiType = roi.getType();
+            switch (roiType) {
+                case VESSEL:
+                    return MainSettings.ROICategory.VESSEL;
+                case NUCLEUS:
+                    return MainSettings.ROICategory.NUCLEUS;
+                case CYTOPLASM:
+                    return MainSettings.ROICategory.CYTOPLASM;
+                case CELL:
+                    return MainSettings.ROICategory.CELL;
+                default:
+                    break;
             }
             
-            // Check for nucleus ROI
-            if (roi.getName().toLowerCase().contains("nucleus") || roi.getName().toLowerCase().contains("nuclei")) {
-                return MainSettings.ROICategory.NUCLEUS;
+            // Fallback to name-based detection for backward compatibility
+            String name = roi.getName().toLowerCase();
+            
+            // Check for cell ROI
+            if (name.contains("cell")) {
+                return MainSettings.ROICategory.CELL;
             }
             
             // Check for cytoplasm ROI
-            if (roi.getName().toLowerCase().contains("cytoplasm") || roi.getName().toLowerCase().contains("cyto")) {
+            if (name.contains("cytoplasm") || name.contains("cyto")) {
                 return MainSettings.ROICategory.CYTOPLASM;
+            }
+            
+            // Check for nucleus ROI
+            if (name.contains("nucleus") || name.contains("nuclei")) {
+                return MainSettings.ROICategory.NUCLEUS;
+            }
+            
+            // Check if this is a vessel ROI (has complex shape or is named as vessel)
+            if (roi.hasComplexShape() || name.contains("vessel")) {
+                return MainSettings.ROICategory.VESSEL;
             }
             
             // Default to vessel ROI for any other user-created ROIs

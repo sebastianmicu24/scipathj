@@ -79,6 +79,7 @@ import org.scijava.prefs.PrefService;
 import org.scijava.thread.ThreadService;
 import org.scijava.ui.UIService;
 import org.scijava.widget.Button;
+import com.scipath.scipathj.core.utils.DirectFileLogger;
 
 import javax.swing.*;
 import java.io.File;
@@ -177,7 +178,10 @@ public abstract class GenericCoreNetwork implements
 	@Parameter
 	private ThreadService threadService;
 
+	@Parameter(required = false)
 	protected String modelName;
+
+	protected String generatedModelName;
 
 	protected TaskManager taskManager;
 
@@ -310,16 +314,40 @@ public abstract class GenericCoreNetwork implements
 
 	@Override
 	public void initialize() {
+		DirectFileLogger.logStarDist("INFO", "=== INIZIO INIZIALIZZAZIONE GENERIC CORE NETWORK ===");
+		DirectFileLogger.logStarDist("INFO", "Classe: " + this.getClass().getSimpleName());
+		
 		initialized = true;
 		cacheName = this.getClass().getSimpleName();
 		modelFileKey = getModelFileKey();
+		
+		DirectFileLogger.logStarDist("INFO", "Cache name: " + cacheName);
+		DirectFileLogger.logStarDist("INFO", "Model file key: " + modelFileKey);
+		
+		DirectFileLogger.logStarDist("INFO", "Inizializzazione tasks...");
 		initTasks();
+		
+		DirectFileLogger.logStarDist("INFO", "Inizializzazione network...");
 		initNetwork();
-		if (!network.libraryLoaded()) {
-			this.cancel("TensorFlow library could not be loaded");
-			return;
+		
+		DirectFileLogger.logStarDist("INFO", "Network presente: " + (network != null));
+		if (network != null) {
+			DirectFileLogger.logStarDist("INFO", "Network class: " + network.getClass().getSimpleName());
+			boolean libraryLoaded = network.libraryLoaded();
+			DirectFileLogger.logStarDist("INFO", "Network library loaded: " + libraryLoaded);
+			
+			if (!libraryLoaded) {
+				DirectFileLogger.logStarDist("ERROR", "TensorFlow library non caricata - cancellazione");
+				this.cancel("TensorFlow library could not be loaded");
+				return;
+			}
+		} else {
+			DirectFileLogger.logStarDist("ERROR", "Network è null!");
 		}
+		
+		DirectFileLogger.logStarDist("INFO", "Inizializzazione task manager...");
 		initTaskManager();
+		DirectFileLogger.logStarDist("INFO", "=== FINE INIZIALIZZAZIONE GENERIC CORE NETWORK ===");
 	}
 
 	public String getModelFileKey() {
@@ -331,18 +359,38 @@ public abstract class GenericCoreNetwork implements
 			initialize();
 		}
 	}
-
-	protected boolean initNetwork() {
-		networkInitialized = true;
-		// Use our Java 21 compatible wrapper instead of the original TensorFlowNetwork
-		network = new TensorFlowNetworkWrapper(modelExecutor);
-		context.inject(network);
-		network.loadLibrary();
-		if(!network.libraryLoaded()) {
-			return false;
-		}
-		return true;
+protected boolean initNetwork() {
+	DirectFileLogger.logStarDist("INFO", "--- Inizio inizializzazione network ---");
+	networkInitialized = true;
+	
+	DirectFileLogger.logStarDist("INFO", "Creazione TensorFlowNetworkWrapper...");
+	DirectFileLogger.logStarDist("INFO", "ModelExecutor presente: " + (modelExecutor != null));
+	if (modelExecutor != null) {
+		DirectFileLogger.logStarDist("INFO", "ModelExecutor class: " + modelExecutor.getClass().getSimpleName());
 	}
+	
+	// Use our Java 21 compatible wrapper instead of the original TensorFlowNetwork
+	network = new TensorFlowNetworkWrapper(modelExecutor);
+	DirectFileLogger.logStarDist("INFO", "TensorFlowNetworkWrapper creato: " + (network != null));
+	
+	DirectFileLogger.logStarDist("INFO", "Context injection...");
+	DirectFileLogger.logStarDist("INFO", "Context presente: " + (context != null));
+	context.inject(network);
+	
+	DirectFileLogger.logStarDist("INFO", "Caricamento libreria network...");
+	network.loadLibrary();
+	
+	boolean libraryLoaded = network.libraryLoaded();
+	DirectFileLogger.logStarDist("INFO", "Library loaded result: " + libraryLoaded);
+	
+	if(!libraryLoaded) {
+		DirectFileLogger.logStarDist("ERROR", "Libreria non caricata - ritorno false");
+		return false;
+	}
+	
+	DirectFileLogger.logStarDist("INFO", "--- Fine inizializzazione network - SUCCESS ---");
+	return true;
+}
 
 	protected void initTasks() {
 		inputValidator = initInputValidator();
@@ -369,7 +417,7 @@ public abstract class GenericCoreNetwork implements
 	}
 
 	protected InputValidator initInputValidator() {
-		return new DefaultInputValidator();
+		return new de.csbdresden.csbdeep.network.Java23CompatibleInputValidator();
 	}
 
 	protected InputMapper initInputMapper() {
@@ -510,30 +558,73 @@ public abstract class GenericCoreNetwork implements
 	}
 
 	protected void tryToPrepareInputAndNetwork() throws FileNotFoundException {
+		DirectFileLogger.logStarDist("INFO", "=== INIZIO PREPARAZIONE INPUT E NETWORK ===");
 
 		networkAndInputCompatible = false;
+		
+		// Store the generated cache name for internal use
+		generatedModelName = cacheName;
+		
+		// Use the modelName parameter from StarDist if provided, otherwise use the generated cache name
+		if (modelName == null || modelName.trim().isEmpty()) {
+			modelName = generatedModelName;
+			DirectFileLogger.logStarDist("INFO", "Using generated model name: " + modelName);
+		} else {
+			DirectFileLogger.logStarDist("INFO", "Using StarDist model name: " + modelName);
+			DirectFileLogger.logStarDist("INFO", "Generated cache name: " + generatedModelName);
+		}
 
-		modelName = cacheName;
-
+		DirectFileLogger.logStarDist("INFO", "Network initialized: " + networkInitialized);
 		if(!networkInitialized) {
+			DirectFileLogger.logStarDist("INFO", "Inizializzazione network...");
 			initNetwork();
 		}
-		if(!network.libraryLoaded()) return;
+		
+		DirectFileLogger.logStarDist("INFO", "Network presente: " + (network != null));
+		if (network != null) {
+			boolean libraryLoaded = network.libraryLoaded();
+			DirectFileLogger.logStarDist("INFO", "Network library loaded: " + libraryLoaded);
+			if(!libraryLoaded) {
+				DirectFileLogger.logStarDist("ERROR", "Libreria non caricata - uscita");
+				return;
+			}
+		} else {
+			DirectFileLogger.logStarDist("ERROR", "Network è null - uscita");
+			return;
+		}
 
+		DirectFileLogger.logStarDist("INFO", "Model file URL: " + modelFileUrl);
 		if(modelFileUrl.isEmpty()) {
+			DirectFileLogger.logStarDist("ERROR", "Model file URL vuoto");
 			taskManager.logError("Trained model file / URL is missing or unavailable");
 		}
+		
+		DirectFileLogger.logStarDist("INFO", "Caricamento modello...");
+		DirectFileLogger.logStarDist("INFO", "ModelLoader presente: " + (modelLoader != null));
+		DirectFileLogger.logStarDist("INFO", "Input presente: " + (getInput() != null));
+		
 		modelLoader.run(modelName, network, modelFileUrl, getInput());
+		DirectFileLogger.logStarDist("INFO", "Modello caricato");
 
+		DirectFileLogger.logStarDist("INFO", "Validazione input...");
 		try {
 			inputValidator.run(getInput(), network);
+			DirectFileLogger.logStarDist("INFO", "Input validato con successo");
 		}
 		catch(IncompatibleTypeException e) {
+			DirectFileLogger.logStarDistException("Errore validazione input", e);
 			taskManager.logError(e.getMessage());
 			return;
 		}
+		
+		DirectFileLogger.logStarDist("INFO", "Mapping input...");
 		inputMapper.run(getInput(), network);
-		networkAndInputCompatible = !inputMapper.isFailed();
+		boolean mapperFailed = inputMapper.isFailed();
+		DirectFileLogger.logStarDist("INFO", "Input mapper failed: " + mapperFailed);
+		
+		networkAndInputCompatible = !mapperFailed;
+		DirectFileLogger.logStarDist("INFO", "Network and input compatible: " + networkAndInputCompatible);
+		DirectFileLogger.logStarDist("INFO", "=== FINE PREPARAZIONE INPUT E NETWORK ===");
 	}
 
 	private void savePreferences() {
@@ -694,7 +785,7 @@ public abstract class GenericCoreNetwork implements
 			taskManager.log(msg);
 		}
 		else {
-			System.out.println(msg);
+			DirectFileLogger.logStarDist("INFO", msg);
 		}
 	}
 
@@ -703,7 +794,7 @@ public abstract class GenericCoreNetwork implements
 			taskManager.logError(msg);
 		}
 		else {
-			System.out.println("[ERROR] " + msg);
+			DirectFileLogger.logStarDist("ERROR", msg);
 		}
 	}
 

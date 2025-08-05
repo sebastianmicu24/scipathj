@@ -255,14 +255,20 @@ public class PipelineRecapPanel extends JPanel {
     }
     
     private Color getBaseStepColor(int stepNumber) {
-        return switch (stepNumber % 6) {
-            case 1 -> new Color(70, 130, 180);   // Steel blue
-            case 2 -> new Color(60, 150, 60);    // Forest green
-            case 3 -> new Color(200, 100, 50);   // Dark orange
-            case 4 -> new Color(180, 70, 130);   // Dark pink
-            case 5 -> new Color(130, 70, 180);   // Dark purple
-            default -> new Color(180, 150, 50);  // Dark yellow
-        };
+        switch (stepNumber % 6) {
+            case 1:
+                return new Color(70, 130, 180);   // Steel blue
+            case 2:
+                return new Color(60, 150, 60);    // Forest green
+            case 3:
+                return new Color(200, 100, 50);   // Dark orange
+            case 4:
+                return new Color(180, 70, 130);   // Dark pink
+            case 5:
+                return new Color(130, 70, 180);   // Dark purple
+            default:
+                return new Color(180, 150, 50);  // Dark yellow
+        }
     }
     
     public PipelineInfo getCurrentPipeline() {

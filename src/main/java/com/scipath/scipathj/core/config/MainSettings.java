@@ -22,7 +22,8 @@ public class MainSettings {
     public enum ROICategory {
         VESSEL("Vessel", new Color(255, 0, 0), 0.2f, 2),      // Red
         NUCLEUS("Nucleus", new Color(0, 0, 255), 0.2f, 2),    // Blue
-        CYTOPLASM("Cytoplasm", new Color(0, 255, 0), 0.2f, 2); // Green
+        CYTOPLASM("Cytoplasm", new Color(0, 255, 0), 0.2f, 2), // Green
+        CELL("Cell", new Color(255, 255, 0), 0.1f, 1);        // Yellow
         
         private final String displayName;
         private final Color defaultBorderColor;
@@ -111,6 +112,7 @@ public class MainSettings {
     private final ROIAppearanceSettings vesselSettings;
     private final ROIAppearanceSettings nucleusSettings;
     private final ROIAppearanceSettings cytoplasmSettings;
+    private final ROIAppearanceSettings cellSettings;
     
     // Settings change listeners
     private final List<SettingsChangeListener> listeners;
@@ -138,6 +140,11 @@ public class MainSettings {
         ROICategory.CYTOPLASM.getDefaultBorderColor(),
         ROICategory.CYTOPLASM.getDefaultFillOpacity(),
         ROICategory.CYTOPLASM.getDefaultBorderWidth()
+    );
+    this.cellSettings = new ROIAppearanceSettings(
+        ROICategory.CELL.getDefaultBorderColor(),
+        ROICategory.CELL.getDefaultFillOpacity(),
+        ROICategory.CELL.getDefaultBorderWidth()
     );
         
         this.listeners = new CopyOnWriteArrayList<>();
@@ -197,6 +204,10 @@ public class MainSettings {
         return cytoplasmSettings;
     }
     
+    public ROIAppearanceSettings getCellSettings() {
+        return cellSettings;
+    }
+    
     // Convenience methods for backward compatibility (use vessel settings as default)
     public Color getRoiBorderColor() {
         return vesselSettings.getBorderColor();
@@ -218,6 +229,7 @@ public class MainSettings {
             case VESSEL: return vesselSettings;
             case NUCLEUS: return nucleusSettings;
             case CYTOPLASM: return cytoplasmSettings;
+            case CELL: return cellSettings;
             default: return vesselSettings; // Default to vessel settings
         }
     }
@@ -321,12 +333,16 @@ public class MainSettings {
         nucleusSettings.setFillOpacity(ROICategory.NUCLEUS.getDefaultFillOpacity());
         nucleusSettings.setBorderWidth(ROICategory.NUCLEUS.getDefaultBorderWidth());
         
-                cytoplasmSettings.setBorderColor(ROICategory.CYTOPLASM.getDefaultBorderColor());
-                cytoplasmSettings.setFillOpacity(ROICategory.CYTOPLASM.getDefaultFillOpacity());
-                cytoplasmSettings.setBorderWidth(ROICategory.CYTOPLASM.getDefaultBorderWidth());
+        cytoplasmSettings.setBorderColor(ROICategory.CYTOPLASM.getDefaultBorderColor());
+        cytoplasmSettings.setFillOpacity(ROICategory.CYTOPLASM.getDefaultFillOpacity());
+        cytoplasmSettings.setBorderWidth(ROICategory.CYTOPLASM.getDefaultBorderWidth());
+        
+        cellSettings.setBorderColor(ROICategory.CELL.getDefaultBorderColor());
+        cellSettings.setFillOpacity(ROICategory.CELL.getDefaultFillOpacity());
+        cellSettings.setBorderWidth(ROICategory.CELL.getDefaultBorderWidth());
                 
-                notifySettingsChanged();
-                LOGGER.info("Main settings reset to defaults for vessel, nucleus, and cytoplasm ROI types");
+        notifySettingsChanged();
+        LOGGER.info("Main settings reset to defaults for vessel, nucleus, cytoplasm, and cell ROI types");
     }
     
     /**
@@ -351,7 +367,11 @@ public class MainSettings {
                
                               !cytoplasmSettings.getBorderColor().equals(ROICategory.CYTOPLASM.getDefaultBorderColor()) ||
                               cytoplasmSettings.getFillOpacity() != ROICategory.CYTOPLASM.getDefaultFillOpacity() ||
-                              cytoplasmSettings.getBorderWidth() != ROICategory.CYTOPLASM.getDefaultBorderWidth();
+                              cytoplasmSettings.getBorderWidth() != ROICategory.CYTOPLASM.getDefaultBorderWidth() ||
+                              
+                              !cellSettings.getBorderColor().equals(ROICategory.CELL.getDefaultBorderColor()) ||
+                              cellSettings.getFillOpacity() != ROICategory.CELL.getDefaultFillOpacity() ||
+                              cellSettings.getBorderWidth() != ROICategory.CELL.getDefaultBorderWidth();
     }
     
     /**
@@ -362,11 +382,12 @@ public class MainSettings {
     @Override
     public String toString() {
         return String.format("MainSettings{pixelsPerMicrometer=%.3f, scaleUnit='%s', " +
-                            "vessel=%s, nucleus=%s, cytoplasm=%s}",
+                            "vessel=%s, nucleus=%s, cytoplasm=%s, cell=%s}",
                             pixelsPerMicrometer, scaleUnit,
                             formatROISettings("Vessel", vesselSettings),
                             formatROISettings("Nucleus", nucleusSettings),
-                            formatROISettings("Cytoplasm", cytoplasmSettings));
+                            formatROISettings("Cytoplasm", cytoplasmSettings),
+                            formatROISettings("Cell", cellSettings));
     }
     
     private String formatROISettings(String type, ROIAppearanceSettings settings) {
@@ -396,6 +417,7 @@ public class MainSettings {
         validateROISettings("Vessel", vesselSettings);
         validateROISettings("Nucleus", nucleusSettings);
         validateROISettings("Cytoplasm", cytoplasmSettings);
+        validateROISettings("Cell", cellSettings);
     }
     
     private void validateROISettings(String categoryName, ROIAppearanceSettings settings) {

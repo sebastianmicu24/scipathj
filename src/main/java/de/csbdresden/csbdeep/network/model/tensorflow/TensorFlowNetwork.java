@@ -170,22 +170,34 @@ public class TensorFlowNetwork<T extends RealType<T>> extends
 
 	@Override
 	protected boolean loadModel(final Location source, final String modelName) {
-		if(!tensorFlowLoaded) return false;
+		if(!tensorFlowLoaded) {
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("TensorFlow not loaded, cannot load model");
+			return false;
+		}
 		log("Loading TensorFlow model " + modelName + " from source file " + source.getURI());
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("=== STARTING MODEL LOADING ===");
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Model name: " + modelName);
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Source URI: " + source.getURI());
 		try {
 			if (model != null) {
 				model.close();
 			}
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Attempting to load cached model using TensorFlowService");
 			model = tensorFlowService.loadCachedModel(source, modelName, MODEL_TAG);
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("TensorFlowService.loadCachedModel() completed");
 //			loadNetworkSettingsFromJson(tensorFlowService.loadFile(source, modelName, "meta.json"));
 		}
 		catch (TensorFlowException e) {
-			e.printStackTrace();
+			com.scipath.scipathj.core.utils.DirectFileLogger.logException("TENSORFLOW", "TensorFlowException during loadCachedModel", e);
 			return false;
 		}
 		// Extract names from the model signature.
 		// The strings "input", "probabilities" and "patches" are meant to be
 		// in sync with the model exporter (export_saved_model()) in Python.
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Checking model state: model=" + (model != null ? "not null" : "null"));
+		if (model != null) {
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Model.model() state: " + (model.model() != null ? "not null" : "null"));
+		}
 		if (model != null && model.model() != null) {
 			try {
 				// Try to extract signature definition from the model
@@ -196,28 +208,75 @@ public class TensorFlowNetwork<T extends RealType<T>> extends
 						MetaGraphDef mgd = MetaGraphDef.parseFrom(metaGraphDef);
 						sig = mgd.getSignatureDefOrThrow(DEFAULT_SERVING_SIGNATURE_DEF_KEY);
 						log("Successfully loaded model signature with " + sig.getInputsCount() + " inputs and " + sig.getOutputsCount() + " outputs");
+						com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Successfully loaded model signature with " + sig.getInputsCount() + " inputs and " + sig.getOutputsCount() + " outputs");
 					} else {
 						log("No metaGraphDef found in SavedModelBundle");
+						com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("No metaGraphDef found in SavedModelBundle");
 						sig = null;
 					}
 				} else {
 					log("Model is not a SavedModelBundle, signature will be null");
+					com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Model is not a SavedModelBundle, signature will be null");
 					sig = null;
 				}
 			} catch (InvalidProtocolBufferException e) {
 				log("Failed to parse model signature: " + e.getMessage());
+				com.scipath.scipathj.core.utils.DirectFileLogger.logException("TENSORFLOW", "Failed to parse model signature", e);
 				sig = null;
 			} catch (Exception e) {
 				log("Error loading model signature: " + e.getMessage());
+				com.scipath.scipathj.core.utils.DirectFileLogger.logException("TENSORFLOW", "Error loading model signature", e);
 				sig = null;
 			}
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Model loaded successfully via TensorFlowService");
 			return true;
 		} else {
-			logService.error("Failed to load model: model is null");
-			return false;
+			logService.error("TensorFlowService.loadCachedModel() returned null model.model() - trying direct loading");
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("TensorFlowService.loadCachedModel() returned null model.model() - trying direct loading");
+			// Try direct loading as fallback for JPackage environment
+			try {
+				com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Attempting direct model loading fallback");
+				model = loadModelDirectly(source, modelName);
+				if (model != null && model.model() != null) {
+					log("Successfully loaded model using direct loading fallback");
+					com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Successfully loaded model using direct loading fallback");
+					// Try to extract signature definition from the directly loaded model
+					try {
+						if (model.model() instanceof org.tensorflow.SavedModelBundle) {
+							org.tensorflow.SavedModelBundle savedModel = (org.tensorflow.SavedModelBundle) model.model();
+							byte[] metaGraphDef = savedModel.metaGraphDef();
+							if (metaGraphDef != null && metaGraphDef.length > 0) {
+								MetaGraphDef mgd = MetaGraphDef.parseFrom(metaGraphDef);
+								sig = mgd.getSignatureDefOrThrow(DEFAULT_SERVING_SIGNATURE_DEF_KEY);
+								log("Successfully loaded model signature with " + sig.getInputsCount() + " inputs and " + sig.getOutputsCount() + " outputs");
+							} else {
+								log("No metaGraphDef found in directly loaded SavedModelBundle");
+								sig = null;
+							}
+						} else {
+							log("Directly loaded model is not a SavedModelBundle, signature will be null");
+							sig = null;
+						}
+					} catch (InvalidProtocolBufferException e) {
+						log("Failed to parse directly loaded model signature: " + e.getMessage());
+						sig = null;
+					} catch (Exception e) {
+						log("Error loading directly loaded model signature: " + e.getMessage());
+						sig = null;
+					}
+					return true;
+				} else {
+					logService.error("Direct model loading also failed");
+					com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Direct model loading also failed - model or model.model() is null");
+					return false;
+				}
+			} catch (Exception e) {
+				logService.error("Exception during direct model loading: " + e.getMessage());
+				com.scipath.scipathj.core.utils.DirectFileLogger.logException("TENSORFLOW", "Exception during direct model loading", e);
+				return false;
+			}
 		}
 	}
-
 	private void loadNetworkSettingsFromJson(File jsonFile) {
 		networkSettings = new NetworkSettings();
 		try {
@@ -296,28 +355,60 @@ public class TensorFlowNetwork<T extends RealType<T>> extends
 
 	@Override
 	public void preprocess() {
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("=== INIZIO PREPROCESSING ===");
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("InputNode presente: " + (inputNode != null));
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("OutputNode presente: " + (outputNode != null));
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Model presente: " + (model != null));
+		if (model != null) {
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Model.model() presente: " + (model.model() != null));
+		}
+		
 		initMapping();
 		calculateMapping();
+		
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("=== FINE PREPROCESSING ===");
 	}
 
 	@Override
 	public void initMapping() {
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("--- Inizio initMapping ---");
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("InputNode stato: " + (inputNode != null ? "presente" : "NULL"));
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("OutputNode stato: " + (outputNode != null ? "presente" : "NULL"));
+		
 		if (inputNode != null) {
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Chiamata inputNode.setMappingDefaults()");
 			inputNode.setMappingDefaults();
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("inputNode.setMappingDefaults() completata");
 		} else {
 			log("Warning: inputNode is null in initMapping(), skipping setMappingDefaults()");
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("ERRORE CRITICO: inputNode è null in initMapping()!");
 		}
 		if (outputNode != null) {
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Chiamata outputNode.setMappingDefaults()");
 			outputNode.setMappingDefaults();
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("outputNode.setMappingDefaults() completata");
 		} else {
 			log("Warning: outputNode is null in initMapping(), skipping setMappingDefaults()");
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("ERRORE CRITICO: outputNode è null in initMapping()!");
 		}
+		
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("--- Fine initMapping ---");
 	}
 
 	@Override
 	public void calculateMapping() {
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("--- Inizio calculateMapping ---");
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("InputNode presente prima doDimensionReduction: " + (inputNode != null));
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("OutputNode presente prima doDimensionReduction: " + (outputNode != null));
+		
 		doDimensionReduction();
+		
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("InputNode presente prima generateMapping: " + (inputNode != null));
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("OutputNode presente prima generateMapping: " + (outputNode != null));
+		
 		generateMapping();
+		
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("--- Fine calculateMapping ---");
 	}
 
 	@Override
@@ -359,11 +450,27 @@ public class TensorFlowNetwork<T extends RealType<T>> extends
 	public boolean libraryLoaded() {
 		return tensorFlowLoaded;
 	}
-
-	private void generateMapping() {
+private void generateMapping() {
+	com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("--- Inizio generateMapping ---");
+	
+	if (inputNode != null) {
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Chiamata inputNode.generateMapping()");
 		inputNode.generateMapping();
-		outputNode.generateMapping();
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("inputNode.generateMapping() completata");
+	} else {
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("ERRORE CRITICO: inputNode è null in generateMapping()!");
 	}
+	
+	if (outputNode != null) {
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Chiamata outputNode.generateMapping()");
+		outputNode.generateMapping();
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("outputNode.generateMapping() completata");
+	} else {
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("ERRORE CRITICO: outputNode è null in generateMapping()!");
+	}
+	
+	com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("--- Fine generateMapping ---");
+}
 
 	private Dataset createEmptyDuplicateWithoutAxis(List<AxisType> imageAxes, List<Long> imageDimensions, AxisType axisToRemove)
 	{
@@ -475,6 +582,331 @@ public class TensorFlowNetwork<T extends RealType<T>> extends
 		super.dispose();
 		tensorFlowLoaded = false;
 		clear();
+	}
+
+	/**
+	 * Direct model loading method for JPackage environment.
+	 * First tries to load from JAR resources, then falls back to ZIP extraction.
+	 */
+	private CachedModelBundle loadModelDirectly(final Location source, final String modelName) throws Exception {
+		log("=== STARTING DIRECT MODEL LOADING ===");
+		log("Source: " + source.getURI());
+		log("Model name: " + modelName);
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("=== STARTING DIRECT MODEL LOADING ===");
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Source: " + source.getURI());
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Model name: " + modelName);
+		
+		// STRATEGY 1: Try to load from JAR resources first (much safer for JPackage)
+		try {
+			log("Attempting to load model from JAR resources...");
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Attempting to load model from JAR resources...");
+			String resourcePath = "/models/2D/" + getModelDirectoryName(modelName) + "/";
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Resource path: " + resourcePath);
+			java.net.URL resourceUrl = getClass().getResource(resourcePath);
+			
+			if (resourceUrl != null) {
+				log("Found model in JAR resources: " + resourceUrl);
+				com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Found model in JAR resources: " + resourceUrl);
+				
+				// Extract model from JAR to temporary directory
+				java.nio.file.Path tempDir = java.nio.file.Files.createTempDirectory("scipathj_model_");
+				log("Created temp directory: " + tempDir.toString());
+				
+				// Extract the model directory from JAR resources
+				extractModelFromResources(resourcePath, tempDir.toFile());
+				
+				// Load model directly using TensorFlow API
+				String modelDirName = getModelDirectoryName(modelName);
+				java.io.File modelDir = new java.io.File(tempDir.toFile(), modelDirName);
+				if (!modelDir.exists()) {
+					// Try to find the model directory in the extracted files
+					modelDir = findModelDirectory(tempDir.toFile());
+				}
+				
+				if (modelDir != null) {
+					org.tensorflow.SavedModelBundle savedModel = org.tensorflow.SavedModelBundle.load(modelDir.getAbsolutePath(), "serve");
+					log("SavedModelBundle loaded successfully from JAR resources");
+					
+					// Create a wrapper that implements CachedModelBundle interface
+					CachedModelBundle directModel = new DirectTensorFlowModel(modelName, source.getURI().toString(), savedModel, tempDir);
+					log("Direct model wrapper created from JAR resources");
+					
+					return directModel;
+				} else {
+					log("Could not find model directory in extracted JAR resources");
+					com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Could not find model directory in extracted JAR resources");
+				}
+			} else {
+				log("Model not found in JAR resources, falling back to ZIP extraction");
+				com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Model not found in JAR resources, falling back to ZIP extraction");
+			}
+		} catch (Exception e) {
+			log("JAR resource loading failed: " + e.getMessage() + ", falling back to ZIP extraction");
+			com.scipath.scipathj.core.utils.DirectFileLogger.logException("TENSORFLOW", "JAR resource loading failed, falling back to ZIP extraction", e);
+		}
+		
+		// STRATEGY 2: Fallback to ZIP extraction (original method)
+		try {
+			log("Attempting ZIP extraction fallback...");
+			
+			// Create a temporary directory for model extraction
+			java.nio.file.Path tempDir = java.nio.file.Files.createTempDirectory("scipathj_model_");
+			log("Created temp directory: " + tempDir.toString());
+			
+			// Extract ZIP to temporary directory
+			java.io.File sourceFile = new java.io.File(source.getURI());
+			if (!sourceFile.exists()) {
+				log("Source file does not exist: " + sourceFile.getAbsolutePath());
+				throw new java.io.FileNotFoundException("Model file not found: " + sourceFile.getAbsolutePath());
+			}
+			
+			log("Extracting ZIP file...");
+			extractZipFile(sourceFile, tempDir.toFile());
+			
+			// Look for saved_model.pb in the extracted directory
+			java.io.File modelDir = findModelDirectory(tempDir.toFile());
+			if (modelDir == null) {
+				log("Could not find saved_model.pb in extracted files");
+				throw new Exception("saved_model.pb not found in model archive");
+			}
+			
+			log("Found model directory: " + modelDir.getAbsolutePath());
+			
+			// Load model directly using TensorFlow API
+			org.tensorflow.SavedModelBundle savedModel = org.tensorflow.SavedModelBundle.load(modelDir.getAbsolutePath(), "serve");
+			log("SavedModelBundle loaded successfully from ZIP");
+			
+			// Create a wrapper that implements CachedModelBundle interface
+			CachedModelBundle directModel = new DirectTensorFlowModel(modelName, source.getURI().toString(), savedModel, tempDir);
+			log("Direct model wrapper created from ZIP");
+			
+			return directModel;
+			
+		} catch (Exception e) {
+			log("All direct model loading strategies failed: " + e.getMessage());
+			throw e;
+		}
+	}
+	
+	/**
+	 * Extract model from JAR resources to temporary directory.
+	 */
+	private void extractModelFromResources(String resourcePath, java.io.File targetDir) throws Exception {
+		log("Extracting model from JAR resources: " + resourcePath);
+		
+		try {
+			// Create target directory
+			targetDir.mkdirs();
+			
+			// Extract the model directory name from the resource path
+			String modelDirName = resourcePath.substring(resourcePath.lastIndexOf("/", resourcePath.length() - 2) + 1);
+			if (modelDirName.endsWith("/")) {
+				modelDirName = modelDirName.substring(0, modelDirName.length() - 1);
+			}
+			
+			// Create the model subdirectory
+			java.io.File modelSubDir = new java.io.File(targetDir, modelDirName);
+			modelSubDir.mkdirs();
+			
+			// Extract specific model files from JAR resources
+			// We need to extract: saved_model.pb, variables/variables.data-00000-of-00001, variables/variables.index
+			
+			// Extract saved_model.pb
+			String savedModelPath = resourcePath + "saved_model.pb";
+			java.io.InputStream savedModelIS = getClass().getResourceAsStream(savedModelPath);
+			if (savedModelIS != null) {
+				java.io.File savedModelFile = new java.io.File(modelSubDir, "saved_model.pb");
+				java.nio.file.Files.copy(savedModelIS, savedModelFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+				savedModelIS.close();
+				log("Extracted saved_model.pb to " + savedModelFile.getAbsolutePath());
+			} else {
+				throw new Exception("saved_model.pb not found in resources: " + savedModelPath);
+			}
+			
+			// Create variables directory
+			java.io.File variablesDir = new java.io.File(modelSubDir, "variables");
+			variablesDir.mkdirs();
+			
+			// Extract variables.data file
+			String variablesDataPath = resourcePath + "variables/variables.data-00000-of-00001";
+			java.io.InputStream variablesDataIS = getClass().getResourceAsStream(variablesDataPath);
+			if (variablesDataIS != null) {
+				java.io.File variablesDataFile = new java.io.File(variablesDir, "variables.data-00000-of-00001");
+				java.nio.file.Files.copy(variablesDataIS, variablesDataFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+				variablesDataIS.close();
+				log("Extracted variables.data-00000-of-00001 to " + variablesDataFile.getAbsolutePath());
+			} else {
+				log("Warning: variables.data-00000-of-00001 not found in resources: " + variablesDataPath);
+			}
+			
+			// Extract variables.index file
+			String variablesIndexPath = resourcePath + "variables/variables.index";
+			java.io.InputStream variablesIndexIS = getClass().getResourceAsStream(variablesIndexPath);
+			if (variablesIndexIS != null) {
+				java.io.File variablesIndexFile = new java.io.File(variablesDir, "variables.index");
+				java.nio.file.Files.copy(variablesIndexIS, variablesIndexFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+				variablesIndexIS.close();
+				log("Extracted variables.index to " + variablesIndexFile.getAbsolutePath());
+			} else {
+				log("Warning: variables.index not found in resources: " + variablesIndexPath);
+			}
+			
+			log("Model extraction from JAR resources completed successfully to " + modelSubDir.getAbsolutePath());
+			
+		} catch (Exception e) {
+			log("Failed to extract model from resources: " + e.getMessage());
+			throw e;
+		}
+	}
+	
+	/**
+	 * Extract ZIP file to target directory.
+	 */
+	private void extractZipFile(java.io.File zipFile, java.io.File targetDir) throws Exception {
+		try {
+			java.util.zip.ZipInputStream zipIS = new java.util.zip.ZipInputStream(new java.io.FileInputStream(zipFile));
+			java.util.zip.ZipEntry entry;
+			while ((entry = zipIS.getNextEntry()) != null) {
+				java.io.File file = new java.io.File(targetDir, entry.getName());
+				if (entry.isDirectory()) {
+					file.mkdirs();
+				} else {
+					file.getParentFile().mkdirs();
+					java.nio.file.Files.copy(zipIS, file.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+				}
+			}
+			zipIS.close();
+		} catch (Exception e) {
+			log("Failed to extract ZIP file: " + e.getMessage());
+			throw e;
+		}
+	}
+	
+	/**
+	 * Find model directory containing saved_model.pb.
+	 */
+	private java.io.File findModelDirectory(java.io.File rootDir) {
+		java.io.File[] files = rootDir.listFiles();
+		if (files != null) {
+			for (java.io.File file : files) {
+				if (file.isDirectory()) {
+					java.io.File savedModelFile = new java.io.File(file, "saved_model.pb");
+					if (savedModelFile.exists()) {
+						return file;
+					}
+					// Recursively search subdirectories
+					java.io.File found = findModelDirectory(file);
+					if (found != null) {
+						return found;
+					}
+				}
+			}
+		}
+		return null;
+	}
+	
+	/**
+	 * Map model names to directory names in resources.
+	 */
+	private String getModelDirectoryName(String modelName) {
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("=== MODEL NAME MAPPING ===");
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Input model name: '" + modelName + "'");
+		
+		if (modelName == null) {
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Model name is null, using default: dsb2018_heavy_augment");
+			return "dsb2018_heavy_augment"; // default
+		}
+		
+		String lowerName = modelName.toLowerCase();
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Lowercase model name: '" + lowerName + "'");
+		
+		// Map StarDist model names to directory names
+		// Check for specific model names first (most specific)
+		if (lowerName.equals("versatile (h&e nuclei)")) {
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Matched 'versatile (h&e nuclei)' -> he_heavy_augment");
+			return "he_heavy_augment";
+		} else if (lowerName.equals("versatile (fluorescent nuclei)")) {
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Matched 'versatile (fluorescent nuclei)' -> dsb2018_heavy_augment");
+			return "dsb2018_heavy_augment";
+		} else if (lowerName.equals("dsb 2018 (from stardist 2d paper)")) {
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Matched 'dsb 2018 (from stardist 2d paper)' -> dsb2018_paper");
+			return "dsb2018_paper";
+		}
+		
+		// Check for partial matches (H&E has priority over versatile)
+		if (lowerName.contains("h&e") || lowerName.contains("he")) {
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Partial match H&E/HE -> he_heavy_augment");
+			return "he_heavy_augment";
+		} else if (lowerName.contains("dsb2018") && lowerName.contains("paper")) {
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Partial match DSB2018 paper -> dsb2018_paper");
+			return "dsb2018_paper";
+		} else if (lowerName.contains("dsb2018") || lowerName.contains("fluorescent") || lowerName.contains("versatile")) {
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Partial match DSB2018/fluorescent/versatile -> dsb2018_heavy_augment");
+			return "dsb2018_heavy_augment";
+		}
+		
+		// Default fallback
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("No match found, using default: dsb2018_heavy_augment");
+		return "dsb2018_heavy_augment";
+	}
+	
+	/**
+	 * Wrapper class for direct TensorFlow model loading.
+	 */
+	private static class DirectTensorFlowModel extends CachedModelBundle {
+		private final org.tensorflow.SavedModelBundle savedModel;
+		private final java.nio.file.Path tempDir;
+		
+		public DirectTensorFlowModel(String modelName, String modelUrl, org.tensorflow.SavedModelBundle savedModel, java.nio.file.Path tempDir) {
+			super(modelName, modelUrl, savedModel, true);
+			this.savedModel = savedModel;
+			this.tempDir = tempDir;
+		}
+		
+		@Override
+		public Object model() {
+			return savedModel;
+		}
+		
+		@Override
+		public byte[] metaGraphDef() {
+			if (savedModel != null) {
+				try {
+					return savedModel.metaGraphDef();
+				} catch (Exception e) {
+					System.err.println("Error getting metaGraphDef: " + e.getMessage());
+					return null;
+				}
+			}
+			return null;
+		}
+		
+		@Override
+		public void close() {
+			if (savedModel != null) {
+				savedModel.close();
+			}
+			// Clean up temporary directory
+			try {
+				deleteDirectory(tempDir.toFile());
+			} catch (Exception e) {
+				// Ignore cleanup errors
+			}
+		}
+		
+		private void deleteDirectory(java.io.File directory) {
+			java.io.File[] files = directory.listFiles();
+			if (files != null) {
+				for (java.io.File file : files) {
+					if (file.isDirectory()) {
+						deleteDirectory(file);
+					} else {
+						file.delete();
+					}
+				}
+			}
+			directory.delete();
+		}
 	}
 
 }

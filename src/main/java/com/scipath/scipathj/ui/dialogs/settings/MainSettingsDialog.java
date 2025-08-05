@@ -35,6 +35,7 @@ public class MainSettingsDialog extends JDialog {
     private final ROICategoryPanel vesselPanel;
     private final ROICategoryPanel nucleusPanel;
     private final ROICategoryPanel cytoplasmPanel;
+    private final ROICategoryPanel cellPanel;
     
     // Result flag
     private boolean settingsChanged = false;
@@ -48,6 +49,7 @@ public class MainSettingsDialog extends JDialog {
         this.vesselPanel = new ROICategoryPanel(MainSettings.ROICategory.VESSEL);
         this.nucleusPanel = new ROICategoryPanel(MainSettings.ROICategory.NUCLEUS);
         this.cytoplasmPanel = new ROICategoryPanel(MainSettings.ROICategory.CYTOPLASM);
+        this.cellPanel = new ROICategoryPanel(MainSettings.ROICategory.CELL);
         
         // Load settings from file first
         configManager.loadMainSettings(settings);
@@ -100,6 +102,7 @@ public class MainSettingsDialog extends JDialog {
         tabbedPane.addTab("Vessel ROIs", vesselPanel);
         tabbedPane.addTab("Nucleus ROIs", nucleusPanel);
         tabbedPane.addTab("Cytoplasm ROIs", cytoplasmPanel);
+        tabbedPane.addTab("Cell ROIs", cellPanel);
         
         mainPanel.add(tabbedPane, BorderLayout.CENTER);
         
@@ -355,6 +358,7 @@ public class MainSettingsDialog extends JDialog {
             vesselPanel.loadSettings(settings.getVesselSettings());
             nucleusPanel.loadSettings(settings.getNucleusSettings());
             cytoplasmPanel.loadSettings(settings.getCytoplasmSettings());
+            cellPanel.loadSettings(settings.getCellSettings());
             
             LOGGER.debug("Loaded current settings into UI components: {}", settings.toString());
         } catch (Exception e) {
@@ -375,6 +379,7 @@ public class MainSettingsDialog extends JDialog {
         vesselPanel.loadDefaults();
         nucleusPanel.loadDefaults();
         cytoplasmPanel.loadDefaults();
+        cellPanel.loadDefaults();
         
         LOGGER.debug("Loaded default settings into UI components");
     }
@@ -428,6 +433,7 @@ public class MainSettingsDialog extends JDialog {
             if (!vesselPanel.validateInputs()) return false;
             if (!nucleusPanel.validateInputs()) return false;
             if (!cytoplasmPanel.validateInputs()) return false;
+            if (!cellPanel.validateInputs()) return false;
             
             return true;
             
@@ -528,12 +534,13 @@ public class MainSettingsDialog extends JDialog {
                 vesselPanel.applySettings(settings.getVesselSettings());
                 nucleusPanel.applySettings(settings.getNucleusSettings());
                 cytoplasmPanel.applySettings(settings.getCytoplasmSettings());
+                cellPanel.applySettings(settings.getCellSettings());
                 
                 // Save to file
                 configManager.saveMainSettings(settings);
                 
                 settingsChanged = true;
-                LOGGER.info("Main settings saved successfully for vessel, nucleus, and cytoplasm ROI types");
+                LOGGER.info("Main settings saved successfully for vessel, nucleus, cytoplasm, and cell ROI types");
                 
                 dispose();
                 

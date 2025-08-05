@@ -1,56 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" 
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-
-    <parent>
-        <groupId>org.scijava</groupId>
-        <artifactId>pom-scijava</artifactId>
-        <version>29.2.1</version>
-        <relativePath />
-    </parent>
 
     <groupId>com.scipath</groupId>
     <artifactId>scipathj</artifactId>
     <version>1.0.0</version>
+    <packaging>jar</packaging>
 
     <name>SciPathJ</name>
     <description>Segmentation and Classification of Images, Pipelines for the Analysis of Tissue Histopathology</description>
-    <url>https://github.com/sebastianmicu24/scipathj</url>
-    <inceptionYear>2025</inceptionYear>
 
     <properties>
-        <package-name>com.scipath.scipathj</package-name>
-        <main-class>com.scipath.scipathj.SciPathJApplication</main-class>
-        <license.licenseName>bsd_3</license.licenseName>
-        <license.copyrightOwners>Sebastian Micu</license.copyrightOwners>
-        
-        <!-- Java Version -->
         <maven.compiler.source>23</maven.compiler.source>
         <maven.compiler.target>23</maven.compiler.target>
-        <maven.compiler.release>23</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         
-        <!-- UI Dependencies -->
-        <flatlaf.version>3.4.1</flatlaf.version>
-        <ikonli.version>12.3.1</ikonli.version>
-        
-        <!-- Machine Learning -->
-        <xgboost.version>2.1.4</xgboost.version>
-        
-        <!-- TensorFlow versions (matching CSBDeep) -->
+        <!-- Core versions -->
+        <imagej.version>2.9.0</imagej.version>
         <tensorflow.version>1.15.0</tensorflow.version>
         <imagej-tensorflow.version>1.1.5</imagej-tensorflow.version>
         
-        <!-- Data Processing -->
-        <jackson.version>2.15.2</jackson.version>
+        <!-- UI versions -->
+        <flatlaf.version>3.4.1</flatlaf.version>
         
         <!-- Logging -->
-        <slf4j.version>2.0.7</slf4j.version>
         <logback.version>1.4.8</logback.version>
-        
-        <!-- Testing -->
-        <junit.version>5.10.0</junit.version>
-        <mockito.version>5.4.0</mockito.version>
-        <assertj.version>3.24.2</assertj.version>
     </properties>
 
     <repositories>
@@ -61,169 +37,118 @@
     </repositories>
 
     <dependencies>
-        <!-- ImageJ Ecosystem (from StarDist POM) -->
+        <!-- ImageJ Core -->
         <dependency>
             <groupId>net.imagej</groupId>
             <artifactId>imagej</artifactId>
+            <version>${imagej.version}</version>
         </dependency>
-        <!-- ImageJ1 Core - Only the core classes without legacy service -->
+        
+        <!-- ImageJ1 Core -->
         <dependency>
             <groupId>net.imagej</groupId>
             <artifactId>ij</artifactId>
+            <version>1.54f</version>
         </dependency>
-        <!-- ImageJ-ImgLib2 Bridge - Required for ImageJFunctions -->
+        
+        <!-- ImageJ-ImgLib2 Bridge -->
         <dependency>
             <groupId>net.imglib2</groupId>
             <artifactId>imglib2-ij</artifactId>
+            <version>2.0.1</version>
         </dependency>
-        <!-- ImageJ Legacy Service - REMOVED to avoid LegacyService conflicts -->
-        <!-- SciPathJ is a standalone application and doesn't need ImageJ 1.x compatibility layer -->
-        <!--
-        <dependency>
-            <groupId>net.imagej</groupId>
-            <artifactId>imagej-legacy</artifactId>
-        </dependency>
-        -->
-        <!-- Clipper (from StarDist POM) -->
-        <dependency>
-            <groupId>de.lighti</groupId>
-            <artifactId>Clipper</artifactId>
-            <version>6.4.2</version>
-            <scope>system</scope>
-            <systemPath>${basedir}/lib/Clipper-6.4.2.jar</systemPath>
-        </dependency>
-        <!-- CSBDeep (from StarDist POM) -->
-        <dependency>
-            <groupId>de.csbdresden</groupId>
-            <artifactId>csbdeep</artifactId>
-            <version>0.3.5-SNAPSHOT</version>
-        </dependency>
-        <!-- ImageJ-TensorFlow Bridge (with explicit version) -->
+        
+        <!-- TensorFlow -->
         <dependency>
             <groupId>net.imagej</groupId>
             <artifactId>imagej-tensorflow</artifactId>
             <version>${imagej-tensorflow.version}</version>
         </dependency>
-        <!-- TensorFlow Core -->
         <dependency>
             <groupId>org.tensorflow</groupId>
             <artifactId>libtensorflow</artifactId>
             <version>${tensorflow.version}</version>
         </dependency>
-        <!-- TensorFlow Proto -->
+        <dependency>
+            <groupId>org.tensorflow</groupId>
+            <artifactId>libtensorflow_jni</artifactId>
+            <version>${tensorflow.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.tensorflow</groupId>
             <artifactId>proto</artifactId>
+            <version>1.15.0</version>
         </dependency>
-        <!-- Utils (from StarDist POM) -->
+        
+        <!-- Clipper for StarDist -->
         <dependency>
-            <groupId>com.google.code.gson</groupId>
-            <artifactId>gson</artifactId>
+            <groupId>de.lighti</groupId>
+            <artifactId>Clipper</artifactId>
+            <version>6.4.2</version>
         </dependency>
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-lang3</artifactId>
-        </dependency>
-
-        <!-- UI Framework (SciPathJ specific) -->
+        
+        <!-- UI -->
         <dependency>
             <groupId>com.formdev</groupId>
             <artifactId>flatlaf</artifactId>
             <version>${flatlaf.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.formdev</groupId>
-            <artifactId>flatlaf-extras</artifactId>
-            <version>${flatlaf.version}</version>
-        </dependency>
-        <dependency>
             <groupId>org.kordamp.ikonli</groupId>
             <artifactId>ikonli-swing</artifactId>
-            <version>${ikonli.version}</version>
+            <version>12.3.1</version>
         </dependency>
         <dependency>
             <groupId>org.kordamp.ikonli</groupId>
             <artifactId>ikonli-fontawesome5-pack</artifactId>
-            <version>${ikonli.version}</version>
+            <version>12.3.1</version>
         </dependency>
-
-        <!-- Machine Learning (SciPathJ specific) -->
-        <dependency>
-            <groupId>ml.dmlc</groupId>
-            <artifactId>xgboost4j_2.12</artifactId>
-            <version>${xgboost.version}</version>
-        </dependency>
-
-        <!-- Data Processing (SciPathJ specific) -->
+        
+        <!-- Jackson for JSON -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>${jackson.version}</version>
+            <version>2.15.2</version>
         </dependency>
         <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId>
-            <version>${jackson.version}</version>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>2.15.2</version>
         </dependency>
-        <dependency>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-        </dependency>
-
-        <!-- Logging (SciPathJ specific) -->
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <version>${slf4j.version}</version>
-        </dependency>
+        
+        <!-- Logging -->
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <version>${logback.version}</version>
         </dependency>
-
-        <!-- Testing (SciPathJ specific) -->
+        
+        <!-- Utilities -->
         <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <version>${junit.version}</version>
-            <scope>test</scope>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.12.0</version>
         </dependency>
         <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-core</artifactId>
-            <version>${mockito.version}</version>
-            <scope>test</scope>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.11.0</version>
         </dependency>
         <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-junit-jupiter</artifactId>
-            <version>${mockito.version}</version>
-            <scope>test</scope>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+            <version>1.15</version>
         </dependency>
         <dependency>
-            <groupId>org.assertj</groupId>
-            <artifactId>assertj-core</artifactId>
-            <version>${assertj.version}</version>
-            <scope>test</scope>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
         </dependency>
     </dependencies>
 
     <build>
         <plugins>
-            <!-- Skip Maven Enforcer Plugin to avoid Java version conflicts -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-enforcer-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>enforce-rules</id>
-                        <phase>none</phase>
-                    </execution>
-                </executions>
-            </plugin>
-            
-            <!-- Compiler Plugin -->
+            <!-- Compiler -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -233,142 +158,22 @@
                 </configuration>
             </plugin>
 
-            <!-- Surefire Plugin for Testing -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.1.2</version>
-            </plugin>
-
-            <!-- Exec Plugin for Development -->
+            <!-- Development execution -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.1.0</version>
                 <configuration>
                     <mainClass>com.scipath.scipathj.SciPathJApplication</mainClass>
-                    <classpathScope>runtime</classpathScope>
-                    <!-- Include system dependencies (like Clipper) in classpath -->
-                    <includeSystemScope>true</includeSystemScope>
-                    <additionalClasspathElements>
-                        <additionalClasspathElement>${basedir}/lib/Clipper-6.4.2.jar</additionalClasspathElement>
-                    </additionalClasspathElements>
-                    <!-- JVM arguments to fix TensorFlow ClassLoader issues with Java 9+ -->
                     <options>
                         <option>--add-opens=java.base/java.lang=ALL-UNNAMED</option>
                         <option>--add-opens=java.base/java.lang.reflect=ALL-UNNAMED</option>
-                        <option>--add-opens=java.base/java.net=ALL-UNNAMED</option>
-                        <option>--add-opens=java.base/java.nio=ALL-UNNAMED</option>
                         <option>--add-opens=java.base/java.util=ALL-UNNAMED</option>
                         <option>--add-opens=java.base/java.util.concurrent=ALL-UNNAMED</option>
                         <option>--add-opens=java.base/sun.nio.ch=ALL-UNNAMED</option>
-                        <option>--add-opens=java.base/sun.security.util=ALL-UNNAMED</option>
-                        <option>--add-opens=java.base/jdk.internal.loader=ALL-UNNAMED</option>
-                        <option>--add-opens=java.base/java.lang.module=ALL-UNNAMED</option>
-                        <option>--add-opens=java.base/jdk.internal.module=ALL-UNNAMED</option>
-                        <option>--illegal-access=permit</option>
-                        <option>-Djava.system.class.loader=java.lang.ClassLoader</option>
-                        <option>-Djdk.module.illegalAccess=permit</option>
-                        <option>-Djdk.module.illegalAccess.silent=true</option>
                     </options>
                 </configuration>
             </plugin>
-
-            <!-- Maven Shade Plugin for Fat JAR -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <version>3.5.2</version>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
-                        <configuration>
-                            <createDependencyReducedPom>false</createDependencyReducedPom>
-                            <transformers>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>com.scipath.scipathj.SciPathJApplication</mainClass>
-                                </transformer>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
-                                    <resource>META-INF/json/org.scijava.plugin.Plugin</resource>
-                                </transformer>
-                            </transformers>
-                            <filters>
-                                <filter>
-                                    <artifact>*:*</artifact>
-                                    <excludes>
-                                        <exclude>META-INF/*.SF</exclude>
-                                        <exclude>META-INF/*.DSA</exclude>
-                                        <exclude>META-INF/*.RSA</exclude>
-                                        <exclude>module-info.class</exclude>
-                                    </excludes>
-                                </filter>
-                            </filters>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <!-- SpotBugs Plugin for Code Analysis -->
-            <plugin>
-                <groupId>com.github.spotbugs</groupId>
-                <artifactId>spotbugs-maven-plugin</artifactId>
-                <version>4.7.3.0</version>
-                <configuration>
-                    <effort>Max</effort>
-                    <threshold>Low</threshold>
-                </configuration>
-            </plugin>
-
-            <!-- PMD Plugin for Code Quality -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-pmd-plugin</artifactId>
-                <version>3.21.0</version>
-                <configuration>
-                    <targetJdk>21</targetJdk>
-                </configuration>
-            </plugin>
-
-            <!-- JaCoCo Plugin for Code Coverage (Java 21 compatible) -->
-            <plugin>
-                <groupId>org.jacoco</groupId>
-                <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.11</version>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>prepare-agent</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>report</id>
-                        <phase>test</phase>
-                        <goals>
-                            <goal>report</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-dependency-plugin</artifactId>
-                    <version>3.6.1</version>
-                    <executions>
-                        <execution>
-                        <id>analyze-dependencies</id>
-                        <goals>
-                            <goal>analyze</goal>
-                        </goals>
-                        <configuration>
-                            <failOnWarning>false</failOnWarning>
-                        </configuration>
-                        </execution>
-                    </executions>
-                </plugin>
         </plugins>
     </build>
 
@@ -377,7 +182,60 @@
             <id>release</id>
             <build>
                 <plugins>
-                    <!-- JPackage Plugin for Native Installer -->
+                    <!-- Copy dependencies -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-dependency-plugin</artifactId>
+                        <version>3.6.1</version>
+                        <executions>
+                            <execution>
+                                <id>copy-dependencies</id>
+                                <phase>prepare-package</phase>
+                                <goals>
+                                    <goal>copy-dependencies</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${project.build.directory}/libs</outputDirectory>
+                                    <includeScope>runtime</includeScope>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <!-- Extract TensorFlow natives -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <version>3.1.0</version>
+                        <executions>
+                            <execution>
+                                <id>extract-natives</id>
+                                <phase>prepare-package</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <target>
+                                        <mkdir dir="${project.build.directory}/lib"/>
+                                        <unzip dest="${project.build.directory}/natives-temp">
+                                            <fileset dir="${settings.localRepository}/org/tensorflow/libtensorflow_jni/1.15.0">
+                                                <include name="libtensorflow_jni-1.15.0.jar"/>
+                                            </fileset>
+                                        </unzip>
+                                        <copy todir="${project.build.directory}/lib" flatten="true" failonerror="false">
+                                            <fileset dir="${project.build.directory}/natives-temp">
+                                                <include name="**/*.dll"/>
+                                                <include name="**/*.so"/>
+                                            </fileset>
+                                        </copy>
+                                        <delete dir="${project.build.directory}/natives-temp"/>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <!-- JPackage -->
                     <plugin>
                         <groupId>org.panteleyev</groupId>
                         <artifactId>jpackage-maven-plugin</artifactId>
@@ -401,34 +259,48 @@
                             <mainJar>${project.build.finalName}.jar</mainJar>
                             <mainClass>com.scipath.scipathj.SciPathJApplication</mainClass>
                             
-                            <!-- Windows Installer -->
                             <type>EXE</type>
                             <winMenu>true</winMenu>
                             <winShortcut>true</winShortcut>
-                            
-                            <!-- Application Icon -->
                             <icon>src/main/resources/icons/scipathj.ico</icon>
                             
-                            <!-- JVM Options -->
-                            <!-- JVM Options -->
+                            <!-- Include dependencies and natives -->
+                            <appContent>
+                                <additionalContent>
+                                    <name>libs</name>
+                                    <source>${project.build.directory}/libs</source>
+                                </additionalContent>
+                                <additionalContent>
+                                    <name>lib</name>
+                                    <source>${project.build.directory}/lib</source>
+                                </additionalContent>
+                            </appContent>
+                            
+                            <!-- JVM options for TensorFlow and Java 21 compatibility -->
                             <javaOptions>
-                                <option>-Xmx4g</option>
-                                <option>--add-opens=java.base/java.lang=ALL-UNNAMED</option>
-                                <option>--add-opens=java.base/java.lang.reflect=ALL-UNNAMED</option>
-                                <option>--add-opens=java.base/java.net=ALL-UNNAMED</option>
-                                <option>--add-opens=java.base/java.nio=ALL-UNNAMED</option>
-                                <option>--add-opens=java.base/java.util=ALL-UNNAMED</option>
-                                <option>--add-opens=java.base/java.util.concurrent=ALL-UNNAMED</option>
-                                <option>--add-opens=java.base/sun.nio.ch=ALL-UNNAMED</option>
-                                <option>--add-opens=java.base/sun.security.util=ALL-UNNAMED</option>
-                                <option>--add-opens=java.base/jdk.internal.loader=ALL-UNNAMED</option>
-                                <option>--add-opens=java.base/java.lang.module=ALL-UNNAMED</option>
-                                <option>--add-opens=java.base/jdk.internal.module=ALL-UNNAMED</option>
-                                <option>--illegal-access=permit</option>
-                                <option>-Djava.system.class.loader=java.lang.ClassLoader</option>
-                                <option>-Djdk.module.illegalAccess=permit</option>
-                                <option>-Djdk.module.illegalAccess.silent=true</option>
+                                <javaOption>-Xmx4G</javaOption>
+                                <javaOption>-Xms1G</javaOption>
+                                <javaOption>--add-opens=java.base/java.lang=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/java.lang.reflect=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/java.util=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/java.util.concurrent=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/sun.nio.ch=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/java.nio=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/sun.nio.fs=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/java.io=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/java.net=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.desktop/sun.awt=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.desktop/sun.java2d=ALL-UNNAMED</javaOption>
+                                <javaOption>-Djava.library.path=$APPDIR/lib</javaOption>
+                                <javaOption>-Dorg.tensorflow.NativeLibrary.MODE=bundled</javaOption>
+                                <javaOption>-Djna.library.path=$APPDIR/lib</javaOption>
+                                <javaOption>-Dfile.encoding=UTF-8</javaOption>
+                                <javaOption>-Dsun.java2d.d3d=false</javaOption>
+                                <javaOption>-Dsun.java2d.opengl=false</javaOption>
+                                <javaOption>-Dswing.aatext=true</javaOption>
+                                <javaOption>-Dawt.useSystemAAFontSettings=on</javaOption>
                             </javaOptions>
+                            
                             <verbose>true</verbose>
                         </configuration>
                     </plugin>

@@ -64,14 +64,39 @@ public class DefaultModelLoader extends DefaultTask implements ModelLoader {
 	protected void loadNetwork(final String modelName, final Network network,
 		final String modelFileUrl, final Dataset input) throws FileNotFoundException {
 
-		if(modelFileUrl.isEmpty()) return;
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("=== INIZIO CARICAMENTO MODELLO ===");
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Model name: " + modelName);
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Model file URL: " + modelFileUrl);
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Network class: " + network.getClass().getSimpleName());
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Input presente: " + (input != null));
+		
+		if(modelFileUrl.isEmpty()) {
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("ERROR: Model file URL è vuoto!");
+			return;
+		}
 
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Chiamando network.loadModel...");
 		boolean loaded = network.loadModel(modelFileUrl, modelName);
-		if(!loaded) return;
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("network.loadModel result: " + loaded);
+		
+		if(!loaded) {
+			com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("ERROR: network.loadModel ha fallito!");
+			return;
+		}
+		
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Caricando input node...");
 		network.loadInputNode(input);
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Input node caricato");
+		
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Caricando output node...");
 		network.loadOutputNode(input);
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Output node caricato");
+		
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Inizializzando mapping...");
 		network.initMapping();
-
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Mapping inizializzato");
+		
+		com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("=== FINE CARICAMENTO MODELLO ===");
 	}
 
 }

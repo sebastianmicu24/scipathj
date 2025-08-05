@@ -26,6 +26,7 @@ public class ConfigurationManager {
     private static final String CONFIG_DIR = System.getProperty("user.home") + File.separator + ".scipathj";
     private static final String VESSEL_SETTINGS_FILE = "vessel_segmentation.properties";
     private static final String NUCLEAR_SETTINGS_FILE = "nuclear_segmentation.properties";
+    private static final String CYTOPLASM_SETTINGS_FILE = "cytoplasm_segmentation.properties";
     private static final String MAIN_SETTINGS_FILE = "main_settings.properties";
     
     // Singleton instance
@@ -225,6 +226,7 @@ public class ConfigurationManager {
             loadROICategorySettings(properties, "vessel", settings.getVesselSettings());
             loadROICategorySettings(properties, "nucleus", settings.getNucleusSettings());
             loadROICategorySettings(properties, "cytoplasm", settings.getCytoplasmSettings());
+            loadROICategorySettings(properties, "cell", settings.getCellSettings());
             
             // For backward compatibility, also load old single ROI settings into vessel settings
             String roiBorderColorStr = properties.getProperty("roiBorderColor");
@@ -285,6 +287,7 @@ public class ConfigurationManager {
         saveROICategorySettings(properties, "vessel", settings.getVesselSettings());
         saveROICategorySettings(properties, "nucleus", settings.getNucleusSettings());
         saveROICategorySettings(properties, "cytoplasm", settings.getCytoplasmSettings());
+        saveROICategorySettings(properties, "cell", settings.getCellSettings());
         
         // For backward compatibility, also save vessel ROI settings as legacy properties
         properties.setProperty("roiBorderColor", colorToString(settings.getVesselSettings().getBorderColor()));
@@ -594,6 +597,130 @@ public class ConfigurationManager {
      */
     public boolean nuclearSettingsFileExists() {
         Path settingsFile = Paths.get(CONFIG_DIR, NUCLEAR_SETTINGS_FILE);
+        return Files.exists(settingsFile);
+    }
+    
+    /**
+     * Load cytoplasm segmentation settings from the properties file.
+     *
+     * @param settings The settings object to populate
+     */
+    public void loadCytoplasmSegmentationSettings(CytoplasmSegmentationSettings settings) {
+        Path settingsFile = Paths.get(CONFIG_DIR, CYTOPLASM_SETTINGS_FILE);
+        
+        if (!Files.exists(settingsFile)) {
+            LOGGER.info("Cytoplasm segmentation settings file not found, using defaults");
+            return;
+        }
+        
+        Properties properties = new Properties();
+        try (InputStream input = Files.newInputStream(settingsFile)) {
+            properties.load(input);
+            
+            // Load exclude vessels setting
+            String excludeVesselsStr = properties.getProperty("excludeVessels");
+            if (excludeVesselsStr != null) {
+                boolean excludeVessels = Boolean.parseBoolean(excludeVesselsStr);
+                settings.setExcludeVessels(excludeVessels);
+                LOGGER.debug("Loaded exclude vessels: {}", excludeVessels);
+            }
+            
+            // Load minimum cell size
+            String minCellSizeStr = properties.getProperty("minCellSize");
+            if (minCellSizeStr != null) {
+                try {
+                    double minCellSize = Double.parseDouble(minCellSizeStr);
+                    settings.setMinCellSize(minCellSize);
+                    LOGGER.debug("Loaded min cell size: {}", minCellSize);
+                } catch (NumberFormatException e) {
+                    LOGGER.warn("Invalid min cell size value in config: {}", minCellSizeStr);
+                }
+            }
+            
+            // Load maximum cell size
+            String maxCellSizeStr = properties.getProperty("maxCellSize");
+            if (maxCellSizeStr != null) {
+                try {
+                    double maxCellSize = Double.parseDouble(maxCellSizeStr);
+                    settings.setMaxCellSize(maxCellSize);
+                    LOGGER.debug("Loaded max cell size: {}", maxCellSize);
+                } catch (NumberFormatException e) {
+                    LOGGER.warn("Invalid max cell size value in config: {}", maxCellSizeStr);
+                }
+            }
+            
+            // Load maximum aspect ratio
+            String maxAspectRatioStr = properties.getProperty("maxAspectRatio");
+            if (maxAspectRatioStr != null) {
+                try {
+                    double maxAspectRatio = Double.parseDouble(maxAspectRatioStr);
+                    settings.setMaxAspectRatio(maxAspectRatio);
+                    LOGGER.debug("Loaded max aspect ratio: {}", maxAspectRatio);
+                } catch (NumberFormatException e) {
+                    LOGGER.warn("Invalid max aspect ratio value in config: {}", maxAspectRatioStr);
+                }
+            }
+            
+            // Load minimum cytoplasm area
+            String minCytoplasmAreaStr = properties.getProperty("minCytoplasmArea");
+            if (minCytoplasmAreaStr != null) {
+                try {
+                    double minCytoplasmArea = Double.parseDouble(minCytoplasmAreaStr);
+                    settings.setMinCytoplasmArea(minCytoplasmArea);
+                    LOGGER.debug("Loaded min cytoplasm area: {}", minCytoplasmArea);
+                } catch (NumberFormatException e) {
+                    LOGGER.warn("Invalid min cytoplasm area value in config: {}", minCytoplasmAreaStr);
+                }
+            }
+            
+            LOGGER.info("Successfully loaded cytoplasm segmentation settings from: {}", settingsFile);
+            
+        } catch (IOException e) {
+            LOGGER.error("Failed to load cytoplasm segmentation settings from: {}", settingsFile, e);
+        }
+    }
+    
+    /**
+     * Save cytoplasm segmentation settings to the properties file.
+     *
+     * @param settings The settings object to save
+     */
+    public void saveCytoplasmSegmentationSettings(CytoplasmSegmentationSettings settings) {
+        Path settingsFile = Paths.get(CONFIG_DIR, CYTOPLASM_SETTINGS_FILE);
+        
+        Properties properties = new Properties();
+        properties.setProperty("excludeVessels", String.valueOf(settings.isExcludeVessels()));
+        properties.setProperty("minCellSize", String.valueOf(settings.getMinCellSize()));
+        properties.setProperty("maxCellSize", String.valueOf(settings.getMaxCellSize()));
+        properties.setProperty("maxAspectRatio", String.valueOf(settings.getMaxAspectRatio()));
+        properties.setProperty("minCytoplasmArea", String.valueOf(settings.getMinCytoplasmArea()));
+        
+        try (OutputStream output = Files.newOutputStream(settingsFile)) {
+            properties.store(output, "SciPathJ Cytoplasm Segmentation Settings");
+            LOGGER.info("Successfully saved cytoplasm segmentation settings to: {}", settingsFile);
+        } catch (IOException e) {
+            LOGGER.error("Failed to save cytoplasm segmentation settings to: {}", settingsFile, e);
+        }
+    }
+    
+    /**
+     * Initialize cytoplasm segmentation settings by loading from file or using defaults.
+     *
+     * @return Initialized CytoplasmSegmentationSettings instance
+     */
+    public CytoplasmSegmentationSettings initializeCytoplasmSegmentationSettings() {
+        CytoplasmSegmentationSettings settings = CytoplasmSegmentationSettings.getInstance();
+        loadCytoplasmSegmentationSettings(settings);
+        return settings;
+    }
+    
+    /**
+     * Check if cytoplasm segmentation settings file exists.
+     *
+     * @return true if the settings file exists
+     */
+    public boolean cytoplasmSettingsFileExists() {
+        Path settingsFile = Paths.get(CONFIG_DIR, CYTOPLASM_SETTINGS_FILE);
         return Files.exists(settingsFile);
     }
 }

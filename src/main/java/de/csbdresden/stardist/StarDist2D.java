@@ -247,6 +247,8 @@ public class StarDist2D extends StarDist2DBase implements Command {
                 } else {
                     paramsCNN.put("modelUrl", pretrainedModel.url);
                 }
+                // Pass the original model choice name to preserve it for TensorFlow model mapping
+                paramsCNN.put("modelName", modelChoice);
                 paramsCNN.put("blockMultiple", pretrainedModel.sizeDivBy);
                 paramsCNN.put("overlap", pretrainedModel.tileOverlap);
             }

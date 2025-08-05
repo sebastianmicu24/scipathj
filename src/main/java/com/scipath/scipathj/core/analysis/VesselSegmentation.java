@@ -1,6 +1,7 @@
-package com.scipath.scipathj.analysis;
+package com.scipath.scipathj.core.analysis;
 
 import com.scipath.scipathj.core.config.ConfigurationManager;
+import com.scipath.scipathj.core.config.SegmentationConstants;
 import com.scipath.scipathj.core.config.VesselSegmentationSettings;
 import com.scipath.scipathj.data.model.UserROI;
 import com.scipath.scipathj.ui.components.ROIManager;
@@ -22,8 +23,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Vessel segmentation functionality for SciPathJ.
+ * Step 1 of the analysis pipeline: Vessel Segmentation.
+ * 
  * Performs thresholding-based vessel detection and creates ROIs from the segmented vessels.
+ * This class handles the first step of the 6-step analysis workflow.
+ * 
+ * @author Sebastian Micu
+ * @version 1.0.0
+ * @since 1.0.0
  */
 public class VesselSegmentation {
     
@@ -35,7 +42,7 @@ public class VesselSegmentation {
     private final VesselSegmentationSettings settings;
     
     /**
-     * Constructor for VesselSegmentation
+     * Constructor for VesselSegmentation with default settings.
      * 
      * @param originalImage The original image to segment
      * @param imageFileName The filename of the image for ROI association
@@ -45,16 +52,34 @@ public class VesselSegmentation {
         this.imageFileName = imageFileName;
         this.roiManager = ROIManager.getInstance();
         this.settings = ConfigurationManager.getInstance().initializeVesselSegmentationSettings();
+        
+        LOGGER.debug("VesselSegmentation initialized for image: {}", imageFileName);
     }
     
     /**
-     * Perform vessel segmentation on the image.
+     * Constructor for VesselSegmentation with custom settings.
+     * 
+     * @param originalImage The original image to segment
+     * @param imageFileName The filename of the image for ROI association
+     * @param settings Custom vessel segmentation settings
+     */
+    public VesselSegmentation(ImagePlus originalImage, String imageFileName, VesselSegmentationSettings settings) {
+        this.originalImage = originalImage;
+        this.imageFileName = imageFileName;
+        this.roiManager = ROIManager.getInstance();
+        this.settings = settings != null ? settings : ConfigurationManager.getInstance().initializeVesselSegmentationSettings();
+        
+        LOGGER.debug("VesselSegmentation initialized for image: {} with custom settings", imageFileName);
+    }
+    
+    /**
+     * Perform vessel segmentation on the image using default threshold.
      * This method:
      * 1. Converts the image to 8-bit grayscale (without saving changes)
      * 2. Applies Gaussian blur to reduce noise
-     * 3. Applies threshold to select pixels with value > 150
+     * 3. Applies threshold to select pixels with value > threshold
      * 4. Processes the binary mask (fill holes)
-     * 5. Creates VesselROI objects from the detected vessel shapes
+     * 5. Creates UserROI objects from the detected vessel shapes
      *
      * @return List of vessel ROIs created from the segmentation
      */
@@ -66,7 +91,7 @@ public class VesselSegmentation {
      * Perform vessel segmentation with custom threshold.
      *
      * @param threshold The threshold value (0-255) for pixel selection
-     * @return List of UserROI objects (converted from VesselROI for compatibility)
+     * @return List of UserROI objects representing detected vessels
      */
     public List<UserROI> segmentVessels(int threshold) {
         LOGGER.info("Starting vessel segmentation for image '{}' with threshold {}", imageFileName, threshold);
@@ -84,7 +109,7 @@ public class VesselSegmentation {
                 IJ.run(workingImage, "8-bit", "");
             }
             
-            // Step 3: Apply Gaussian blur to reduce noise (similar to SCHELI)
+            // Step 3: Apply Gaussian blur to reduce noise
             GaussianBlur gaussianBlur = new GaussianBlur();
             gaussianBlur.blurGaussian(workingImage.getProcessor(), settings.getGaussianBlurSigma());
             LOGGER.debug("Applied Gaussian blur with sigma: {}", settings.getGaussianBlurSigma());
@@ -96,7 +121,7 @@ public class VesselSegmentation {
             // Create binary mask: pixels > threshold become 255 (white), others become 0 (black)
             processor.threshold(threshold);
             
-            // Step 5: Process the binary mask (fill holes, similar to SCHELI)
+            // Step 5: Process the binary mask (fill holes)
             if (settings.isApplyMorphologicalClosing()) {
                 processBinaryMask(workingImage);
             }
@@ -124,7 +149,7 @@ public class VesselSegmentation {
     }
     
     /**
-     * Process the binary mask to improve vessel detection (similar to SCHELI approach).
+     * Process the binary mask to improve vessel detection.
      * This includes filling holes and other morphological operations.
      */
     private void processBinaryMask(ImagePlus binaryImage) {
@@ -256,14 +281,13 @@ public class VesselSegmentation {
         }
     }
     
-    
     /**
      * Get the current threshold value being used.
      *
      * @return The threshold value (0-255)
      */
     public static int getDefaultThreshold() {
-        return VesselSegmentationSettings.DEFAULT_THRESHOLD;
+        return SegmentationConstants.DEFAULT_VESSEL_THRESHOLD;
     }
     
     /**
@@ -272,7 +296,7 @@ public class VesselSegmentation {
      * @return The minimum vessel area in pixels
      */
     public static double getMinVesselSize() {
-        return VesselSegmentationSettings.DEFAULT_MIN_ROI_SIZE;
+        return SegmentationConstants.DEFAULT_MIN_VESSEL_SIZE;
     }
     
     /**
@@ -281,7 +305,7 @@ public class VesselSegmentation {
      * @return The maximum vessel area in pixels
      */
     public static double getMaxVesselSize() {
-        return VesselSegmentationSettings.DEFAULT_MAX_ROI_SIZE;
+        return SegmentationConstants.DEFAULT_MAX_VESSEL_SIZE;
     }
     
     /**
@@ -291,5 +315,38 @@ public class VesselSegmentation {
      */
     public VesselSegmentationSettings getSettings() {
         return settings;
+    }
+    
+    /**
+     * Get statistics about the vessel segmentation results.
+     * 
+     * @param vesselROIs list of detected vessel ROIs
+     * @return formatted statistics string
+     */
+    public String getStatistics(List<UserROI> vesselROIs) {
+        if (vesselROIs.isEmpty()) {
+            return "No vessels detected";
+        }
+        
+        double totalArea = vesselROIs.stream()
+            .mapToDouble(UserROI::getArea)
+            .sum();
+        
+        double avgArea = totalArea / vesselROIs.size();
+        
+        double minArea = vesselROIs.stream()
+            .mapToDouble(UserROI::getArea)
+            .min()
+            .orElse(0.0);
+        
+        double maxArea = vesselROIs.stream()
+            .mapToDouble(UserROI::getArea)
+            .max()
+            .orElse(0.0);
+        
+        return String.format(
+            "Vessels: %d, Total area: %.1f px, Avg area: %.1f px (range: %.1f-%.1f)",
+            vesselROIs.size(), totalArea, avgArea, minArea, maxArea
+        );
     }
 }

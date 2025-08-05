@@ -27,6 +27,8 @@ public class NucleusROI extends UserROI {
     private String segmentationMethod;
     private double centroidX;
     private double centroidY;
+    private CellROI parentCell;
+    private CytoplasmROI associatedCytoplasm;
     
     /**
      * Creates a new NucleusROI from an ImageJ ROI.
@@ -217,11 +219,86 @@ public class NucleusROI extends UserROI {
     
     /**
      * Sets the segmentation method used to detect this nucleus.
-     * 
+     *
      * @param method the segmentation method name
      */
     public void setSegmentationMethod(String method) {
         this.segmentationMethod = method;
+    }
+    
+    /**
+     * Gets the parent cell that contains this nucleus.
+     *
+     * @return the parent cell ROI, or null if not set
+     */
+    public CellROI getParentCell() {
+        return parentCell;
+    }
+    
+    /**
+     * Sets the parent cell that contains this nucleus.
+     *
+     * @param parentCell the parent cell ROI
+     */
+    public void setParentCell(CellROI parentCell) {
+        this.parentCell = parentCell;
+    }
+    
+    /**
+     * Gets the associated cytoplasm ROI.
+     *
+     * @return the cytoplasm ROI, or null if not set
+     */
+    public CytoplasmROI getAssociatedCytoplasm() {
+        return associatedCytoplasm;
+    }
+    
+    /**
+     * Sets the associated cytoplasm ROI.
+     *
+     * @param cytoplasm the cytoplasm ROI
+     */
+    public void setAssociatedCytoplasm(CytoplasmROI cytoplasm) {
+        this.associatedCytoplasm = cytoplasm;
+    }
+    
+    /**
+     * Gets the center coordinates of the nucleus as an integer array.
+     *
+     * @return array with [x, y] coordinates of the nucleus center
+     */
+    public int[] getNucleusCenter() {
+        return new int[]{(int) Math.round(centroidX), (int) Math.round(centroidY)};
+    }
+    
+    /**
+     * Checks if this nucleus is part of a complete cell.
+     *
+     * @return true if both parent cell and cytoplasm are set
+     */
+    public boolean isPartOfCompleteCell() {
+        return parentCell != null && associatedCytoplasm != null;
+    }
+    
+    /**
+     * Gets the nucleus number from the name.
+     * Extracts the number from names like "Nucleus_5" -> 5.
+     *
+     * @return the nucleus number, or -1 if not found
+     */
+    public int getNucleusNumber() {
+        try {
+            String name = getName();
+            if (name != null && name.contains("_")) {
+                String[] parts = name.split("_");
+                if (parts.length > 1) {
+                    return Integer.parseInt(parts[1]);
+                }
+            }
+        } catch (NumberFormatException e) {
+            // Return -1 if parsing fails
+        }
+        return -1;
     }
     
     /**
