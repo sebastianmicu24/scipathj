@@ -4,292 +4,294 @@
 
 ![SciPathJ Logo](src/main/resources/icon.png)
 
-SciPathJ è un software moderno basato su Java per l'analisi di immagini istopatologiche, progettato per fornire segmentazione e classificazione automatizzata di immagini istologiche. Il progetto si basa su metodologie comprovate incorporando un'interfaccia utente moderna e un'architettura estendibile.
+SciPathJ is a modern Java-based software for histopathological image analysis, designed to provide automated segmentation and classification of histological images. The project builds upon proven methodologies while incorporating a modern user interface and an extensible architecture.
 
-## Indice
+## Table of Contents
 
-- [Panoramica del Progetto](#panoramica-del-progetto)
-- [Caratteristiche Principali](#caratteristiche-principali)
-- [Architettura del Sistema](#architettura-del-sistema)
-- [Tecnologie Utilizzate](#tecnologie-utilizzate)
-- [Installazione](#installazione)
-- [Utilizzo](#utilizzo)
-- [Pipeline di Analisi](#pipeline-di-analisi)
-- [Gestione delle ROI](#gestione-delle-roi)
-- [Integrazione StarDist](#integrazione-stardist)
-- [Sviluppo](#sviluppo)
-- [Contribuire](#contribuire)
-- [Licenza](#licenza)
+- [Project Overview](#project-overview)
+- [Key Features](#key-features)
+- [System Architecture](#system-architecture)
+- [Technologies Used](#technologies-used)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Analysis Pipelines](#analysis-pipelines)
+- [ROI Management](#roi-management)
+- [StarDist Integration](#stardist-integration)
+- [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
+- [Contact](#contact)
 
-## Panoramica del Progetto
+## Project Overview
 
-SciPathJ è un'applicazione desktop professionale per l'analisi di immagini istopatologiche che combina algoritmi avanzati di elaborazione delle immagini con un'interfaccia utente intuitiva. Il software è progettato per ricercatori e professionisti nel campo della patologia digitale che necessitano di strumenti automatizzati per l'analisi del tessuto.
+SciPathJ is a professional desktop application for histopathological image analysis that combines advanced image processing algorithms with an intuitive user interface. The software is designed for researchers and professionals in the digital pathology field who need automated tools for tissue analysis.
 
-### Visione del Progetto
+### Project Vision
 
-- **Analisi Automatizzata**: Software altamente automatizzato per l'analisi istopatologica
-- **Elaborazione Batch**: Processamento di cartelle di immagini con risultati completi
-- **Interfaccia Moderna**: Interfaccia utente pulita e intuitiva con design professionale
-- **Estendibilità**: Architettura pronta per plugin per futuri miglioramenti
+- **Automated Analysis**: Highly automated software for histopathological analysis.
+- **Batch Processing**: Process entire folders of images with comprehensive results.
+- **Modern Interface**: A clean and intuitive user interface with a professional design.
+- **Extensibility**: A plugin-ready architecture for future enhancements.
 
-## Caratteristiche Principali
+## Key Features
 
-### 🖼️ Gestione Avanzata delle Immagini
-- Supporto per formati comuni: JPG, PNG, GIF, BMP, TIFF
-- Supporto per formati scientifici: LSM, CZI, ND2, OIB, OIF, VSI
-- Supporto per formati di microscopia: IMS, LIF, SCN, SVS, NDPI
-- Galleria di miniature con navigazione efficiente
-- Visualizzatore di immagini principale con metadati
+### 🖼️ Advanced Image Management
+- Support for common formats: JPG, PNG, GIF, BMP, TIFF
+- Support for scientific formats: LSM, CZI, ND2, OIB, OIF, VSI
+- Support for microscopy formats: IMS, LIF, SCN, SVS, NDPI
+- Thumbnail gallery for efficient navigation
+- Main image viewer with metadata display
 
-### 🔍 Segmentazione Intelligente
-- **Segmentazione Nucleare**: Integrazione con StarDist per il rilevamento dei nuclei
-- **Segmentazione Vascolare**: Algoritmi di sogliatura per il rilevamento dei vasi
-- Parametri configurabili per diversi tipi di tessuto
-- Pre-processing automatico delle immagini
+### 🔍 Intelligent Segmentation
+- **Nuclear Segmentation**: Integration with StarDist for nucleus detection.
+- **Vascular Segmentation**: Thresholding algorithms for vessel detection.
+- Configurable parameters for different tissue types.
+- Automatic image pre-processing.
 
-### 🎯 Sistema ROI (Region of Interest)
-- Creazione interattiva di ROI: Quadrato, Rettangolo, Cerchio
-- Gestione multi-immagine con associazione automatica
-- Esportazione in formati compatibili con ImageJ (.roi, .zip)
-- Importazione da file ROI esistenti
-- Visualizzazione sovrapposta sulle immagini
+### 🎯 ROI (Region of Interest) System
+- Interactive ROI creation: Square, Rectangle, Circle.
+- Multi-image management with automatic association.
+- Export to ImageJ-compatible formats (.roi, .zip).
+- Import from existing ROI files.
+- Overlay display on images.
 
-### 🎨 Interfaccia Utente Moderna
-- Temi Chiari/Scuri con FlatLaf
-- Icone professionali FontAwesome
-- Design responsivo e transizioni fluide
-- Navigazione a schede intuitive
-- Barra di stato con feedback in tempo reale
+### 🎨 Modern User Interface
+- Light/Dark themes with FlatLaf.
+- Professional FontAwesome icons.
+- Responsive design and smooth transitions.
+- Intuitive tab-based navigation.
+- Status bar with real-time feedback.
 
-### ⚙️ Pipeline Estendibili
-- Architettura a pipeline modulare
-- Configurazione passo-passo
-- Supporto per l'aggiunta di nuovi algoritmi
-- Esecuzione batch con monitoraggio del progresso
+### ⚙️ Extendable Pipelines
+- Modular pipeline architecture.
+- Step-by-step configuration.
+- Support for adding new algorithms.
+- Batch execution with progress monitoring.
 
-## Architettura del Sistema
+## System Architecture
 
-### Struttura del Progetto
+### Project Structure
 
 ```
 com.scipath.scipathj/
-├── core/                 # Motore di elaborazione principale
-│   ├── engine/          # Coordinatore principale dell'elaborazione
-│   ├── pipeline/        # Sistema di gestione delle pipeline
-│   ├── config/          # Gestione della configurazione
-│   └── events/          # Sistema di eventi per aggiornamenti UI
-├── ui/                  # Componenti dell'interfaccia utente
-│   ├── main/           # Finestra principale dell'applicazione
-│   ├── components/     # Componenti UI riutilizzabili
-│   ├── dialogs/        # Impostazioni e dialoghi
-│   ├── themes/         # Gestione dei temi
-│   ├── model/          # Modelli dati UI
-│   └── utils/          # Utilità UI
-├── analysis/           # Algoritmi di analisi
-├── data/               # Modelli dati e gestione
-│   └── model/          # Strutture dati principali
-└── SciPathJApplication.java # Classe principale dell'applicazione
+├── core/                 # Main processing engine
+│   ├── engine/          # Main processing coordinator
+│   ├── pipeline/        # Pipeline management system
+│   ├── config/          # Configuration management
+│   └── events/          # Event system for UI updates
+├── ui/                  # User Interface components
+│   ├── main/           # Main application window
+│   ├── components/     # Reusable UI components
+│   ├── dialogs/        # Settings and dialogs
+│   ├── themes/         # Theme management
+│   ├── model/          # UI data models
+│   └── utils/          # UI utilities
+├── analysis/           # Analysis algorithms
+├── data/               # Data models and management
+│   └── model/          # Core data structures
+└── SciPathJApplication.java # Main application class
 ```
 
-### Componenti Principali
+### Core Components
 
 #### Core Engine
-- **SciPathJEngine**: Coordinatore centrale dell'elaborazione
-- **ConfigurationManager**: Gestione delle impostazioni e preferenze
-- **EventBus**: Sistema di comunicazione basato su eventi
-- **Pipeline System**: Architettura di pipeline estendibile con interfacce
+- **SciPathJEngine**: Central processing coordinator.
+- **ConfigurationManager**: Manages settings and preferences.
+- **EventBus**: Event-based communication system.
+- **Pipeline System**: Extendable pipeline architecture with interfaces.
 
-#### Sistema UI
-- **MainWindow**: Interfaccia principale dell'applicazione con navigazione a schede
-- **PipelineSelectionPanel**: Selezione interattiva delle pipeline con schede visive
-- **PipelineRecapPanel**: Visualizzazione delle informazioni della pipeline
-- **FolderSelectionPanel**: Selezione cartelle con drag-and-drop
-- **ImageGallery**: Galleria verticale di miniature
-- **MainImageViewer**: Visualizzatore principale di immagini
+#### UI System
+- **MainWindow**: Main application interface with tabbed navigation.
+- **PipelineSelectionPanel**: Interactive pipeline selection with visual cards.
+- **PipelineRecapPanel**: Displays pipeline information.
+- **FolderSelectionPanel**: Folder selection with drag-and-drop.
+- **ImageGallery**: Vertical thumbnail gallery.
+- **MainImageViewer**: Main image viewer.
 
-#### Gestione ROI
-- **ROIManager**: Sistema centralizzato di gestione delle ROI
-- **ROIOverlay**: Sistema di sovrapposizione per il disegno interattivo
-- **ROIToolbar**: Barra degli strumenti per la gestione delle ROI
-- Supporto completo per formati ImageJ (.roi, .zip)
+#### ROI Management
+- **ROIManager**: Centralized ROI management system.
+- **ROIOverlay**: Overlay system for interactive drawing.
+- **ROIToolbar**: Toolbar for ROI management.
+- Full support for ImageJ formats (.roi, .zip).
 
-## Tecnologie Utilizzate
+## Technologies Used
 
 ### Core Java
-- **Java 23**: Ultima versione con funzionalità preview abilitate
-- **Maven**: Gestione delle dipendenze e build
-- **SLF4J + Logback**: Sistema di logging professionale
+- **Java 23**: Latest version with preview features enabled.
+- **Maven**: Dependency management and build tool.
+- **SLF4J + Logback**: Professional logging framework.
 
-### Elaborazione delle Immagini
-- **ImageJ 2.9.0**: Ecosistema completo per l'elaborazione delle immagini scientifiche
-- **ImgLib2**: Libreria per l'elaborazione di immagini multidimensionali
-- **CSBDeep 0.3.5-SNAPSHOT**: Deep learning per l'analisi biologica
-- **StarDist**: Rilevamento di nuclei basato su deep learning
+### Image Processing
+- **ImageJ 2.9.0**: Comprehensive ecosystem for scientific image processing.
+- **ImgLib2**: Library for multidimensional image processing.
+- **CSBDeep 0.3.5-SNAPSHOT**: Deep learning for biological analysis.
+- **StarDist**: Deep learning-based nucleus detection.
 
 ### Machine Learning
-- **XGBoost4J 2.1.4**: Algoritmi di machine learning per la classificazione
-- **TensorFlow 1.15.0**: Backend per reti neurali
+- **XGBoost4J 2.1.4**: Machine learning algorithms for classification.
+- **TensorFlow 1.15.0**: Backend for neural networks.
 
-### Interfaccia Utente
-- **FlatLaf 3.4.1**: Temi moderni per applicazioni Swing
-- **Ikonli 12.3.1**: Icone professionali FontAwesome
-- **Swing**: Framework UI principale di Java
+### User Interface
+- **FlatLaf 3.4.1**: Modern Look and Feel for Swing applications.
+- **Ikonli 12.3.1**: Professional FontAwesome icons.
+- **Swing**: Main Java UI framework.
 
-### Dati
-- **Jackson 2.15.2**: Elaborazione JSON
-- **Apache Commons**: Utilità varie
+### Data
+- **Jackson 2.15.2**: JSON processing.
+- **Apache Commons**: Various utilities.
 
-## Installazione
+## Installation
 
-### Prerequisiti
+### Prerequisites
 
-- Java 23 o successivo
-- Maven 3.6 o successivo
-- 4GB di RAM raccomandati
-- Spazio su disco: 500MB
+- Java 23 or later
+- Maven 3.6 or later
+- 4GB of RAM recommended
+- 500MB of disk space
 
-### Build da Sorgenti
+### Build from Source
 
-1. Clonare il repository:
-```bash
-git clone https://github.com/sebastianmicu24/scipathj.git
-cd scipathj
-```
+1.  Clone the repository:
+    ```bash
+    git clone https://github.com/sebastianmicu24/scipathj.git
+    cd scipathj
+    ```
 
-2. Compilare il progetto:
-```bash
-mvn clean compile
-```
+2.  Compile the project:
+    ```bash
+    mvn clean compile
+    ```
 
-3. Eseguire l'applicazione:
-```bash
-mvn exec:java
-```
+3.  Run the application:
+    ```bash
+    mvn exec:java
+    ```
 
-### Creazione dell'Eseguibile
+### Creating an Executable
 
-Per creare un JAR eseguibile:
+To create an executable JAR file:
 ```bash
 mvn clean package
 ```
 
-L'eseguibile verrà creato in `target/scipathj-1.0.0.jar`
+The executable will be created at `target/scipathj-1.0.0.jar`.
 
-## Utilizzo
+## Usage
 
-### Avvio dell'Applicazione
+### Starting the Application
 
-1. Avviare SciPathJ:
-```bash
-java -jar target/scipathj-1.0.0.jar
-```
+1.  Launch SciPathJ:
+    ```bash
+    java -jar target/scipathj-1.0.0.jar
+    ```
 
-2. Selezionare una pipeline di analisi dalla schermata principale
+2.  Select an analysis pipeline from the main screen.
 
-3. Scegliere una cartella contenente le immagini da analizzare
+3.  Choose a folder containing the images to be analyzed.
 
-4. Navigare nella galleria e selezionare le immagini di interesse
+4.  Navigate the gallery and select the images of interest.
 
-### Flusso di Lavoro Principale
+### Main Workflow
 
-1. **Selezione della Pipeline**
-   - Scegliere tra le pipeline disponibili
-   - Visualizzare i passaggi di analisi previsti
-   - Configurare i parametri specifici
+1.  **Pipeline Selection**
+    - Choose from available pipelines.
+    - View the planned analysis steps.
+    - Configure specific parameters.
 
-2. **Selezione delle Immagini**
-   - Selezionare una cartella tramite drag-and-drop
-   - Navigare nella galleria delle miniature
-   - Visualizzare le immagini nel visualizzatore principale
+2.  **Image Selection**
+    - Select a folder via drag-and-drop.
+    - Browse the thumbnail gallery.
+    - View images in the main viewer.
 
-3. **Analisi**
-   - Avviare l'analisi con il pulsante "Start"
-   - Monitorare il progresso nella barra di stato
-   - Visualizzare i risultati al termine
+3.  **Analysis**
+    - Start the analysis with the "Start" button.
+    - Monitor progress in the status bar.
+    - View the results upon completion.
 
-4. **Gestione delle ROI**
-   - Creare ROI manualmente sugli immagini
-   - Utilizzare le ROI generate automaticamente
-   - Esportare le ROI per analisi esterne
+4.  **ROI Management**
+    - Manually create ROIs on images.
+    - Use automatically generated ROIs.
+    - Export ROIs for external analysis.
 
-## Pipeline di Analisi
+## Analysis Pipelines
 
-### Pipeline Disponibili
+### Available Pipelines
 
-#### 1. Analisi Epatica H&E
-- Segmentazione nucleare con StarDist
-- Segmentazione vascolare
-- Estrazione delle caratteristiche morfologiche
-- Classificazione del tessuto
+#### 1. H&E Liver Analysis
+- Nuclear segmentation with StarDist.
+- Vascular segmentation.
+- Morphological feature extraction.
+- Tissue classification.
 
-#### 2. Segmentazione Nucleare
-- Rilevamento nuclei con StarDist
-- Filtraggio per dimensione e forma
-- Statistiche nucleari
-- Esportazione risultati
+#### 2. Nuclear Segmentation
+- Nucleus detection with StarDist.
+- Filtering by size and shape.
+- Nuclear statistics.
+- Export results.
 
-#### 3. Analisi Vascolare
-- Segmentazione dei vasi sanguigni
-- Analisi della densità vascolare
-- Misurazioni morfologiche
-- Visualizzazione risultati
+#### 3. Vascular Analysis
+- Blood vessel segmentation.
+- Vascular density analysis.
+- Morphological measurements.
+- Results visualization.
 
-### Configurazione della Pipeline
+### Pipeline Configuration
 
-Ogni pipeline offre configurazioni specifiche:
+Each pipeline offers specific configurations:
 
-#### Impostazioni di Segmentazione Nucleare
-- Scelta del modello StarDist
-- Soglie di probabilità e NMS
-- Normalizzazione dell'input
-- Parametri di tiling
+#### Nuclear Segmentation Settings
+- StarDist model selection.
+- Probability and NMS thresholds.
+- Input normalization.
+- Tiling parameters.
 
-#### Impostazioni di Segmentazione Vascolare
-- Soglia di intensità
-- Sigma del blur gaussiano
-- Chiusura morfologica
-- Dimensioni minime/massime
+#### Vascular Segmentation Settings
+- Intensity threshold.
+- Gaussian blur sigma.
+- Morphological closing.
+- Minimum/maximum sizes.
 
-## Gestione delle ROI
+## ROI Management
 
-### Creazione di ROI
+### Creating ROIs
 
-1. Selezionare uno strumento di disegno dalla toolbar:
-   - Quadrato
-   - Rettangolo
-   - Cerchio
+1.  Select a drawing tool from the toolbar:
+    - Square
+    - Rectangle
+    - Circle
 
-2. Fare clic e trascinare sull'immagine per creare la ROI
+2.  Click and drag on the image to create the ROI.
 
-3. La ROI verrà automaticamente associata all'immagine corrente
+3.  The ROI will be automatically associated with the current image.
 
-### Gestione delle ROI Esistenti
+### Managing Existing ROIs
 
-- **Salva ROI**: Esporta le ROI dell'immagine corrente
-- **Salva Tutte**: Esporta tutte le ROI in un file ZIP master
-- **Cancella Tutte**: Rimuove tutte le ROI dall'immagine corrente
+- **Save ROIs**: Export the ROIs of the current image.
+- **Save All**: Export all ROIs into a master ZIP file.
+- **Delete All**: Remove all ROIs from the current image.
 
-### Formati Supportati
+### Supported Formats
 
-- **ROI singola**: File .roi (compatibile con ImageJ)
-- **ROI multiple**: File .zip (set di ROI ImageJ)
-- **Master ZIP**: File ZIP organizzato per immagine
+- **Single ROI**: .roi file (ImageJ compatible).
+- **Multiple ROIs**: .zip file (set of ImageJ ROIs).
+- **Master ZIP**: ZIP file organized by image.
 
-## Integrazione StarDist
+## StarDist Integration
 
-SciPathJ integra StarDist, un algoritmo state-of-the-art per il rilevamento dei nuclei cellulari basato su deep learning.
+SciPathJ integrates StarDist, a state-of-the-art algorithm for cell nucleus detection based on deep learning.
 
-### Modelli Supportati
+### Supported Models
 
-- **Versatile (fluorescent)**: Modello generale per immagini fluorescenti
-- **Versatile (H&E)**: Modello specifico per immagini istopatologiche H&E
-- **DSB 2018**: Modello addestrato sul dataset DSB 2018
-- **Tissue Net**: Modello per tessuti vari
+- **Versatile (fluorescent)**: General model for fluorescent images.
+- **Versatile (H&E)**: Specific model for H&E histopathological images.
+- **DSB 2018**: Model trained on the DSB 2018 dataset.
+- **Tissue Net**: Model for various tissues.
 
-### Configurazione StarDist
+### StarDist Configuration
 
 ```java
-// Esempio di configurazione
+// Example configuration
 NuclearSegmentationSettings settings = new NuclearSegmentationSettings();
 settings.setModelChoice("Versatile (H&E)");
 settings.setProbThresh(0.5);
@@ -299,93 +301,95 @@ settings.setPercentileBottom(1.0);
 settings.setPercentileTop(99.8);
 ```
 
-### Pre-processing Automatico
+### Automatic Pre-processing
 
-- Conversione a 8-bit per compatibilità
-- Normalizzazione percentile-based
-- Gestione di immagini RGB a canali separati
-- Fallback a metodi tradizionali in caso di errori
+- Conversion to 8-bit for compatibility.
+- Percentile-based normalization.
+- Management of RGB images with separate channels.
+- Fallback to traditional methods in case of errors.
 
-## Sviluppo
+## Development
 
-### Ambiente di Sviluppo
+### Development Environment
 
-1. IDE raccomandato: IntelliJ IDEA
-2. Plugin utili:
-   - Maven Integration
-   - Git Integration
-   - SonarLint
+1.  Recommended IDE: IntelliJ IDEA
+2.  Useful Plugins:
+    - Maven Integration
+    - Git Integration
+    - SonarLint
 
-### Struttura del Codice
+### Code Structure
 
-Il progetto segue le linee guida di sviluppo Java professionale:
+The project follows professional Java development guidelines:
 
-- **Principio di Responsabilità Unica**: Ogni classe ha una sola responsabilità
-- **Documentazione Completa**: JavaDoc per tutte le classi e metodi pubblici
-- **Gestione degli Errori**: Eccezioni personalizzate e logging dettagliato
-- **Test Unitari**: JUnit 5 con Mockito per il mocking
+- **Single Responsibility Principle**: Each class has a single responsibility.
+- **Comprehensive Documentation**: JavaDoc for all public classes and methods.
+- **Error Handling**: Custom exceptions and detailed logging.
+- **Unit Testing**: JUnit 5 with Mockito for mocking.
 
-### Compilazione e Testing
+### Building and Testing
 
 ```bash
-# Compilazione
+# Compile
 mvn clean compile
 
-# Esecuzione test
+# Run tests
 mvn test
 
-# Analisi codice
+# Code analysis
 mvn spotbugs:check
 mvn pmd:check
 
-# Copertura test
+# Test coverage
 mvn jacoco:report
 ```
 
-### Standard di Codifica
+### Coding Standards
 
-- Dimensione massima dei file: 400 linee
-- Dimensione massima dei metodi: 30 linee
-- Nomi descrittivi per classi, metodi e variabili
-- Commenti che spiegano il "perché" non il "cosa"
+- Maximum file length: 400 lines.
+- Maximum method length: 30 lines.
+- Descriptive names for classes, methods, and variables.
+- Comments that explain the "why," not the "what."
 
-## Contribuire
+## Contributing
 
-### Linee Guida per i Contributi
+We welcome contributions! Please follow these guidelines to get started.
 
-1. Fare fork del repository
-2. Creare un branch feature: `git checkout -b feature/nuova-funzionalita`
-3. Commit delle modifiche: `git commit -m 'Aggiunta nuova funzionalità'`
-4. Push del branch: `git push origin feature/nuova-funzionalita`
-5. Aprire una Pull Request
+### Contribution Guidelines
 
-### Segnalazione di Bug
+1.  Fork the repository.
+2.  Create a feature branch: `git checkout -b feature/new-feature`
+3.  Commit your changes: `git commit -m 'Add new feature'`
+4.  Push to the branch: `git push origin feature/new-feature`
+5.  Open a Pull Request.
 
-Utilizzare le issue di GitHub per segnalare bug:
-- Titolo descrittivo
-- Passi per riprodurre il problema
-- Comportamento atteso vs. comportamento osservato
-- Stack trace se disponibile
-- Versione di Java e del sistema operativo
+### Reporting Bugs
 
-## Licenza
+Please use GitHub Issues to report bugs:
+- Use a descriptive title.
+- Provide steps to reproduce the issue.
+- Explain the expected vs. observed behavior.
+- Include a stack trace if available.
+- Specify your Java and operating system versions.
 
-Questo progetto è distribuito sotto licenza BSD 3-Clause. Vedere il file [LICENSE](LICENSE) per i dettagli.
+## License
 
-## Riconoscimenti
+This project is distributed under the BSD 3-Clause License. See the [LICENSE](LICENSE) file for details.
 
-- **ImageJ Team**: Per l'eccezionale framework di elaborazione delle immagini
-- **StarDist Team**: Per l'algoritmo di segmentazione nucleare state-of-the-art
-- **CSBDeep Team**: Per il framework di deep learning per l'analisi biologica
-- **FlatLaf Team**: Per i moderni temi Swing
+## Acknowledgments
 
-## Contatti
+- **ImageJ Team**: For the outstanding image processing framework.
+- **StarDist Team**: For the state-of-the-art nuclear segmentation algorithm.
+- **CSBDeep Team**: For the deep learning framework for biological analysis.
+- **FlatLaf Team**: For the modern Swing Look and Feels.
 
-- **Autore**: Sebastian Micu
+## Contact
+
+- **Author**: Sebastian Micu
 - **Email**: sebastian.micu@example.com
 - **Repository**: https://github.com/sebastianmicu24/scipathj
 - **Issues**: https://github.com/sebastianmicu24/scipathj/issues
 
 ---
 
-**SciPathJ** - Strumento professionale per l'analisi istopatologica digitale
+**SciPathJ** - A professional tool for digital histopathological analysis.
