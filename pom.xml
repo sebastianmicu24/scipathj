@@ -19,7 +19,7 @@
         
         <!-- Core versions -->
         <imagej.version>2.9.0</imagej.version>
-        <tensorflow.version>1.15.0</tensorflow.version>
+        <tensorflow.version>1.0.0</tensorflow.version>
         <imagej-tensorflow.version>1.1.5</imagej-tensorflow.version>
         
         <!-- UI versions -->
@@ -58,26 +58,16 @@
             <version>2.0.1</version>
         </dependency>
         
-        <!-- TensorFlow -->
-        <dependency>
-            <groupId>net.imagej</groupId>
-            <artifactId>imagej-tensorflow</artifactId>
-            <version>${imagej-tensorflow.version}</version>
-        </dependency>
+        <!-- TensorFlow 2.x -->
         <dependency>
             <groupId>org.tensorflow</groupId>
-            <artifactId>libtensorflow</artifactId>
+            <artifactId>tensorflow-core-platform</artifactId>
             <version>${tensorflow.version}</version>
         </dependency>
         <dependency>
             <groupId>org.tensorflow</groupId>
-            <artifactId>libtensorflow_jni</artifactId>
+            <artifactId>tensorflow-framework</artifactId>
             <version>${tensorflow.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.tensorflow</groupId>
-            <artifactId>proto</artifactId>
-            <version>1.15.0</version>
         </dependency>
         
         <!-- Clipper for StarDist -->
@@ -154,7 +144,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
-                    <release>${maven.compiler.release}</release>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
                 </configuration>
             </plugin>
 
@@ -202,7 +193,7 @@
                         </executions>
                     </plugin>
 
-                    <!-- Extract TensorFlow natives -->
+                    <!-- Extract TensorFlow 2.x natives -->
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-antrun-plugin</artifactId>
@@ -217,15 +208,17 @@
                                 <configuration>
                                     <target>
                                         <mkdir dir="${project.build.directory}/lib"/>
+                                        <!-- TensorFlow 2.x natives are included in tensorflow-core-platform -->
                                         <unzip dest="${project.build.directory}/natives-temp">
-                                            <fileset dir="${settings.localRepository}/org/tensorflow/libtensorflow_jni/1.15.0">
-                                                <include name="libtensorflow_jni-1.15.0.jar"/>
+                                            <fileset dir="${settings.localRepository}/org/tensorflow">
+                                                <include name="**/tensorflow-core-platform-${tensorflow.version}*.jar"/>
                                             </fileset>
                                         </unzip>
                                         <copy todir="${project.build.directory}/lib" flatten="true" failonerror="false">
                                             <fileset dir="${project.build.directory}/natives-temp">
                                                 <include name="**/*.dll"/>
                                                 <include name="**/*.so"/>
+                                                <include name="**/*.dylib"/>
                                             </fileset>
                                         </copy>
                                         <delete dir="${project.build.directory}/natives-temp"/>
@@ -278,8 +271,8 @@
                             
                             <!-- JVM options for TensorFlow and Java 21 compatibility -->
                             <javaOptions>
-                                <javaOption>-Xmx4G</javaOption>
-                                <javaOption>-Xms1G</javaOption>
+                                <javaOption>-Xmx8G</javaOption>
+                                <javaOption>-Xms2G</javaOption>
                                 <javaOption>--add-opens=java.base/java.lang=ALL-UNNAMED</javaOption>
                                 <javaOption>--add-opens=java.base/java.lang.reflect=ALL-UNNAMED</javaOption>
                                 <javaOption>--add-opens=java.base/java.util=ALL-UNNAMED</javaOption>

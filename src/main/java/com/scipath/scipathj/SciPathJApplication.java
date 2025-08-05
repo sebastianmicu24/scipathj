@@ -3,9 +3,6 @@ package com.scipath.scipathj;
 import com.scipath.scipathj.core.config.ConfigurationManager;
 import com.scipath.scipathj.core.config.MainSettings;
 import com.scipath.scipathj.core.engine.SciPathJEngine;
-import com.scipath.scipathj.core.engine.Java21ClassLoaderFix;
-import com.scipath.scipathj.core.engine.ClassLoaderDebugger;
-import com.scipath.scipathj.core.engine.TensorFlowLibraryLoader;
 import com.scipath.scipathj.ui.main.MainWindow;
 import com.scipath.scipathj.ui.themes.ThemeManager;
 import org.slf4j.Logger;
@@ -40,31 +37,6 @@ public class SciPathJApplication {
     public static void main(String[] args) {
         LOGGER.info("Starting SciPathJ Application v1.0.0");
         try {
-            // Comprehensive ClassLoader debugging
-            LOGGER.info("Starting comprehensive ClassLoader debugging");
-            ClassLoaderDebugger.debugClassLoaderEnvironment();
-            ClassLoaderDebugger.identifyPotentialIssues();
-            
-            // Apply Java 21 ClassLoader compatibility fix early in startup
-            LOGGER.info("Applying Java 21 ClassLoader compatibility fix");
-            Java21ClassLoaderFix.applyFix();
-            
-            // Force URLClassLoader environment as additional safety measure
-            Java21ClassLoaderFix.forceURLClassLoaderEnvironment();
-            
-            LOGGER.info("ClassLoader info after fixes: {}", Java21ClassLoaderFix.getClassLoaderInfo());
-            
-            // Preload TensorFlow library early in startup
-            LOGGER.info("Attempting to preload TensorFlow library");
-            boolean tensorFlowPreloaded = TensorFlowLibraryLoader.loadTensorFlowLibrary();
-            if (tensorFlowPreloaded) {
-                LOGGER.info("TensorFlow library preloaded successfully: {}",
-                           TensorFlowLibraryLoader.getLoadedLibraryPath());
-            } else {
-                LOGGER.warn("TensorFlow library preloading failed, will try again during StarDist initialization");
-                LOGGER.debug("TensorFlow loading status: {}", TensorFlowLibraryLoader.getLoadingStatus());
-            }
-            
             // Set system properties for better UI experience
             setupSystemProperties();
             
@@ -76,15 +48,6 @@ public class SciPathJApplication {
             
         } catch (Exception e) {
             LOGGER.error("Failed to start SciPathJ application", e);
-            
-            // Additional debugging on failure
-            LOGGER.error("Performing additional debugging due to startup failure");
-            try {
-                ClassLoaderDebugger.debugClassLoaderEnvironment();
-            } catch (Exception debugException) {
-                LOGGER.error("Even debugging failed", debugException);
-            }
-            
             showErrorDialog("Application Startup Error",
                           "Failed to start SciPathJ: " + e.getMessage());
             System.exit(1);
@@ -109,16 +72,7 @@ public class SciPathJApplication {
         // Set application name for OS integration
         System.setProperty("apple.awt.application.name", "SciPathJ");
         
-        // Java module system compatibility for TensorFlow and legacy libraries
-        System.setProperty("java.system.class.loader", "java.lang.ClassLoader");
-        System.setProperty("jdk.module.illegalAccess", "permit");
-        System.setProperty("jdk.module.illegalAccess.silent", "true");
-        
-        // TensorFlow specific compatibility settings
-        System.setProperty("tensorflow.eager", "false");
-        System.setProperty("org.tensorflow.NativeLibrary.DEBUG", "false");
-        
-        LOGGER.debug("System properties configured for optimal UI experience and Java module compatibility");
+        LOGGER.debug("System properties configured for optimal UI experience");
     }
     
     /**
@@ -149,8 +103,6 @@ public class SciPathJApplication {
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 LOGGER.info("Shutting down SciPathJ application");
                 engine.shutdown();
-                // Restore original ClassLoader on shutdown
-                Java21ClassLoaderFix.restoreOriginalClassLoader();
             }));
             
             // Show the application

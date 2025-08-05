@@ -42,7 +42,6 @@ import de.csbdresden.csbdeep.network.ModelExecutor;
 import de.csbdresden.csbdeep.network.ModelLoader;
 import de.csbdresden.csbdeep.network.model.Network;
 import de.csbdresden.csbdeep.network.model.tensorflow.TensorFlowNetwork;
-import com.scipath.scipathj.core.engine.TensorFlowNetworkWrapper;
 import de.csbdresden.csbdeep.normalize.DefaultInputNormalizer;
 import de.csbdresden.csbdeep.normalize.InputNormalizer;
 import de.csbdresden.csbdeep.task.Task;
@@ -363,15 +362,15 @@ protected boolean initNetwork() {
 	DirectFileLogger.logStarDist("INFO", "--- Inizio inizializzazione network ---");
 	networkInitialized = true;
 	
-	DirectFileLogger.logStarDist("INFO", "Creazione TensorFlowNetworkWrapper...");
+	DirectFileLogger.logStarDist("INFO", "Creazione TensorFlowNetwork...");
 	DirectFileLogger.logStarDist("INFO", "ModelExecutor presente: " + (modelExecutor != null));
 	if (modelExecutor != null) {
 		DirectFileLogger.logStarDist("INFO", "ModelExecutor class: " + modelExecutor.getClass().getSimpleName());
 	}
 	
-	// Use our Java 21 compatible wrapper instead of the original TensorFlowNetwork
-	network = new TensorFlowNetworkWrapper(modelExecutor);
-	DirectFileLogger.logStarDist("INFO", "TensorFlowNetworkWrapper creato: " + (network != null));
+	// Use TensorFlow 2.x compatible TensorFlowNetwork
+	network = new TensorFlowNetwork(modelExecutor);
+	DirectFileLogger.logStarDist("INFO", "TensorFlowNetwork creato: " + (network != null));
 	
 	DirectFileLogger.logStarDist("INFO", "Context injection...");
 	DirectFileLogger.logStarDist("INFO", "Context presente: " + (context != null));

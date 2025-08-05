@@ -42,7 +42,6 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 
-import org.scijava.io.http.HTTPLocation;
 import org.scijava.io.location.FileLocation;
 import org.scijava.io.location.Location;
 
@@ -59,12 +58,8 @@ public class IOHelper {
 		final File file = new File(path);
 		Location source;
 		if (!file.exists()) {
-			try {
-				source = new HTTPLocation(path);
-			}
-			catch (MalformedURLException | URISyntaxException exc) {
-				throw new FileNotFoundException("Could not find file or URL: " + path);
-			}
+			// For TensorFlow 2.x, we only support local files
+			throw new FileNotFoundException("Could not find file: " + path);
 		}
 		else {
 			source = new FileLocation(file);
@@ -93,10 +88,36 @@ public class IOHelper {
 	public static String getFileCacheName(Class<? extends GenericNetwork> parentClass, File file) throws IOException {
 		FileInputStream fis = null;
 		try {
-			fis = new FileInputStream(file);
+			// Handle TensorFlow 2.x SavedModel directories
+			File targetFile = file;
+			if (file.isDirectory()) {
+				// For TensorFlow 2.x SavedModel, use saved_model.pb for hash calculation
+				File savedModelPb = new File(file, "saved_model.pb");
+				if (savedModelPb.exists() && savedModelPb.isFile()) {
+					targetFile = savedModelPb;
+					System.out.println("[INFO] Using saved_model.pb for cache name calculation: " + savedModelPb.getAbsolutePath());
+				} else {
+					// Fallback: use directory name + modification time
+					String dirName = file.getName();
+					long lastModified = file.lastModified();
+					String hashInput = dirName + "_" + lastModified;
+					String md5 = org.apache.commons.codec.digest.DigestUtils.md5Hex(hashInput.getBytes());
+					System.out.println("[INFO] Using directory-based cache name for: " + file.getAbsolutePath());
+					return parentClass.getSimpleName() + "_" + md5;
+				}
+			}
+			
+			fis = new FileInputStream(targetFile);
 			String md5 = org.apache.commons.codec.digest.DigestUtils.md5Hex(fis);
 			return parentClass.getSimpleName() + "_" + md5;
 		} catch (IOException e) {
+			// If we still can't read the file, create a fallback cache name
+			if (file.isDirectory()) {
+				String dirName = file.getName();
+				String md5 = org.apache.commons.codec.digest.DigestUtils.md5Hex(dirName.getBytes());
+				System.out.println("[WARN] Using fallback cache name for directory: " + file.getAbsolutePath());
+				return parentClass.getSimpleName() + "_" + md5;
+			}
 			throw e;
 		} finally {
 			if(fis != null) {

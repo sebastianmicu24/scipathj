@@ -54,7 +54,10 @@ public class CachedModelBundle {
     public byte[] metaGraphDef() {
         if (model instanceof org.tensorflow.SavedModelBundle) {
             try {
-                return ((org.tensorflow.SavedModelBundle) model).metaGraphDef();
+                // For TensorFlow 2.x, metaGraphDef() returns MetaGraphDef object
+                // Convert to bytes using toByteArray()
+                org.tensorflow.proto.MetaGraphDef metaGraph = ((org.tensorflow.SavedModelBundle) model).metaGraphDef();
+                return metaGraph != null ? metaGraph.toByteArray() : null;
             } catch (Exception e) {
                 System.err.println("Error getting metaGraphDef: " + e.getMessage());
                 return null;

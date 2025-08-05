@@ -720,20 +720,38 @@ public class SimpleHENuclearSegmentation {
             // Prepare image for StarDist (8-bit preferred)
             ImagePlus processedImage = prepareImageForStarDist(imagePlus);
             
+            LOGGER.debug("Before ImgLib2 conversion: {}x{}, {} channels, {}-bit, type={}",
+                        processedImage.getWidth(), processedImage.getHeight(),
+                        processedImage.getNChannels(), processedImage.getBitDepth(), processedImage.getType());
+            
             // Convert to ImgLib2
             Img img = ImageJFunctions.wrapReal(processedImage);
+            
+            LOGGER.debug("After ImgLib2 conversion: {} dimensions, type={}",
+                        img.numDimensions(), img.getClass().getSimpleName());
+            
+            // Log dimensions
+            StringBuilder dimStr = new StringBuilder();
+            for (int i = 0; i < img.numDimensions(); i++) {
+                if (i > 0) dimStr.append("x");
+                dimStr.append(img.dimension(i));
+            }
+            LOGGER.debug("ImgLib2 dimensions: {}", dimStr.toString());
             
             // Create axes
             AxisType[] axes = {Axes.X, Axes.Y};
             if (processedImage.getNChannels() > 1) {
                 axes = new AxisType[]{Axes.X, Axes.Y, Axes.CHANNEL};
+                LOGGER.debug("Using 3D axes: [X, Y, CHANNEL]");
+            } else {
+                LOGGER.debug("Using 2D axes: [X, Y]");
             }
             
             ImgPlus imgPlus = new ImgPlus(img, processedImage.getTitle(), axes);
             Dataset dataset = datasetService.create(imgPlus);
             
-            LOGGER.debug("Converted ImagePlus to Dataset: {}x{} pixels", 
-                        dataset.getWidth(), dataset.getHeight());
+            LOGGER.debug("Final Dataset: {}x{} pixels, {} channels",
+                        dataset.getWidth(), dataset.getHeight(), dataset.getChannels());
             
             return dataset;
             

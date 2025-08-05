@@ -102,20 +102,70 @@ public class StarDist2DModel {
             return null;
         }
         
-        // Look for the model in the resources directory first
-        File resourceModelDir = new File("src/main/resources/models/2D/" + modelName);
-        if (resourceModelDir.exists() && resourceModelDir.isDirectory()) {
-            // Check if this directory contains a SavedModel structure
-            File savedModelPb = new File(resourceModelDir, "saved_model.pb");
-            File variablesDir = new File(resourceModelDir, "variables");
-            
-            if (savedModelPb.exists() && variablesDir.exists()) {
-                LOGGER.debug("Found model in resources directory: {}", resourceModelDir.getAbsolutePath());
-                return resourceModelDir;
+        // Priority 1: Look for the model in the resources directory (most reliable)
+        String[] resourcePaths = {
+            "src/main/resources/models/2D/" + modelName,
+            "models/2D/" + modelName,
+            "./src/main/resources/models/2D/" + modelName,
+            "./models/2D/" + modelName
+        };
+        
+        for (String resourcePath : resourcePaths) {
+            File resourceModelDir = new File(resourcePath);
+            if (resourceModelDir.exists() && resourceModelDir.isDirectory()) {
+                // Check if this directory contains a SavedModel structure
+                File savedModelPb = new File(resourceModelDir, "saved_model.pb");
+                File variablesDir = new File(resourceModelDir, "variables");
+                
+                if (savedModelPb.exists() && variablesDir.exists()) {
+                    LOGGER.info("Found local TensorFlow 2.x model: {}", resourceModelDir.getAbsolutePath());
+                    return resourceModelDir;
+                }
             }
         }
         
-        // If not found in resources, try other possible locations
+        // Priority 2: Try to find via ClassLoader resources (when running from JAR)
+        try {
+            String resourcePath = "models/2D/" + modelName + "/saved_model.pb";
+            if (StarDist2DModel.class.getClassLoader().getResource(resourcePath) != null) {
+                // Model exists in resources, but we need to extract it to a temp directory
+                // for TensorFlow to load it properly
+                File tempDir = File.createTempFile("stardist_model_", "_" + modelName);
+                tempDir.delete(); // Delete the file so we can create a directory
+                tempDir.mkdirs();
+                
+                // Extract saved_model.pb
+                try (var inputStream = StarDist2DModel.class.getClassLoader().getResourceAsStream(resourcePath)) {
+                    if (inputStream != null) {
+                        File savedModelPb = new File(tempDir, "saved_model.pb");
+                        java.nio.file.Files.copy(inputStream, savedModelPb.toPath());
+                        
+                        // Extract variables directory
+                        File variablesDir = new File(tempDir, "variables");
+                        variablesDir.mkdirs();
+                        
+                        // Extract variables files
+                        String[] variableFiles = {"variables.data-00000-of-00001", "variables.index"};
+                        for (String varFile : variableFiles) {
+                            String varResourcePath = "models/2D/" + modelName + "/variables/" + varFile;
+                            try (var varInputStream = StarDist2DModel.class.getClassLoader().getResourceAsStream(varResourcePath)) {
+                                if (varInputStream != null) {
+                                    File varFile_f = new File(variablesDir, varFile);
+                                    java.nio.file.Files.copy(varInputStream, varFile_f.toPath());
+                                }
+                            }
+                        }
+                        
+                        LOGGER.info("Extracted TensorFlow 2.x model to temp directory: {}", tempDir.getAbsolutePath());
+                        return tempDir;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Could not extract model from resources: {}", e.getMessage());
+        }
+        
+        // Priority 3: Legacy fallback paths
         String[] possiblePaths = {
             "models",                           // When running from scipathj/ directory
             "scipathj/models",                  // When running from parent directory
@@ -139,7 +189,7 @@ public class StarDist2DModel {
                         if (savedModelPb.exists() && variablesDir.exists()) {
                             // Check if this matches our expected model
                             if (isMatchingModel(modelDir, modelName)) {
-                                LOGGER.debug("Found model in directory: {}", modelDir.getAbsolutePath());
+                                LOGGER.info("Found model in legacy directory: {}", modelDir.getAbsolutePath());
                                 return modelDir;
                             }
                         }
