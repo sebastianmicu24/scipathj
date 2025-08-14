@@ -4,7 +4,7 @@
 
 ![SciPathJ Logo](src/main/resources/icon.png)
 
-SciPathJ is a modern Java-based software for histopathological image analysis, designed to provide automated segmentation and classification of histological images. The project builds upon proven methodologies while incorporating a modern user interface and an extensible architecture.
+SciPathJ is a modern, professional-grade Java software for histopathological image analysis, designed to provide automated segmentation and classification of histological images. The project builds upon proven methodologies while incorporating a modern user interface and an extensible, SOLID-compliant architecture ready for production environments.
 
 ## Table of Contents
 
@@ -25,14 +25,14 @@ SciPathJ is a modern Java-based software for histopathological image analysis, d
 
 ## Project Overview
 
-SciPathJ is a professional desktop application for histopathological image analysis that combines advanced image processing algorithms with an intuitive user interface. The software is designed for researchers and professionals in the digital pathology field who need automated tools for tissue analysis.
+SciPathJ is a professional desktop application for histopathological image analysis that combines advanced image processing algorithms with an intuitive user interface. The software is designed for researchers and professionals in the digital pathology field who need automated, reliable, and extensible tools for tissue analysis.
 
 ### Project Vision
 
 - **Automated Analysis**: Highly automated software for histopathological analysis.
 - **Batch Processing**: Process entire folders of images with comprehensive results.
 - **Modern Interface**: A clean and intuitive user interface with a professional design.
-- **Extensibility**: A plugin-ready architecture for future enhancements.
+- **Extensibility**: A plugin-ready architecture built on SOLID principles.
 
 ## Key Features
 
@@ -44,8 +44,9 @@ SciPathJ is a professional desktop application for histopathological image analy
 - Main image viewer with metadata display
 
 ### 🔍 Intelligent Segmentation
-- **Nuclear Segmentation**: Integration with StarDist for nucleus detection.
+- **Nuclear Segmentation**: Integration with StarDist for state-of-the-art nucleus detection.
 - **Vascular Segmentation**: Thresholding algorithms for vessel detection.
+- **Cytoplasm Segmentation**: Advanced algorithms like Voronoi for cytoplasm analysis.
 - Configurable parameters for different tissue types.
 - Automatic image pre-processing.
 
@@ -58,93 +59,90 @@ SciPathJ is a professional desktop application for histopathological image analy
 
 ### 🎨 Modern User Interface
 - Light/Dark themes with FlatLaf.
-- Professional FontAwesome icons.
+- Professional FontAwesome icons via Ikonli.
 - Responsive design and smooth transitions.
 - Intuitive tab-based navigation.
 - Status bar with real-time feedback.
 
 ### ⚙️ Extendable Pipelines
-- Modular pipeline architecture.
-- Step-by-step configuration.
-- Support for adding new algorithms.
+- Modular, SOLID-compliant pipeline architecture.
+- Step-by-step configuration with clear settings dialogs.
+- Support for adding new algorithms and processing steps.
 - Batch execution with progress monitoring.
 
 ## System Architecture
+
+The architecture of SciPathJ is built on modern software engineering principles, emphasizing modularity, testability, and maintainability. The system avoids Singleton patterns in favor of a centralized **Application Context** that manages object lifecycles and handles **Dependency Injection (DI)**.
 
 ### Project Structure
 
 ```
 com.scipath.scipathj/
-├── core/                 # Main processing engine
-│   ├── engine/          # Main processing coordinator
-│   ├── pipeline/        # Pipeline management system
-│   ├── config/          # Configuration management
-│   └── events/          # Event system for UI updates
-├── ui/                  # User Interface components
+├── core/
+│   ├── bootstrap/      # Application startup and context management
+│   ├── analysis/       # Core analysis and segmentation logic
+│   ├── config/         # Immutable configuration records and manager
+│   ├── engine/         # Central processing engine
+│   └── pipeline/       # Extensible pipeline system
+├── ui/
 │   ├── main/           # Main application window
-│   ├── components/     # Reusable UI components
+│   ├── components/     # Reusable UI components (views)
+│   ├── controllers/    # UI logic and event handling
 │   ├── dialogs/        # Settings and dialogs
-│   ├── themes/         # Theme management
 │   ├── model/          # UI data models
-│   └── utils/          # UI utilities
-├── analysis/           # Analysis algorithms
-├── data/               # Data models and management
-│   └── model/          # Core data structures
-└── SciPathJApplication.java # Main application class
+│   └── themes/         # Theme management
+├── data/
+│   └── model/          # Core data structures (e.g., ROIs)
+└── SciPathJApplication.java # Main application entry point
 ```
 
 ### Core Components
 
-#### Core Engine
-- **SciPathJEngine**: Central processing coordinator.
-- **ConfigurationManager**: Manages settings and preferences.
-- **EventBus**: Event-based communication system.
-- **Pipeline System**: Extendable pipeline architecture with interfaces.
+#### Core Engine & Configuration
+- **ApplicationContext**: Manages the lifecycle of all major components. It instantiates services like `ConfigurationManager` and `SciPathJEngine` and injects them where needed.
+- **SciPathJEngine**: Central coordinator for processing tasks. It receives analysis requests from the UI and delegates them to the appropriate pipelines.
+- **ConfigurationManager**: Handles the persistence (loading and saving) of application settings. It produces immutable configuration objects (Java Records).
+- **Immutable Settings Records**: Classes like `VesselSegmentationSettings`, `NuclearSegmentationSettings`, and `MainSettings` are implemented as immutable Java Records to ensure thread safety and predictability.
 
 #### UI System
-- **MainWindow**: Main application interface with tabbed navigation.
-- **PipelineSelectionPanel**: Interactive pipeline selection with visual cards.
-- **PipelineRecapPanel**: Displays pipeline information.
-- **FolderSelectionPanel**: Folder selection with drag-and-drop.
-- **ImageGallery**: Vertical thumbnail gallery.
-- **MainImageViewer**: Main image viewer.
+- **MainWindow**: The main application Frame, which orchestrates all UI panels.
+- **Controllers** (`AnalysisController`, `NavigationController`): Handle user interactions, delegate tasks to the engine, and update the UI.
+- **UI Panels** (`PipelineSelectionPanel`, `ImageGallery`, etc.): Self-contained Swing components responsible for displaying information. They receive dependencies, like configuration objects, via their constructors.
 
 #### ROI Management
-- **ROIManager**: Centralized ROI management system.
-- **ROIOverlay**: Overlay system for interactive drawing.
-- **ROIToolbar**: Toolbar for ROI management.
-- Full support for ImageJ formats (.roi, .zip).
+- **ROIManager**: Centralized service for managing ROIs across all images.
+- **ROIOverlay**: Renders ROIs on top of the `MainImageViewer`.
+- **ROIToolbar**: Provides tools for creating and deleting ROIs.
 
 ## Technologies Used
 
 ### Core Java
-- **Java 23**: Latest version with preview features enabled.
-- **Maven**: Dependency management and build tool.
+- **Java 23**: Latest version with modern features like Records, Sealed Classes, and Pattern Matching.
+- **Maven**: Dependency management and build automation.
 - **SLF4J + Logback**: Professional logging framework.
 
 ### Image Processing
-- **ImageJ 2.9.0**: Comprehensive ecosystem for scientific image processing.
-- **ImgLib2**: Library for multidimensional image processing.
-- **CSBDeep 0.3.5-SNAPSHOT**: Deep learning for biological analysis.
-- **StarDist**: Deep learning-based nucleus detection.
+- **ImageJ**: A comprehensive ecosystem for scientific image processing.
+- **ImgLib2**: Core library for n-dimensional image representation.
+- **CSBDeep**: Deep learning framework for microscopy.
+- **StarDist**: State-of-the-art deep learning model for nucleus detection.
 
 ### Machine Learning
-- **XGBoost4J 2.1.4**: Machine learning algorithms for classification.
-- **TensorFlow 1.15.0**: Backend for neural networks.
+- **XGBoost4J**: Machine learning algorithms for classification tasks.
+- **TensorFlow**: Backend for running neural networks (used by StarDist).
 
 ### User Interface
-- **FlatLaf 3.4.1**: Modern Look and Feel for Swing applications.
-- **Ikonli 12.3.1**: Professional FontAwesome icons.
-- **Swing**: Main Java UI framework.
+- **Java Swing**: The core framework for the desktop UI.
+- **FlatLaf**: A modern, clean Look and Feel for Swing applications.
+- **Ikonli**: Library for using high-quality icon fonts like FontAwesome.
 
 ### Data
-- **Jackson 2.15.2**: JSON processing.
-- **Apache Commons**: Various utilities.
+- **Jackson**: High-performance JSON processing for configuration and data export.
+- **Apache Commons**: A suite of utilities for common developer tasks.
 
 ## Installation
 
 ### Prerequisites
-
 - Java 23 or later
 - Maven 3.6 or later
 - 4GB of RAM recommended
@@ -170,12 +168,11 @@ com.scipath.scipathj/
 
 ### Creating an Executable
 
-To create an executable JAR file:
+To create a standalone executable JAR file:
 ```bash
 mvn clean package
 ```
-
-The executable will be created at `target/scipathj-1.0.0.jar`.
+The executable will be located at `target/scipathj-1.0.0.jar`.
 
 ## Usage
 
@@ -185,34 +182,16 @@ The executable will be created at `target/scipathj-1.0.0.jar`.
     ```bash
     java -jar target/scipathj-1.0.0.jar
     ```
-
 2.  Select an analysis pipeline from the main screen.
-
 3.  Choose a folder containing the images to be analyzed.
-
 4.  Navigate the gallery and select the images of interest.
 
 ### Main Workflow
 
-1.  **Pipeline Selection**
-    - Choose from available pipelines.
-    - View the planned analysis steps.
-    - Configure specific parameters.
-
-2.  **Image Selection**
-    - Select a folder via drag-and-drop.
-    - Browse the thumbnail gallery.
-    - View images in the main viewer.
-
-3.  **Analysis**
-    - Start the analysis with the "Start" button.
-    - Monitor progress in the status bar.
-    - View the results upon completion.
-
-4.  **ROI Management**
-    - Manually create ROIs on images.
-    - Use automatically generated ROIs.
-    - Export ROIs for external analysis.
+1.  **Pipeline Selection**: Choose from available pipelines and configure their specific parameters.
+2.  **Image Selection**: Select a folder via drag-and-drop or file chooser, then browse the thumbnail gallery.
+3.  **Analysis**: Start the analysis. Monitor progress in the status bar and view results upon completion.
+4.  **ROI Management**: Manually create, edit, or import ROIs. Export ROIs for external analysis.
 
 ## Analysis Pipelines
 
@@ -220,89 +199,79 @@ The executable will be created at `target/scipathj-1.0.0.jar`.
 
 #### 1. H&E Liver Analysis
 - Nuclear segmentation with StarDist.
-- Vascular segmentation.
+- Vascular and cytoplasm segmentation.
 - Morphological feature extraction.
 - Tissue classification.
 
 #### 2. Nuclear Segmentation
-- Nucleus detection with StarDist.
+- High-performance nucleus detection with StarDist.
 - Filtering by size and shape.
-- Nuclear statistics.
-- Export results.
+- Export of nuclear statistics and ROIs.
 
 #### 3. Vascular Analysis
-- Blood vessel segmentation.
-- Vascular density analysis.
-- Morphological measurements.
-- Results visualization.
+- Blood vessel segmentation using adaptive thresholding.
+- Vascular density analysis and morphological measurements.
 
 ### Pipeline Configuration
 
-Each pipeline offers specific configurations:
+Each pipeline offers specific, type-safe configurations:
 
 #### Nuclear Segmentation Settings
-- StarDist model selection.
+- StarDist model selection (e.g., "Versatile (H&E)").
 - Probability and NMS thresholds.
-- Input normalization.
-- Tiling parameters.
+- Input normalization and percentile adjustments.
+- Tiling parameters for large images.
 
 #### Vascular Segmentation Settings
-- Intensity threshold.
-- Gaussian blur sigma.
-- Morphological closing.
-- Minimum/maximum sizes.
+- Intensity threshold and Gaussian blur sigma.
+- Morphological closing operations.
+- Minimum/maximum ROI sizes.
 
 ## ROI Management
 
 ### Creating ROIs
 
-1.  Select a drawing tool from the toolbar:
-    - Square
-    - Rectangle
-    - Circle
-
+1.  Select a drawing tool from the toolbar (Square, Rectangle, Circle).
 2.  Click and drag on the image to create the ROI.
-
-3.  The ROI will be automatically associated with the current image.
+3.  The ROI is automatically associated with the current image and managed by the `ROIManager`.
 
 ### Managing Existing ROIs
-
 - **Save ROIs**: Export the ROIs of the current image.
-- **Save All**: Export all ROIs into a master ZIP file.
+- **Save All**: Export all ROIs from all images into a master ZIP file.
 - **Delete All**: Remove all ROIs from the current image.
 
 ### Supported Formats
-
-- **Single ROI**: .roi file (ImageJ compatible).
-- **Multiple ROIs**: .zip file (set of ImageJ ROIs).
-- **Master ZIP**: ZIP file organized by image.
+- **Single ROI**: `.roi` file (ImageJ compatible).
+- **Multiple ROIs**: `.zip` file (a set of ImageJ ROIs).
 
 ## StarDist Integration
 
 SciPathJ integrates StarDist, a state-of-the-art algorithm for cell nucleus detection based on deep learning.
 
 ### Supported Models
-
 - **Versatile (fluorescent)**: General model for fluorescent images.
 - **Versatile (H&E)**: Specific model for H&E histopathological images.
 - **DSB 2018**: Model trained on the DSB 2018 dataset.
-- **Tissue Net**: Model for various tissues.
 
-### StarDist Configuration
+### StarDist Configuration (Example)
+
+Configuration is managed through immutable Java Records, ensuring settings are thread-safe and predictable.
 
 ```java
-// Example configuration
-NuclearSegmentationSettings settings = new NuclearSegmentationSettings();
-settings.setModelChoice("Versatile (H&E)");
-settings.setProbThresh(0.5);
-settings.setNmsThresh(0.4);
-settings.setNormalizeInput(true);
-settings.setPercentileBottom(1.0);
-settings.setPercentileTop(99.8);
+// Example of creating a configuration record
+var nuclearSettings = new NuclearSegmentationSettings(
+    "Versatile (H&E)", // modelChoice
+    0.5,               // probThresh
+    0.4,               // nmsThresh
+    true,              // normalizeInput
+    1.0,               // percentileBottom
+    99.8,              // percentileTop
+    1024,              // normTileSize
+    "ROI Manager"      // outputType
+);
 ```
 
 ### Automatic Pre-processing
-
 - Conversion to 8-bit for compatibility.
 - Percentile-based normalization.
 - Management of RGB images with separate channels.
@@ -310,46 +279,43 @@ settings.setPercentileTop(99.8);
 
 ## Development
 
+The project adheres to professional Java development guidelines to ensure a high-quality, maintainable, and extensible codebase.
+
 ### Development Environment
 
-1.  Recommended IDE: IntelliJ IDEA
-2.  Useful Plugins:
-    - Maven Integration
-    - Git Integration
-    - SonarLint
+- **Recommended IDE**: IntelliJ IDEA
+- **Useful Plugins**:
+  - Maven Integration
+  - Git Integration
+  - SonarLint / Checkstyle
 
-### Code Structure
+### Architectural Principles
 
-The project follows professional Java development guidelines:
+The codebase is built upon the **SOLID** principles:
+- **(S)ingle Responsibility Principle**: Each class has a single, well-defined responsibility.
+- **(O)pen/Closed Principle**: Software entities are open for extension, but closed for modification.
+- **(L)iskov Substitution Principle**: Subtypes are substitutable for their base types.
+- **(I)nterface Segregation Principle**: Clients are not forced to depend on interfaces they do not use.
+- **(D)ependency Inversion Principle**: High-level modules do not depend on low-level modules; both depend on abstractions. Dependency Injection is used throughout the application.
 
-- **Single Responsibility Principle**: Each class has a single responsibility.
+### Coding Practices
+- **Immutability**: Data-carrying classes are implemented as immutable Java Records where possible.
 - **Comprehensive Documentation**: JavaDoc for all public classes and methods.
-- **Error Handling**: Custom exceptions and detailed logging.
-- **Unit Testing**: JUnit 5 with Mockito for mocking.
+- **Robust Error Handling**: Specific, custom exceptions are used instead of generic ones.
+- **Unit Testing**: JUnit 5 with Mockito for creating robust and isolated tests.
 
 ### Building and Testing
 
 ```bash
-# Compile
-mvn clean compile
+# Compile and run all tests
+mvn clean test
 
-# Run tests
-mvn test
+# Run code quality analysis
+mvn spotbugs:check pmd:check
 
-# Code analysis
-mvn spotbugs:check
-mvn pmd:check
-
-# Test coverage
+# Generate test coverage report
 mvn jacoco:report
 ```
-
-### Coding Standards
-
-- Maximum file length: 400 lines.
-- Maximum method length: 30 lines.
-- Descriptive names for classes, methods, and variables.
-- Comments that explain the "why," not the "what."
 
 ## Contributing
 

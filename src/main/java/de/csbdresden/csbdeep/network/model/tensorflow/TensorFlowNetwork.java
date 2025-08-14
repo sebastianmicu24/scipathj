@@ -39,6 +39,7 @@ import de.csbdresden.csbdeep.task.Task;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -308,7 +309,7 @@ public class TensorFlowNetwork<T extends RealType<T>> extends DefaultNetwork<T> 
   private void loadNetworkSettingsFromJson(File jsonFile) {
     networkSettings = new NetworkSettings();
     try {
-      JsonReader reader = new JsonReader(new FileReader(jsonFile));
+      JsonReader reader = new JsonReader(new FileReader(jsonFile, StandardCharsets.UTF_8));
       try {
         readNetworkSettingsArray(reader);
       } finally {
@@ -667,7 +668,7 @@ public class TensorFlowNetwork<T extends RealType<T>> extends DefaultNetwork<T> 
       String resourcePath = "/models/2D/" + getModelDirectoryName(modelName) + "/";
       com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
           "Resource path: " + resourcePath);
-      java.net.URL resourceUrl = getClass().getResource(resourcePath);
+      java.net.URL resourceUrl = TensorFlowNetwork.class.getResource(resourcePath);
 
       if (resourceUrl != null) {
         log("Found model in JAR resources: " + resourceUrl);

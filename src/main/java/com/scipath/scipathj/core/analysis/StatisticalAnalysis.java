@@ -4,6 +4,7 @@ import com.scipath.scipathj.core.analysis.CellClassification.ClassificationResul
 import com.scipath.scipathj.data.model.UserROI;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -98,7 +99,7 @@ public class StatisticalAnalysis {
       // For now, create a basic CSV with available data
 
       String csvFileName = outputPath.resolve(imageFileName + "_analysis.csv").toString();
-      try (FileWriter writer = new FileWriter(csvFileName)) {
+      try (FileWriter writer = new FileWriter(csvFileName, StandardCharsets.UTF_8)) {
         // Write header
         writer.append("Image,Vessels,Nuclei,Cytoplasm,TotalCells\n");
 

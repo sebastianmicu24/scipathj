@@ -67,6 +67,7 @@ public class ResourceManager {
   /**
    * Checks current memory usage and logs warnings if thresholds are exceeded.
    */
+  @SuppressWarnings("CallToSystemGC")
   private void checkMemoryUsage() {
     try {
       double memoryUsageRatio = getMemoryUsageRatio();
@@ -207,6 +208,7 @@ public class ResourceManager {
    * <p>This method should be used sparingly, typically only when memory
    * usage is critical or between processing batches.</p>
    */
+  @SuppressWarnings("CallToSystemGC")
   public void forceGarbageCollection() {
     long beforeGC = getMemoryUsageMB();
 

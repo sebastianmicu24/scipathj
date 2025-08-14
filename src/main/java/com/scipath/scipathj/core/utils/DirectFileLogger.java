@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
@@ -74,7 +75,7 @@ public class DirectFileLogger {
               "%s [%s] %-5s %s - %s%n",
               timestamp, Thread.currentThread().getName(), level, logger, message);
 
-      try (FileWriter fw = new FileWriter(logFile, true);
+      try (FileWriter fw = new FileWriter(logFile, StandardCharsets.UTF_8, true);
           PrintWriter pw = new PrintWriter(fw)) {
         pw.print(logLine);
         pw.flush();
@@ -99,7 +100,7 @@ public class DirectFileLogger {
       File logFile = new File(logDir, filename);
       String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMAT);
 
-      try (FileWriter fw = new FileWriter(logFile, true);
+      try (FileWriter fw = new FileWriter(logFile, StandardCharsets.UTF_8, true);
           PrintWriter pw = new PrintWriter(fw)) {
 
         pw.printf(

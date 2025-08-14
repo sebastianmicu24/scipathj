@@ -51,7 +51,7 @@ public class VesselSegmentation {
         configurationManager,
         originalImage,
         imageFileName,
-        configurationManager.initializeVesselSegmentationSettings(),
+        configurationManager.loadVesselSegmentationSettings(),
         ROIManager.getInstance());
   }
 
@@ -90,7 +90,7 @@ public class VesselSegmentation {
     this.imageFileName = imageFileName;
     this.roiManager = roiManager;
     this.settings =
-        settings != null ? settings : configurationManager.initializeVesselSegmentationSettings();
+        settings != null ? settings : configurationManager.loadVesselSegmentationSettings();
 
     LOGGER.info("VesselSegmentation initialized for image: {}", imageFileName);
   }
@@ -108,7 +108,7 @@ public class VesselSegmentation {
    * @throws VesselSegmentationException if segmentation fails
    */
   public List<UserROI> segmentVessels() throws VesselSegmentationException {
-    return segmentVessels(settings.getThreshold());
+    return segmentVessels(settings.threshold());
   }
 
   /**
@@ -146,7 +146,7 @@ public class VesselSegmentation {
       applyThreshold(workingImage, threshold);
 
       // Step 5: Process the binary mask (fill holes)
-      if (settings.isApplyMorphologicalClosing()) {
+      if (settings.applyMorphologicalClosing()) {
         processBinaryMask(workingImage);
       }
 
@@ -186,7 +186,7 @@ public class VesselSegmentation {
    */
   private void applyGaussianBlur(ImagePlus workingImage) {
     GaussianBlur gaussianBlur = new GaussianBlur();
-    gaussianBlur.blurGaussian(workingImage.getProcessor(), settings.getGaussianBlurSigma());
+    gaussianBlur.blurGaussian(workingImage.getProcessor(), settings.gaussianBlurSigma());
   }
 
   /**
@@ -301,7 +301,7 @@ public class VesselSegmentation {
    * Check if vessel area meets size requirements.
    */
   private boolean isValidVesselSize(double area) {
-    return area >= settings.getMinRoiSize() && area <= settings.getMaxRoiSize();
+    return area >= settings.minRoiSize() && area <= settings.maxRoiSize();
   }
 
   /**

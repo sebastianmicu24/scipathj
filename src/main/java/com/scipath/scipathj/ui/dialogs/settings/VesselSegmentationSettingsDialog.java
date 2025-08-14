@@ -23,7 +23,7 @@ public class VesselSegmentationSettingsDialog extends JDialog {
       LoggerFactory.getLogger(VesselSegmentationSettingsDialog.class);
 
   // Settings instances
-  private final VesselSegmentationSettings settings;
+  private VesselSegmentationSettings settings;
   private final MainSettings mainSettings;
   private final ConfigurationManager configManager;
 
@@ -40,13 +40,9 @@ public class VesselSegmentationSettingsDialog extends JDialog {
 
   public VesselSegmentationSettingsDialog(Frame parent, ConfigurationManager configurationManager) {
     super(parent, "Vessel Segmentation Settings", true);
-    this.settings = VesselSegmentationSettings.getInstance();
-    this.mainSettings = MainSettings.getInstance();
     this.configManager = configurationManager;
-
-    // Load settings from file first
-    configManager.loadVesselSegmentationSettings(settings);
-    configManager.loadMainSettings(mainSettings);
+    this.settings = configurationManager.loadVesselSegmentationSettings();
+    this.mainSettings = configurationManager.loadMainSettings();
 
     initializeDialog();
     loadCurrentSettings();
@@ -258,17 +254,17 @@ public class VesselSegmentationSettingsDialog extends JDialog {
    */
   private void loadCurrentSettings() {
     try {
-      thresholdSlider.setValue(settings.getThreshold());
-      thresholdValueLabel.setText(String.valueOf(settings.getThreshold()));
+      thresholdSlider.setValue(settings.threshold());
+      thresholdValueLabel.setText(String.valueOf(settings.threshold()));
 
       // Convert pixel values to micrometers for display
-      double minRoiSizeInMicrometers = mainSettings.pixelsToMicrometers(settings.getMinRoiSize());
-      double maxRoiSizeInMicrometers = mainSettings.pixelsToMicrometers(settings.getMaxRoiSize());
+      double minRoiSizeInMicrometers = mainSettings.pixelsToMicrometers(settings.minRoiSize());
+      double maxRoiSizeInMicrometers = mainSettings.pixelsToMicrometers(settings.maxRoiSize());
 
       minRoiSizeSpinner.setValue(minRoiSizeInMicrometers);
       maxRoiSizeSpinner.setValue(maxRoiSizeInMicrometers);
-      gaussianBlurSigmaSpinner.setValue(settings.getGaussianBlurSigma());
-      morphologicalClosingCheckBox.setSelected(settings.isApplyMorphologicalClosing());
+      gaussianBlurSigmaSpinner.setValue(settings.gaussianBlurSigma());
+      morphologicalClosingCheckBox.setSelected(settings.applyMorphologicalClosing());
 
       LOGGER.debug("Loaded current settings into UI components: {}", settings.toString());
     } catch (Exception e) {
@@ -378,15 +374,17 @@ public class VesselSegmentationSettingsDialog extends JDialog {
         double minRoiSizeInPixels = mainSettings.micrometersToPixels(minRoiSizeInMicrometers);
         double maxRoiSizeInPixels = mainSettings.micrometersToPixels(maxRoiSizeInMicrometers);
 
-        // Update settings with new values
-        settings.setThreshold(thresholdSlider.getValue());
-        settings.setMinRoiSize(minRoiSizeInPixels);
-        settings.setMaxRoiSize(maxRoiSizeInPixels);
-        settings.setGaussianBlurSigma((Double) gaussianBlurSigmaSpinner.getValue());
-        settings.setApplyMorphologicalClosing(morphologicalClosingCheckBox.isSelected());
+        // Create new settings with updated values
+        VesselSegmentationSettings updatedSettings =
+            new VesselSegmentationSettings(
+                thresholdSlider.getValue(),
+                minRoiSizeInPixels,
+                maxRoiSizeInPixels,
+                (Double) gaussianBlurSigmaSpinner.getValue(),
+                morphologicalClosingCheckBox.isSelected());
 
         // Save to file
-        configManager.saveVesselSegmentationSettings(settings);
+        configManager.saveVesselSegmentationSettings(updatedSettings);
 
         settingsChanged = true;
         LOGGER.info("Vessel segmentation settings saved successfully");

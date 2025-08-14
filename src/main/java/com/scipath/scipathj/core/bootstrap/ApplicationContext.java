@@ -25,7 +25,6 @@ public final class ApplicationContext {
   private ApplicationLifecycleManager lifecycleManager;
 
   /**
-   * /**
    * Initializes the application context and all managed components.
    */
   public void initialize() {
@@ -50,8 +49,11 @@ public final class ApplicationContext {
    */
   private void initializeSettings() {
     try {
-      configurationManager.initializeVesselSegmentationSettings();
-      configurationManager.initializeMainSettings();
+      // Load settings to ensure they are available and valid
+      configurationManager.loadVesselSegmentationSettings();
+      configurationManager.loadMainSettings();
+      configurationManager.loadNuclearSegmentationSettings();
+      configurationManager.loadCytoplasmSegmentationSettings();
       LOGGER.debug("All settings initialized successfully");
     } catch (Exception e) {
       LOGGER.warn("Failed to initialize some settings, using defaults", e);

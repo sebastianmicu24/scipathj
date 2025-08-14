@@ -3,6 +3,7 @@ package com.scipath.scipathj.core.utils;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import org.slf4j.Logger;
@@ -62,7 +63,7 @@ public class LoggingDebugger {
   private static void writeTestFile(File logDir) {
     try {
       File testFile = new File(logDir, "logging-test.txt");
-      try (FileWriter writer = new FileWriter(testFile)) {
+      try (FileWriter writer = new FileWriter(testFile, StandardCharsets.UTF_8)) {
         writer.write("SciPathJ Logging Test\n");
         writer.write(
             "Timestamp: "

@@ -56,6 +56,7 @@ public class Java23CompatibleInputValidator extends DefaultTask implements Input
       return;
     }
 
+    @SuppressWarnings("BC_IMPOSSIBLE_INSTANCEOF")
     Object nodeShapeObj = network.getInputNode().getNodeShape();
     long[] nodeShape = null;
     if (nodeShapeObj instanceof long[]) {
@@ -105,6 +106,7 @@ public class Java23CompatibleInputValidator extends DefaultTask implements Input
     setFinished();
   }
 
+  @SuppressWarnings("BC_IMPOSSIBLE_INSTANCEOF")
   private void checkForTooManyDimensions(Dataset input, Network network) {
     Object nodeShapeObj = network.getInputNode().getNodeShape();
     long[] nodeShape = null;

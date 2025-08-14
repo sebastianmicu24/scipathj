@@ -28,7 +28,8 @@ public class CellClassification {
    * @param imageFileName The filename of the image
    * @param features Previously extracted features for all ROIs
    */
-  public CellClassification(String imageFileName, Map<String, Map<String, Double>> features) {
+  public CellClassification(
+      final String imageFileName, final Map<String, Map<String, Double>> features) {
     this.imageFileName = imageFileName;
     this.features = features != null ? features : new HashMap<>();
 
@@ -71,7 +72,7 @@ public class CellClassification {
    * @param modelPath path to the classification model file
    * @return true if model loaded successfully
    */
-  public boolean loadModel(String modelPath) {
+  public boolean loadModel(final String modelPath) {
     LOGGER.debug("Loading classification model from: {} (TODO: not implemented)", modelPath);
 
     // TODO: Implement model loading
@@ -92,7 +93,7 @@ public class CellClassification {
    * @param rawFeatures raw extracted features
    * @return preprocessed features ready for classification
    */
-  public Map<String, Double> preprocessFeatures(Map<String, Double> rawFeatures) {
+  public Map<String, Double> preprocessFeatures(final Map<String, Double> rawFeatures) {
     LOGGER.debug("Preprocessing features (TODO: not implemented)");
 
     // TODO: Implement feature preprocessing:
@@ -110,7 +111,7 @@ public class CellClassification {
    * @param results classification results map
    * @return formatted statistics string
    */
-  public String getStatistics(Map<String, ClassificationResult> results) {
+  public String getStatistics(final Map<String, ClassificationResult> results) {
     if (results.isEmpty()) {
       return "No cells classified (TODO: not implemented)";
     }
@@ -140,10 +141,10 @@ public class CellClassification {
     private final Map<String, Double> classProbabilities;
 
     public ClassificationResult(
-        String roiName,
-        String predictedClass,
-        double confidence,
-        Map<String, Double> classProbabilities) {
+        final String roiName,
+        final String predictedClass,
+        final double confidence,
+        final Map<String, Double> classProbabilities) {
       this.roiName = roiName;
       this.predictedClass = predictedClass;
       this.confidence = confidence;
@@ -163,7 +164,8 @@ public class CellClassification {
     }
 
     public Map<String, Double> getClassProbabilities() {
-      return classProbabilities;
+      // Return defensive copy to prevent exposure of internal representation
+      return new HashMap<>(classProbabilities);
     }
 
     @Override

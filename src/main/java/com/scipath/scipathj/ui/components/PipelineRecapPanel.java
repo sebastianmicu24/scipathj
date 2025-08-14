@@ -162,7 +162,7 @@ public class PipelineRecapPanel extends JPanel {
           dialog = new NuclearSegmentationSettingsDialog(parentFrame, configurationManager);
           break;
         case 3: // Cell Creation (Cytoplasm Segmentation)
-          dialog = new CytoplasmSegmentationSettingsDialog(parentFrame);
+          dialog = new CytoplasmSegmentationSettingsDialog(parentFrame, configurationManager);
           break;
         case 4: // Feature Extraction
           dialog = new FeatureExtractionSettingsDialog(parentFrame);

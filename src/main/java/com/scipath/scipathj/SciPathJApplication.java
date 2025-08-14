@@ -33,6 +33,7 @@ import org.slf4j.LoggerFactory;
 public final class SciPathJApplication {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(SciPathJApplication.class);
+  private static final int EXIT_CODE_ERROR = 1;
 
   private SciPathJApplication() {
     // Utility class - prevent instantiation
@@ -43,7 +44,7 @@ public final class SciPathJApplication {
    *
    * @param args command line arguments (currently unused)
    */
-  public static void main(String[] args) {
+  public static void main(final String[] args) {
     LOGGER.info("Starting SciPathJ Application v1.0.0");
 
     try {
@@ -63,7 +64,7 @@ public final class SciPathJApplication {
     } catch (Exception e) {
       LOGGER.error("Failed to start SciPathJ application", e);
       showErrorDialog("Application Startup Error", "Failed to start SciPathJ: " + e.getMessage());
-      System.exit(1);
+      System.exit(EXIT_CODE_ERROR);
     }
   }
 
@@ -73,7 +74,7 @@ public final class SciPathJApplication {
    *
    * @param context the initialized application context
    */
-  private static void createAndShowGUI(ApplicationContext context) {
+  private static void createAndShowGUI(final ApplicationContext context) {
     try {
       LOGGER.info("Initializing main application window");
 
@@ -93,7 +94,7 @@ public final class SciPathJApplication {
       LOGGER.error("Failed to create main application window", e);
       showErrorDialog(
           "GUI Initialization Error", "Failed to initialize user interface: " + e.getMessage());
-      System.exit(1);
+      System.exit(EXIT_CODE_ERROR);
     }
   }
 
@@ -103,7 +104,7 @@ public final class SciPathJApplication {
    * @param title the dialog title
    * @param message the error message to display
    */
-  private static void showErrorDialog(String title, String message) {
+  private static void showErrorDialog(final String title, final String message) {
     SwingUtilities.invokeLater(
         () -> JOptionPane.showMessageDialog(null, message, title, JOptionPane.ERROR_MESSAGE));
   }

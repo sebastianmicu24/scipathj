@@ -1,20 +1,46 @@
 package com.scipath.scipathj.core.config;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 /**
- * Configuration settings for nuclear segmentation using StarDist.
- * This class manages all parameters related to nucleus detection and segmentation.
+ * Settings record for nuclear segmentation using StarDist.
+ * Immutable data carrier that manages all parameters related to nucleus detection and segmentation.
+ * Uses Java 16+ record syntax for conciseness and immutability.
+ *
+ * @param modelChoice The StarDist model choice
+ * @param normalizeInput Whether input normalization is enabled
+ * @param percentileBottom The bottom percentile for normalization (0.0-100.0)
+ * @param percentileTop The top percentile for normalization (0.0-100.0)
+ * @param probThresh The probability threshold for nucleus detection (0.0-1.0)
+ * @param nmsThresh The non-maximum suppression threshold (0.0-1.0)
+ * @param outputType The output type for StarDist results
+ * @param nTiles The number of tiles for processing large images
+ * @param excludeBoundary The boundary exclusion distance in pixels
+ * @param roiPosition The ROI position setting
+ * @param verbose Whether verbose output is enabled
+ * @param showCsbdeepProgress Whether CSBDeep progress display is enabled
+ * @param showProbAndDist Whether probability and distance maps should be shown
+ * @param minNucleusSize The minimum nucleus size for filtering in pixels
+ * @param maxNucleusSize The maximum nucleus size for filtering in pixels
  *
  * @author Sebastian Micu
  * @version 1.0.0
  * @since 1.0.0
  */
-public class NuclearSegmentationSettings {
-
-  private static final Logger LOGGER = LoggerFactory.getLogger(NuclearSegmentationSettings.class);
+public record NuclearSegmentationSettings(
+    String modelChoice,
+    boolean normalizeInput,
+    float percentileBottom,
+    float percentileTop,
+    float probThresh,
+    float nmsThresh,
+    String outputType,
+    int nTiles,
+    int excludeBoundary,
+    String roiPosition,
+    boolean verbose,
+    boolean showCsbdeepProgress,
+    boolean showProbAndDist,
+    double minNucleusSize,
+    double maxNucleusSize) {
 
   // Default values based on SCHELI implementation
   public static final String DEFAULT_MODEL_CHOICE = "Versatile (H&E nuclei)";
@@ -33,341 +59,483 @@ public class NuclearSegmentationSettings {
   public static final double DEFAULT_MIN_NUCLEUS_SIZE = 10.0;
   public static final double DEFAULT_MAX_NUCLEUS_SIZE = 1000.0;
 
-  @JsonProperty("modelChoice")
-  private String modelChoice = DEFAULT_MODEL_CHOICE;
-
-  @JsonProperty("normalizeInput")
-  private boolean normalizeInput = DEFAULT_NORMALIZE_INPUT;
-
-  @JsonProperty("percentileBottom")
-  private float percentileBottom = DEFAULT_PERCENTILE_BOTTOM;
-
-  @JsonProperty("percentileTop")
-  private float percentileTop = DEFAULT_PERCENTILE_TOP;
-
-  @JsonProperty("probThresh")
-  private float probThresh = DEFAULT_PROB_THRESH;
-
-  @JsonProperty("nmsThresh")
-  private float nmsThresh = DEFAULT_NMS_THRESH;
-
-  @JsonProperty("outputType")
-  private String outputType = DEFAULT_OUTPUT_TYPE;
-
-  @JsonProperty("nTiles")
-  private int nTiles = DEFAULT_N_TILES;
-
-  @JsonProperty("excludeBoundary")
-  private int excludeBoundary = DEFAULT_EXCLUDE_BOUNDARY;
-
-  @JsonProperty("roiPosition")
-  private String roiPosition = DEFAULT_ROI_POSITION;
-
-  @JsonProperty("verbose")
-  private boolean verbose = DEFAULT_VERBOSE;
-
-  @JsonProperty("showCsbdeepProgress")
-  private boolean showCsbdeepProgress = DEFAULT_SHOW_CSBDEEP_PROGRESS;
-
-  @JsonProperty("showProbAndDist")
-  private boolean showProbAndDist = DEFAULT_SHOW_PROB_AND_DIST;
-
-  @JsonProperty("minNucleusSize")
-  private double minNucleusSize = DEFAULT_MIN_NUCLEUS_SIZE;
-
-  @JsonProperty("maxNucleusSize")
-  private double maxNucleusSize = DEFAULT_MAX_NUCLEUS_SIZE;
-
   /**
-   * Default constructor.
+   * Creates a new NuclearSegmentationSettings with validation.
+   *
+   * @throws IllegalArgumentException if any parameter is invalid
    */
-  public NuclearSegmentationSettings() {
-    LOGGER.debug("Created NuclearSegmentationSettings with default values");
+  public NuclearSegmentationSettings {
+    if (modelChoice == null || modelChoice.trim().isEmpty()) {
+      throw new IllegalArgumentException("Model choice cannot be null or empty");
+    }
+    if (percentileBottom < 0.0f || percentileBottom > 100.0f) {
+      throw new IllegalArgumentException(
+          "Bottom percentile must be between 0.0 and 100.0, got: " + percentileBottom);
+    }
+    if (percentileTop < 0.0f || percentileTop > 100.0f) {
+      throw new IllegalArgumentException(
+          "Top percentile must be between 0.0 and 100.0, got: " + percentileTop);
+    }
+    if (percentileBottom >= percentileTop) {
+      throw new IllegalArgumentException(
+          "Bottom percentile ("
+              + percentileBottom
+              + ") must be less than top percentile ("
+              + percentileTop
+              + ")");
+    }
+    if (probThresh < 0.0f || probThresh > 1.0f) {
+      throw new IllegalArgumentException(
+          "Probability threshold must be between 0.0 and 1.0, got: " + probThresh);
+    }
+    if (nmsThresh < 0.0f || nmsThresh > 1.0f) {
+      throw new IllegalArgumentException(
+          "NMS threshold must be between 0.0 and 1.0, got: " + nmsThresh);
+    }
+    if (outputType == null || outputType.trim().isEmpty()) {
+      throw new IllegalArgumentException("Output type cannot be null or empty");
+    }
+    if (nTiles < 1) {
+      throw new IllegalArgumentException("Number of tiles must be at least 1, got: " + nTiles);
+    }
+    if (excludeBoundary < 0) {
+      throw new IllegalArgumentException(
+          "Exclude boundary must be non-negative, got: " + excludeBoundary);
+    }
+    if (roiPosition == null || roiPosition.trim().isEmpty()) {
+      throw new IllegalArgumentException("ROI position cannot be null or empty");
+    }
+    if (minNucleusSize < 0.0) {
+      throw new IllegalArgumentException(
+          "Minimum nucleus size must be non-negative, got: " + minNucleusSize);
+    }
+    if (maxNucleusSize < 0.0) {
+      throw new IllegalArgumentException(
+          "Maximum nucleus size must be non-negative, got: " + maxNucleusSize);
+    }
+    if (minNucleusSize >= maxNucleusSize) {
+      throw new IllegalArgumentException(
+          "Minimum nucleus size ("
+              + minNucleusSize
+              + ") must be less than maximum nucleus size ("
+              + maxNucleusSize
+              + ")");
+    }
+
+    // Normalize string inputs
+    modelChoice = modelChoice.trim();
+    outputType = outputType.trim();
+    roiPosition = roiPosition.trim();
   }
 
   /**
-   * Gets the StarDist model choice.
+   * Creates a new NuclearSegmentationSettings instance with default values.
    *
-   * @return the model choice string
+   * @return A new instance with default settings
    */
-  public String getModelChoice() {
-    return modelChoice;
+  public static NuclearSegmentationSettings createDefault() {
+    return new NuclearSegmentationSettings(
+        DEFAULT_MODEL_CHOICE,
+        DEFAULT_NORMALIZE_INPUT,
+        DEFAULT_PERCENTILE_BOTTOM,
+        DEFAULT_PERCENTILE_TOP,
+        DEFAULT_PROB_THRESH,
+        DEFAULT_NMS_THRESH,
+        DEFAULT_OUTPUT_TYPE,
+        DEFAULT_N_TILES,
+        DEFAULT_EXCLUDE_BOUNDARY,
+        DEFAULT_ROI_POSITION,
+        DEFAULT_VERBOSE,
+        DEFAULT_SHOW_CSBDEEP_PROGRESS,
+        DEFAULT_SHOW_PROB_AND_DIST,
+        DEFAULT_MIN_NUCLEUS_SIZE,
+        DEFAULT_MAX_NUCLEUS_SIZE);
   }
 
   /**
-   * Sets the StarDist model choice.
+   * Creates a new instance with updated model choice.
    *
-   * @param modelChoice the model choice string
+   * @param newModelChoice The new model choice
+   * @return A new instance with the updated model choice
+   * @throws IllegalArgumentException if modelChoice is invalid
    */
-  public void setModelChoice(String modelChoice) {
-    this.modelChoice = modelChoice;
-    LOGGER.debug("Set model choice to: {}", modelChoice);
+  public NuclearSegmentationSettings withModelChoice(String newModelChoice) {
+    return new NuclearSegmentationSettings(
+        newModelChoice,
+        normalizeInput,
+        percentileBottom,
+        percentileTop,
+        probThresh,
+        nmsThresh,
+        outputType,
+        nTiles,
+        excludeBoundary,
+        roiPosition,
+        verbose,
+        showCsbdeepProgress,
+        showProbAndDist,
+        minNucleusSize,
+        maxNucleusSize);
   }
 
   /**
-   * Gets whether input normalization is enabled.
+   * Creates a new instance with updated input normalization setting.
    *
-   * @return true if input normalization is enabled
+   * @param newNormalizeInput Whether to enable input normalization
+   * @return A new instance with the updated setting
    */
-  public boolean isNormalizeInput() {
-    return normalizeInput;
+  public NuclearSegmentationSettings withNormalizeInput(boolean newNormalizeInput) {
+    return new NuclearSegmentationSettings(
+        modelChoice,
+        newNormalizeInput,
+        percentileBottom,
+        percentileTop,
+        probThresh,
+        nmsThresh,
+        outputType,
+        nTiles,
+        excludeBoundary,
+        roiPosition,
+        verbose,
+        showCsbdeepProgress,
+        showProbAndDist,
+        minNucleusSize,
+        maxNucleusSize);
   }
 
   /**
-   * Sets whether input normalization is enabled.
+   * Creates a new instance with updated bottom percentile.
    *
-   * @param normalizeInput true to enable input normalization
+   * @param newPercentileBottom The new bottom percentile (0.0-100.0)
+   * @return A new instance with the updated bottom percentile
+   * @throws IllegalArgumentException if percentileBottom is invalid
    */
-  public void setNormalizeInput(boolean normalizeInput) {
-    this.normalizeInput = normalizeInput;
-    LOGGER.debug("Set normalize input to: {}", normalizeInput);
+  public NuclearSegmentationSettings withPercentileBottom(float newPercentileBottom) {
+    return new NuclearSegmentationSettings(
+        modelChoice,
+        normalizeInput,
+        newPercentileBottom,
+        percentileTop,
+        probThresh,
+        nmsThresh,
+        outputType,
+        nTiles,
+        excludeBoundary,
+        roiPosition,
+        verbose,
+        showCsbdeepProgress,
+        showProbAndDist,
+        minNucleusSize,
+        maxNucleusSize);
   }
 
   /**
-   * Gets the bottom percentile for normalization.
+   * Creates a new instance with updated top percentile.
    *
-   * @return the bottom percentile value
+   * @param newPercentileTop The new top percentile (0.0-100.0)
+   * @return A new instance with the updated top percentile
+   * @throws IllegalArgumentException if percentileTop is invalid
    */
-  public float getPercentileBottom() {
-    return percentileBottom;
+  public NuclearSegmentationSettings withPercentileTop(float newPercentileTop) {
+    return new NuclearSegmentationSettings(
+        modelChoice,
+        normalizeInput,
+        percentileBottom,
+        newPercentileTop,
+        probThresh,
+        nmsThresh,
+        outputType,
+        nTiles,
+        excludeBoundary,
+        roiPosition,
+        verbose,
+        showCsbdeepProgress,
+        showProbAndDist,
+        minNucleusSize,
+        maxNucleusSize);
   }
 
   /**
-   * Sets the bottom percentile for normalization.
+   * Creates a new instance with updated probability threshold.
    *
-   * @param percentileBottom the bottom percentile value (0.0-100.0)
+   * @param newProbThresh The new probability threshold (0.0-1.0)
+   * @return A new instance with the updated probability threshold
+   * @throws IllegalArgumentException if probThresh is invalid
    */
-  public void setPercentileBottom(float percentileBottom) {
-    this.percentileBottom = Math.max(0.0f, Math.min(100.0f, percentileBottom));
-    LOGGER.debug("Set percentile bottom to: {}", this.percentileBottom);
+  public NuclearSegmentationSettings withProbThresh(float newProbThresh) {
+    return new NuclearSegmentationSettings(
+        modelChoice,
+        normalizeInput,
+        percentileBottom,
+        percentileTop,
+        newProbThresh,
+        nmsThresh,
+        outputType,
+        nTiles,
+        excludeBoundary,
+        roiPosition,
+        verbose,
+        showCsbdeepProgress,
+        showProbAndDist,
+        minNucleusSize,
+        maxNucleusSize);
   }
 
   /**
-   * Gets the top percentile for normalization.
+   * Creates a new instance with updated NMS threshold.
    *
-   * @return the top percentile value
+   * @param newNmsThresh The new NMS threshold (0.0-1.0)
+   * @return A new instance with the updated NMS threshold
+   * @throws IllegalArgumentException if nmsThresh is invalid
    */
-  public float getPercentileTop() {
-    return percentileTop;
+  public NuclearSegmentationSettings withNmsThresh(float newNmsThresh) {
+    return new NuclearSegmentationSettings(
+        modelChoice,
+        normalizeInput,
+        percentileBottom,
+        percentileTop,
+        probThresh,
+        newNmsThresh,
+        outputType,
+        nTiles,
+        excludeBoundary,
+        roiPosition,
+        verbose,
+        showCsbdeepProgress,
+        showProbAndDist,
+        minNucleusSize,
+        maxNucleusSize);
   }
 
   /**
-   * Sets the top percentile for normalization.
+   * Creates a new instance with updated output type.
    *
-   * @param percentileTop the top percentile value (0.0-100.0)
+   * @param newOutputType The new output type
+   * @return A new instance with the updated output type
+   * @throws IllegalArgumentException if outputType is invalid
    */
-  public void setPercentileTop(float percentileTop) {
-    this.percentileTop = Math.max(0.0f, Math.min(100.0f, percentileTop));
-    LOGGER.debug("Set percentile top to: {}", this.percentileTop);
+  public NuclearSegmentationSettings withOutputType(String newOutputType) {
+    return new NuclearSegmentationSettings(
+        modelChoice,
+        normalizeInput,
+        percentileBottom,
+        percentileTop,
+        probThresh,
+        nmsThresh,
+        newOutputType,
+        nTiles,
+        excludeBoundary,
+        roiPosition,
+        verbose,
+        showCsbdeepProgress,
+        showProbAndDist,
+        minNucleusSize,
+        maxNucleusSize);
   }
 
   /**
-   * Gets the probability threshold for nucleus detection.
+   * Creates a new instance with updated number of tiles.
    *
-   * @return the probability threshold (0.0-1.0)
+   * @param newNTiles The new number of tiles (must be at least 1)
+   * @return A new instance with the updated number of tiles
+   * @throws IllegalArgumentException if nTiles is invalid
    */
-  public float getProbThresh() {
-    return probThresh;
+  public NuclearSegmentationSettings withNTiles(int newNTiles) {
+    return new NuclearSegmentationSettings(
+        modelChoice,
+        normalizeInput,
+        percentileBottom,
+        percentileTop,
+        probThresh,
+        nmsThresh,
+        outputType,
+        newNTiles,
+        excludeBoundary,
+        roiPosition,
+        verbose,
+        showCsbdeepProgress,
+        showProbAndDist,
+        minNucleusSize,
+        maxNucleusSize);
   }
 
   /**
-   * Sets the probability threshold for nucleus detection.
+   * Creates a new instance with updated boundary exclusion distance.
    *
-   * @param probThresh the probability threshold (0.0-1.0)
+   * @param newExcludeBoundary The new boundary exclusion distance (must be non-negative)
+   * @return A new instance with the updated boundary exclusion distance
+   * @throws IllegalArgumentException if excludeBoundary is invalid
    */
-  public void setProbThresh(float probThresh) {
-    this.probThresh = Math.max(0.0f, Math.min(1.0f, probThresh));
-    LOGGER.debug("Set probability threshold to: {}", this.probThresh);
+  public NuclearSegmentationSettings withExcludeBoundary(int newExcludeBoundary) {
+    return new NuclearSegmentationSettings(
+        modelChoice,
+        normalizeInput,
+        percentileBottom,
+        percentileTop,
+        probThresh,
+        nmsThresh,
+        outputType,
+        nTiles,
+        newExcludeBoundary,
+        roiPosition,
+        verbose,
+        showCsbdeepProgress,
+        showProbAndDist,
+        minNucleusSize,
+        maxNucleusSize);
   }
 
   /**
-   * Gets the non-maximum suppression threshold.
+   * Creates a new instance with updated ROI position setting.
    *
-   * @return the NMS threshold (0.0-1.0)
+   * @param newRoiPosition The new ROI position setting
+   * @return A new instance with the updated ROI position setting
+   * @throws IllegalArgumentException if roiPosition is invalid
    */
-  public float getNmsThresh() {
-    return nmsThresh;
+  public NuclearSegmentationSettings withRoiPosition(String newRoiPosition) {
+    return new NuclearSegmentationSettings(
+        modelChoice,
+        normalizeInput,
+        percentileBottom,
+        percentileTop,
+        probThresh,
+        nmsThresh,
+        outputType,
+        nTiles,
+        excludeBoundary,
+        newRoiPosition,
+        verbose,
+        showCsbdeepProgress,
+        showProbAndDist,
+        minNucleusSize,
+        maxNucleusSize);
   }
 
   /**
-   * Sets the non-maximum suppression threshold.
+   * Creates a new instance with updated verbose setting.
    *
-   * @param nmsThresh the NMS threshold (0.0-1.0)
+   * @param newVerbose Whether to enable verbose output
+   * @return A new instance with the updated verbose setting
    */
-  public void setNmsThresh(float nmsThresh) {
-    this.nmsThresh = Math.max(0.0f, Math.min(1.0f, nmsThresh));
-    LOGGER.debug("Set NMS threshold to: {}", this.nmsThresh);
+  public NuclearSegmentationSettings withVerbose(boolean newVerbose) {
+    return new NuclearSegmentationSettings(
+        modelChoice,
+        normalizeInput,
+        percentileBottom,
+        percentileTop,
+        probThresh,
+        nmsThresh,
+        outputType,
+        nTiles,
+        excludeBoundary,
+        roiPosition,
+        newVerbose,
+        showCsbdeepProgress,
+        showProbAndDist,
+        minNucleusSize,
+        maxNucleusSize);
   }
 
   /**
-   * Gets the output type for StarDist results.
+   * Creates a new instance with updated CSBDeep progress display setting.
    *
-   * @return the output type string
+   * @param newShowCsbdeepProgress Whether to show CSBDeep progress
+   * @return A new instance with the updated setting
    */
-  public String getOutputType() {
-    return outputType;
+  public NuclearSegmentationSettings withShowCsbdeepProgress(boolean newShowCsbdeepProgress) {
+    return new NuclearSegmentationSettings(
+        modelChoice,
+        normalizeInput,
+        percentileBottom,
+        percentileTop,
+        probThresh,
+        nmsThresh,
+        outputType,
+        nTiles,
+        excludeBoundary,
+        roiPosition,
+        verbose,
+        newShowCsbdeepProgress,
+        showProbAndDist,
+        minNucleusSize,
+        maxNucleusSize);
   }
 
   /**
-   * Sets the output type for StarDist results.
+   * Creates a new instance with updated probability and distance maps display setting.
    *
-   * @param outputType the output type string
+   * @param newShowProbAndDist Whether to show probability and distance maps
+   * @return A new instance with the updated setting
    */
-  public void setOutputType(String outputType) {
-    this.outputType = outputType;
-    LOGGER.debug("Set output type to: {}", outputType);
+  public NuclearSegmentationSettings withShowProbAndDist(boolean newShowProbAndDist) {
+    return new NuclearSegmentationSettings(
+        modelChoice,
+        normalizeInput,
+        percentileBottom,
+        percentileTop,
+        probThresh,
+        nmsThresh,
+        outputType,
+        nTiles,
+        excludeBoundary,
+        roiPosition,
+        verbose,
+        showCsbdeepProgress,
+        newShowProbAndDist,
+        minNucleusSize,
+        maxNucleusSize);
   }
 
   /**
-   * Gets the number of tiles for processing large images.
+   * Creates a new instance with updated minimum nucleus size.
    *
-   * @return the number of tiles
+   * @param newMinNucleusSize The new minimum nucleus size (must be non-negative)
+   * @return A new instance with the updated minimum nucleus size
+   * @throws IllegalArgumentException if minNucleusSize is invalid
    */
-  public int getNTiles() {
-    return nTiles;
+  public NuclearSegmentationSettings withMinNucleusSize(double newMinNucleusSize) {
+    return new NuclearSegmentationSettings(
+        modelChoice,
+        normalizeInput,
+        percentileBottom,
+        percentileTop,
+        probThresh,
+        nmsThresh,
+        outputType,
+        nTiles,
+        excludeBoundary,
+        roiPosition,
+        verbose,
+        showCsbdeepProgress,
+        showProbAndDist,
+        newMinNucleusSize,
+        maxNucleusSize);
   }
 
   /**
-   * Sets the number of tiles for processing large images.
+   * Creates a new instance with updated maximum nucleus size.
    *
-   * @param nTiles the number of tiles (must be positive)
+   * @param newMaxNucleusSize The new maximum nucleus size (must be non-negative)
+   * @return A new instance with the updated maximum nucleus size
+   * @throws IllegalArgumentException if maxNucleusSize is invalid
    */
-  public void setNTiles(int nTiles) {
-    this.nTiles = Math.max(1, nTiles);
-    LOGGER.debug("Set number of tiles to: {}", this.nTiles);
-  }
-
-  /**
-   * Gets the boundary exclusion distance.
-   *
-   * @return the boundary exclusion distance in pixels
-   */
-  public int getExcludeBoundary() {
-    return excludeBoundary;
-  }
-
-  /**
-   * Sets the boundary exclusion distance.
-   *
-   * @param excludeBoundary the boundary exclusion distance in pixels
-   */
-  public void setExcludeBoundary(int excludeBoundary) {
-    this.excludeBoundary = Math.max(0, excludeBoundary);
-    LOGGER.debug("Set exclude boundary to: {}", this.excludeBoundary);
-  }
-
-  /**
-   * Gets the ROI position setting.
-   *
-   * @return the ROI position string
-   */
-  public String getRoiPosition() {
-    return roiPosition;
-  }
-
-  /**
-   * Sets the ROI position setting.
-   *
-   * @param roiPosition the ROI position string
-   */
-  public void setRoiPosition(String roiPosition) {
-    this.roiPosition = roiPosition;
-    LOGGER.debug("Set ROI position to: {}", roiPosition);
-  }
-
-  /**
-   * Gets whether verbose output is enabled.
-   *
-   * @return true if verbose output is enabled
-   */
-  public boolean isVerbose() {
-    return verbose;
-  }
-
-  /**
-   * Sets whether verbose output is enabled.
-   *
-   * @param verbose true to enable verbose output
-   */
-  public void setVerbose(boolean verbose) {
-    this.verbose = verbose;
-    LOGGER.debug("Set verbose to: {}", verbose);
-  }
-
-  /**
-   * Gets whether CSBDeep progress display is enabled.
-   *
-   * @return true if CSBDeep progress display is enabled
-   */
-  public boolean isShowCsbdeepProgress() {
-    return showCsbdeepProgress;
-  }
-
-  /**
-   * Sets whether CSBDeep progress display is enabled.
-   *
-   * @param showCsbdeepProgress true to show CSBDeep progress
-   */
-  public void setShowCsbdeepProgress(boolean showCsbdeepProgress) {
-    this.showCsbdeepProgress = showCsbdeepProgress;
-    LOGGER.debug("Set show CSBDeep progress to: {}", showCsbdeepProgress);
-  }
-
-  /**
-   * Gets whether probability and distance maps should be shown.
-   *
-   * @return true if probability and distance maps should be shown
-   */
-  public boolean isShowProbAndDist() {
-    return showProbAndDist;
-  }
-
-  /**
-   * Sets whether probability and distance maps should be shown.
-   *
-   * @param showProbAndDist true to show probability and distance maps
-   */
-  public void setShowProbAndDist(boolean showProbAndDist) {
-    this.showProbAndDist = showProbAndDist;
-    LOGGER.debug("Set show probability and distance to: {}", showProbAndDist);
-  }
-
-  /**
-   * Gets the minimum nucleus size for filtering.
-   *
-   * @return the minimum nucleus size in pixels
-   */
-  public double getMinNucleusSize() {
-    return minNucleusSize;
-  }
-
-  /**
-   * Sets the minimum nucleus size for filtering.
-   *
-   * @param minNucleusSize the minimum nucleus size in pixels
-   */
-  public void setMinNucleusSize(double minNucleusSize) {
-    this.minNucleusSize = Math.max(0.0, minNucleusSize);
-    LOGGER.debug("Set minimum nucleus size to: {}", this.minNucleusSize);
-  }
-
-  /**
-   * Gets the maximum nucleus size for filtering.
-   *
-   * @return the maximum nucleus size in pixels
-   */
-  public double getMaxNucleusSize() {
-    return maxNucleusSize;
-  }
-
-  /**
-   * Sets the maximum nucleus size for filtering.
-   *
-   * @param maxNucleusSize the maximum nucleus size in pixels
-   */
-  public void setMaxNucleusSize(double maxNucleusSize) {
-    this.maxNucleusSize = Math.max(0.0, maxNucleusSize);
-    LOGGER.debug("Set maximum nucleus size to: {}", this.maxNucleusSize);
+  public NuclearSegmentationSettings withMaxNucleusSize(double newMaxNucleusSize) {
+    return new NuclearSegmentationSettings(
+        modelChoice,
+        normalizeInput,
+        percentileBottom,
+        percentileTop,
+        probThresh,
+        nmsThresh,
+        outputType,
+        nTiles,
+        excludeBoundary,
+        roiPosition,
+        verbose,
+        showCsbdeepProgress,
+        showProbAndDist,
+        minNucleusSize,
+        newMaxNucleusSize);
   }
 
   /**
@@ -376,51 +544,49 @@ public class NuclearSegmentationSettings {
    * @return true if settings are valid, false otherwise
    */
   public boolean isValid() {
-    boolean valid = true;
-
-    if (percentileBottom >= percentileTop) {
-      LOGGER.warn(
-          "Invalid percentile range: bottom ({}) >= top ({})", percentileBottom, percentileTop);
-      valid = false;
+    try {
+      validate();
+      return true;
+    } catch (IllegalStateException e) {
+      return false;
     }
-
-    if (minNucleusSize >= maxNucleusSize) {
-      LOGGER.warn(
-          "Invalid nucleus size range: min ({}) >= max ({})", minNucleusSize, maxNucleusSize);
-      valid = false;
-    }
-
-    if (probThresh < 0.0f || probThresh > 1.0f) {
-      LOGGER.warn("Invalid probability threshold: {} (must be 0.0-1.0)", probThresh);
-      valid = false;
-    }
-
-    return valid;
   }
 
   /**
-   * Resets all settings to their default values.
+   * Validate that all current settings are within acceptable ranges.
+   * This method is called automatically by the constructor, but can be used
+   * for additional validation if needed.
+   *
+   * @throws IllegalStateException if any setting is invalid
    */
-  public void resetToDefaults() {
-    this.modelChoice = DEFAULT_MODEL_CHOICE;
-    this.normalizeInput = DEFAULT_NORMALIZE_INPUT;
-    this.percentileBottom = DEFAULT_PERCENTILE_BOTTOM;
-    this.percentileTop = DEFAULT_PERCENTILE_TOP;
-    this.probThresh = DEFAULT_PROB_THRESH;
-    this.nmsThresh = DEFAULT_NMS_THRESH;
-    this.outputType = DEFAULT_OUTPUT_TYPE;
-    this.nTiles = DEFAULT_N_TILES;
-    this.excludeBoundary = DEFAULT_EXCLUDE_BOUNDARY;
-    this.roiPosition = DEFAULT_ROI_POSITION;
-    this.verbose = DEFAULT_VERBOSE;
-    this.showCsbdeepProgress = DEFAULT_SHOW_CSBDEEP_PROGRESS;
-    this.showProbAndDist = DEFAULT_SHOW_PROB_AND_DIST;
-    this.minNucleusSize = DEFAULT_MIN_NUCLEUS_SIZE;
-    this.maxNucleusSize = DEFAULT_MAX_NUCLEUS_SIZE;
-
-    LOGGER.info("Reset nuclear segmentation settings to defaults");
+  public void validate() {
+    if (percentileBottom >= percentileTop) {
+      throw new IllegalStateException(
+          "Invalid percentile range: bottom ("
+              + percentileBottom
+              + ") >= top ("
+              + percentileTop
+              + ")");
+    }
+    if (minNucleusSize >= maxNucleusSize) {
+      throw new IllegalStateException(
+          "Invalid nucleus size range: min ("
+              + minNucleusSize
+              + ") >= max ("
+              + maxNucleusSize
+              + ")");
+    }
+    if (probThresh < 0.0f || probThresh > 1.0f) {
+      throw new IllegalStateException(
+          "Invalid probability threshold: " + probThresh + " (must be 0.0-1.0)");
+    }
   }
 
+  /**
+   * Get a string representation of current settings.
+   *
+   * @return String representation of settings
+   */
   @Override
   public String toString() {
     return String.format(

@@ -6,12 +6,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Properties;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Manages application configuration settings with persistence.
  * Handles loading and saving settings to/from properties files.
+ * This class follows dependency injection principles and avoids singleton patterns.
  *
  * @author Sebastian Micu
  * @version 1.0.0
@@ -34,7 +37,6 @@ public class ConfigurationManager {
    * Initializes the configuration directory if it doesn't exist.
    */
   public ConfigurationManager() {
-    LOGGER.debug("ConfigurationManager initialized");
     ensureConfigDirectoryExists();
   }
 
@@ -54,82 +56,73 @@ public class ConfigurationManager {
   }
 
   /**
-   * Load vessel segmentation settings from the properties file.
+   * Generic method to load settings from a properties file.
    *
+   * @param <T> The settings type
+   * @param fileName The properties file name
+   * @param settingsLoader Function to load properties into the settings object
    * @param settings The settings object to populate
    */
-  public void loadVesselSegmentationSettings(VesselSegmentationSettings settings) {
-    Path settingsFile = Paths.get(CONFIG_DIR, VESSEL_SETTINGS_FILE);
+  private <T> void loadSettings(
+      String fileName, BiConsumer<Properties, T> settingsLoader, T settings) {
+    Path settingsFile = Paths.get(CONFIG_DIR, fileName);
 
     if (!Files.exists(settingsFile)) {
-      LOGGER.info("Vessel segmentation settings file not found, using defaults");
+      LOGGER.debug("Settings file not found: {}, using defaults", fileName);
       return;
     }
 
     Properties properties = new Properties();
     try (InputStream input = Files.newInputStream(settingsFile)) {
       properties.load(input);
-
-      // Load threshold
-      String thresholdStr = properties.getProperty("threshold");
-      if (thresholdStr != null) {
-        try {
-          int threshold = Integer.parseInt(thresholdStr);
-          settings.setThreshold(threshold);
-          LOGGER.debug("Loaded threshold: {}", threshold);
-        } catch (NumberFormatException e) {
-          LOGGER.warn("Invalid threshold value in config: {}", thresholdStr);
-        }
-      }
-
-      // Load min ROI size
-      String minRoiSizeStr = properties.getProperty("minRoiSize");
-      if (minRoiSizeStr != null) {
-        try {
-          double minRoiSize = Double.parseDouble(minRoiSizeStr);
-          settings.setMinRoiSize(minRoiSize);
-          LOGGER.debug("Loaded min ROI size: {}", minRoiSize);
-        } catch (NumberFormatException e) {
-          LOGGER.warn("Invalid min ROI size value in config: {}", minRoiSizeStr);
-        }
-      }
-
-      // Load max ROI size
-      String maxRoiSizeStr = properties.getProperty("maxRoiSize");
-      if (maxRoiSizeStr != null) {
-        try {
-          double maxRoiSize = Double.parseDouble(maxRoiSizeStr);
-          settings.setMaxRoiSize(maxRoiSize);
-          LOGGER.debug("Loaded max ROI size: {}", maxRoiSize);
-        } catch (NumberFormatException e) {
-          LOGGER.warn("Invalid max ROI size value in config: {}", maxRoiSizeStr);
-        }
-      }
-
-      // Load Gaussian blur sigma
-      String gaussianBlurSigmaStr = properties.getProperty("gaussianBlurSigma");
-      if (gaussianBlurSigmaStr != null) {
-        try {
-          double gaussianBlurSigma = Double.parseDouble(gaussianBlurSigmaStr);
-          settings.setGaussianBlurSigma(gaussianBlurSigma);
-          LOGGER.debug("Loaded Gaussian blur sigma: {}", gaussianBlurSigma);
-        } catch (NumberFormatException e) {
-          LOGGER.warn("Invalid Gaussian blur sigma value in config: {}", gaussianBlurSigmaStr);
-        }
-      }
-
-      // Load morphological closing setting
-      String applyMorphologicalClosingStr = properties.getProperty("applyMorphologicalClosing");
-      if (applyMorphologicalClosingStr != null) {
-        boolean applyMorphologicalClosing = Boolean.parseBoolean(applyMorphologicalClosingStr);
-        settings.setApplyMorphologicalClosing(applyMorphologicalClosing);
-        LOGGER.debug("Loaded apply morphological closing: {}", applyMorphologicalClosing);
-      }
-
-      LOGGER.info("Successfully loaded vessel segmentation settings from: {}", settingsFile);
-
+      settingsLoader.accept(properties, settings);
+      LOGGER.debug("Successfully loaded settings from: {}", settingsFile);
     } catch (IOException e) {
-      LOGGER.error("Failed to load vessel segmentation settings from: {}", settingsFile, e);
+      LOGGER.error("Failed to load settings from: {}", settingsFile, e);
+    }
+  }
+
+  /**
+   * Generic method to save settings to a properties file.
+   *
+   * @param <T> The settings type
+   * @param fileName The properties file name
+   * @param comment The comment for the properties file
+   * @param settingsSaver Function to save settings to properties
+   * @param settings The settings object to save
+   */
+  private <T> void saveSettings(
+      String fileName, String comment, Function<T, Properties> settingsSaver, T settings) {
+    Path settingsFile = Paths.get(CONFIG_DIR, fileName);
+
+    Properties properties = settingsSaver.apply(settings);
+    try (OutputStream output = Files.newOutputStream(settingsFile)) {
+      properties.store(output, comment);
+      LOGGER.debug("Successfully saved settings to: {}", settingsFile);
+    } catch (IOException e) {
+      LOGGER.error("Failed to save settings to: {}", settingsFile, e);
+    }
+  }
+
+  /**
+   * Loads vessel segmentation settings from the configuration file.
+   *
+   * @return The loaded vessel segmentation settings, or default settings if file doesn't exist
+   */
+  public VesselSegmentationSettings loadVesselSegmentationSettings() {
+    Path settingsFile = Paths.get(CONFIG_DIR, VESSEL_SETTINGS_FILE);
+
+    if (!Files.exists(settingsFile)) {
+      return VesselSegmentationSettings.createDefault();
+    }
+
+    try (InputStream input = Files.newInputStream(settingsFile)) {
+      Properties properties = new Properties();
+      properties.load(input);
+      return loadVesselProperties(properties);
+    } catch (IOException e) {
+      LOGGER.error("Error loading vessel settings: {}", e.getMessage());
+      return VesselSegmentationSettings.createDefault();
     }
   }
 
@@ -139,33 +132,113 @@ public class ConfigurationManager {
    * @param settings The settings object to save
    */
   public void saveVesselSegmentationSettings(VesselSegmentationSettings settings) {
-    Path settingsFile = Paths.get(CONFIG_DIR, VESSEL_SETTINGS_FILE);
+    saveSettings(
+        VESSEL_SETTINGS_FILE,
+        "SciPathJ Vessel Segmentation Settings",
+        this::createVesselProperties,
+        settings);
+  }
 
-    Properties properties = new Properties();
-    properties.setProperty("threshold", String.valueOf(settings.getThreshold()));
-    properties.setProperty("minRoiSize", String.valueOf(settings.getMinRoiSize()));
-    properties.setProperty("maxRoiSize", String.valueOf(settings.getMaxRoiSize()));
-    properties.setProperty("gaussianBlurSigma", String.valueOf(settings.getGaussianBlurSigma()));
-    properties.setProperty(
-        "applyMorphologicalClosing", String.valueOf(settings.isApplyMorphologicalClosing()));
+  /**
+   * Loads nuclear segmentation settings from the configuration file.
+   *
+   * @return The loaded nuclear segmentation settings, or default settings if file doesn't exist
+   */
+  public NuclearSegmentationSettings loadNuclearSegmentationSettings() {
+    Path settingsFile = Paths.get(CONFIG_DIR, NUCLEAR_SETTINGS_FILE);
 
-    try (OutputStream output = Files.newOutputStream(settingsFile)) {
-      properties.store(output, "SciPathJ Vessel Segmentation Settings");
-      LOGGER.info("Successfully saved vessel segmentation settings to: {}", settingsFile);
+    if (!Files.exists(settingsFile)) {
+      return NuclearSegmentationSettings.createDefault();
+    }
+
+    try (InputStream input = Files.newInputStream(settingsFile)) {
+      Properties properties = new Properties();
+      properties.load(input);
+      return loadNuclearProperties(properties);
     } catch (IOException e) {
-      LOGGER.error("Failed to save vessel segmentation settings to: {}", settingsFile, e);
+      LOGGER.error("Error loading nuclear settings: {}", e.getMessage());
+      return NuclearSegmentationSettings.createDefault();
     }
   }
 
   /**
-   * Initialize vessel segmentation settings by loading from file or using defaults.
+   * Save nuclear segmentation settings to the properties file.
    *
-   * @return Initialized VesselSegmentationSettings instance
+   * @param settings The settings object to save
    */
-  public VesselSegmentationSettings initializeVesselSegmentationSettings() {
-    VesselSegmentationSettings settings = VesselSegmentationSettings.getInstance();
-    loadVesselSegmentationSettings(settings);
-    return settings;
+  public void saveNuclearSegmentationSettings(NuclearSegmentationSettings settings) {
+    saveSettings(
+        NUCLEAR_SETTINGS_FILE,
+        "SciPathJ Nuclear Segmentation Settings",
+        this::createNuclearProperties,
+        settings);
+  }
+
+  /**
+   * Loads cytoplasm segmentation settings from the configuration file.
+   *
+   * @return The loaded cytoplasm segmentation settings, or default settings if file doesn't exist
+   */
+  public CytoplasmSegmentationSettings loadCytoplasmSegmentationSettings() {
+    Path settingsFile = Paths.get(CONFIG_DIR, CYTOPLASM_SETTINGS_FILE);
+
+    if (!Files.exists(settingsFile)) {
+      return CytoplasmSegmentationSettings.createDefault();
+    }
+
+    try (InputStream input = Files.newInputStream(settingsFile)) {
+      Properties properties = new Properties();
+      properties.load(input);
+      return loadCytoplasmProperties(properties);
+    } catch (IOException e) {
+      LOGGER.error("Error loading cytoplasm settings: {}", e.getMessage());
+      return CytoplasmSegmentationSettings.createDefault();
+    }
+  }
+
+  /**
+   * Save cytoplasm segmentation settings to the properties file.
+   *
+   * @param settings The settings object to save
+   */
+  public void saveCytoplasmSegmentationSettings(CytoplasmSegmentationSettings settings) {
+    saveSettings(
+        CYTOPLASM_SETTINGS_FILE,
+        "SciPathJ Cytoplasm Segmentation Settings",
+        this::createCytoplasmProperties,
+        settings);
+  }
+
+  /**
+   * Loads main settings from the configuration file.
+   *
+   * @return The loaded main settings, or default settings if file doesn't exist
+   */
+  public MainSettings loadMainSettings() {
+    Path settingsFile = Paths.get(CONFIG_DIR, MAIN_SETTINGS_FILE);
+
+    if (!Files.exists(settingsFile)) {
+      return MainSettings.createDefault();
+    }
+
+    try (InputStream input = Files.newInputStream(settingsFile)) {
+      Properties properties = new Properties();
+      properties.load(input);
+      return loadMainSettingsFromProperties(properties);
+    } catch (IOException e) {
+      LOGGER.error("Error loading main settings: {}", e.getMessage());
+      return MainSettings.createDefault();
+    }
+  }
+
+  /**
+   * Save main settings to the properties file.
+   *
+   * @param settings The settings object to save
+   */
+  public void saveMainSettings(MainSettings settings) {
+    saveSettings(
+        MAIN_SETTINGS_FILE, "SciPathJ Main Settings", this::createMainProperties, settings);
   }
 
   /**
@@ -178,95 +251,276 @@ public class ConfigurationManager {
   }
 
   /**
-   * Load main settings from the properties file.
+   * Check if a settings file exists.
    *
-   * @param settings The settings object to populate
+   * @param fileName The settings file name
+   * @return true if the settings file exists
    */
-  public void loadMainSettings(MainSettings settings) {
-    Path settingsFile = Paths.get(CONFIG_DIR, MAIN_SETTINGS_FILE);
-
-    if (!Files.exists(settingsFile)) {
-      LOGGER.info("Main settings file not found, using defaults");
-      return;
-    }
-
-    Properties properties = new Properties();
-    try (InputStream input = Files.newInputStream(settingsFile)) {
-      properties.load(input);
-
-      // Load scale settings
-      String pixelsPerMicrometerStr = properties.getProperty("pixelsPerMicrometer");
-      if (pixelsPerMicrometerStr != null) {
-        try {
-          double pixelsPerMicrometer = Double.parseDouble(pixelsPerMicrometerStr);
-          settings.setPixelsPerMicrometer(pixelsPerMicrometer);
-          LOGGER.debug("Loaded pixels per micrometer: {}", pixelsPerMicrometer);
-        } catch (NumberFormatException e) {
-          LOGGER.warn("Invalid pixels per micrometer value in config: {}", pixelsPerMicrometerStr);
-        }
-      }
-
-      String scaleUnit = properties.getProperty("scaleUnit");
-      if (scaleUnit != null) {
-        settings.setScaleUnit(scaleUnit);
-        LOGGER.debug("Loaded scale unit: {}", scaleUnit);
-      }
-
-      // Load type-specific ROI appearance settings
-      loadROICategorySettings(properties, "vessel", settings.getVesselSettings());
-      loadROICategorySettings(properties, "nucleus", settings.getNucleusSettings());
-      loadROICategorySettings(properties, "cytoplasm", settings.getCytoplasmSettings());
-      loadROICategorySettings(properties, "cell", settings.getCellSettings());
-
-      // For backward compatibility, also load old single ROI settings into vessel settings
-      String roiBorderColorStr = properties.getProperty("roiBorderColor");
-      if (roiBorderColorStr != null) {
-        try {
-          Color roiBorderColor = parseColor(roiBorderColorStr);
-          settings.getVesselSettings().setBorderColor(roiBorderColor);
-          LOGGER.debug("Loaded legacy ROI border color: {}", roiBorderColorStr);
-        } catch (Exception e) {
-          LOGGER.warn("Invalid ROI border color value in config: {}", roiBorderColorStr);
-        }
-      }
-
-      String roiFillOpacityStr = properties.getProperty("roiFillOpacity");
-      if (roiFillOpacityStr != null) {
-        try {
-          float roiFillOpacity = Float.parseFloat(roiFillOpacityStr);
-          settings.getVesselSettings().setFillOpacity(roiFillOpacity);
-          LOGGER.debug("Loaded legacy ROI fill opacity: {}", roiFillOpacity);
-        } catch (NumberFormatException e) {
-          LOGGER.warn("Invalid ROI fill opacity value in config: {}", roiFillOpacityStr);
-        }
-      }
-
-      String roiBorderWidthStr = properties.getProperty("roiBorderWidth");
-      if (roiBorderWidthStr != null) {
-        try {
-          int roiBorderWidth = Integer.parseInt(roiBorderWidthStr);
-          settings.getVesselSettings().setBorderWidth(roiBorderWidth);
-          LOGGER.debug("Loaded legacy ROI border width: {}", roiBorderWidth);
-        } catch (NumberFormatException e) {
-          LOGGER.warn("Invalid ROI border width value in config: {}", roiBorderWidthStr);
-        }
-      }
-
-      LOGGER.info("Successfully loaded main settings from: {}", settingsFile);
-
-    } catch (IOException e) {
-      LOGGER.error("Failed to load main settings from: {}", settingsFile, e);
-    }
+  public boolean settingsFileExists(String fileName) {
+    Path settingsFile = Paths.get(CONFIG_DIR, fileName);
+    return Files.exists(settingsFile);
   }
 
-  /**
-   * Save main settings to the properties file.
-   *
-   * @param settings The settings object to save
-   */
-  public void saveMainSettings(MainSettings settings) {
-    Path settingsFile = Paths.get(CONFIG_DIR, MAIN_SETTINGS_FILE);
+  // === VESSEL SETTINGS PROPERTY HANDLERS ===
 
+  private VesselSegmentationSettings loadVesselProperties(Properties properties) {
+    int threshold =
+        getIntProperty(properties, "threshold", VesselSegmentationSettings.DEFAULT_THRESHOLD);
+    double minRoiSize =
+        getDoubleProperty(
+            properties, "minRoiSize", VesselSegmentationSettings.DEFAULT_MIN_ROI_SIZE);
+    double maxRoiSize =
+        getDoubleProperty(
+            properties, "maxRoiSize", VesselSegmentationSettings.DEFAULT_MAX_ROI_SIZE);
+    double gaussianBlurSigma =
+        getDoubleProperty(
+            properties,
+            "gaussianBlurSigma",
+            VesselSegmentationSettings.DEFAULT_GAUSSIAN_BLUR_SIGMA);
+    boolean applyMorphologicalClosing =
+        getBooleanProperty(
+            properties,
+            "applyMorphologicalClosing",
+            VesselSegmentationSettings.DEFAULT_APPLY_MORPHOLOGICAL_CLOSING);
+
+    return new VesselSegmentationSettings(
+        threshold, minRoiSize, maxRoiSize, gaussianBlurSigma, applyMorphologicalClosing);
+  }
+
+  private Properties createVesselProperties(VesselSegmentationSettings settings) {
+    Properties properties = new Properties();
+    properties.setProperty("threshold", String.valueOf(settings.threshold()));
+    properties.setProperty("minRoiSize", String.valueOf(settings.minRoiSize()));
+    properties.setProperty("maxRoiSize", String.valueOf(settings.maxRoiSize()));
+    properties.setProperty("gaussianBlurSigma", String.valueOf(settings.gaussianBlurSigma()));
+    properties.setProperty(
+        "applyMorphologicalClosing", String.valueOf(settings.applyMorphologicalClosing()));
+    return properties;
+  }
+
+  // === NUCLEAR SETTINGS PROPERTY HANDLERS ===
+
+  private NuclearSegmentationSettings loadNuclearProperties(Properties properties) {
+    String modelChoice =
+        getStringProperty(
+            properties, "modelChoice", NuclearSegmentationSettings.DEFAULT_MODEL_CHOICE);
+    boolean normalizeInput =
+        getBooleanProperty(
+            properties, "normalizeInput", NuclearSegmentationSettings.DEFAULT_NORMALIZE_INPUT);
+    float percentileBottom =
+        getFloatProperty(
+            properties, "percentileBottom", NuclearSegmentationSettings.DEFAULT_PERCENTILE_BOTTOM);
+    float percentileTop =
+        getFloatProperty(
+            properties, "percentileTop", NuclearSegmentationSettings.DEFAULT_PERCENTILE_TOP);
+    float probThresh =
+        getFloatProperty(properties, "probThresh", NuclearSegmentationSettings.DEFAULT_PROB_THRESH);
+    float nmsThresh =
+        getFloatProperty(properties, "nmsThresh", NuclearSegmentationSettings.DEFAULT_NMS_THRESH);
+    int nTiles = getIntProperty(properties, "nTiles", NuclearSegmentationSettings.DEFAULT_N_TILES);
+    int excludeBoundary =
+        getIntProperty(
+            properties, "excludeBoundary", NuclearSegmentationSettings.DEFAULT_EXCLUDE_BOUNDARY);
+    double minNucleusSize =
+        getDoubleProperty(
+            properties, "minNucleusSize", NuclearSegmentationSettings.DEFAULT_MIN_NUCLEUS_SIZE);
+    double maxNucleusSize =
+        getDoubleProperty(
+            properties, "maxNucleusSize", NuclearSegmentationSettings.DEFAULT_MAX_NUCLEUS_SIZE);
+    boolean verbose =
+        getBooleanProperty(properties, "verbose", NuclearSegmentationSettings.DEFAULT_VERBOSE);
+    boolean showCsbdeepProgress =
+        getBooleanProperty(
+            properties,
+            "showCsbdeepProgress",
+            NuclearSegmentationSettings.DEFAULT_SHOW_CSBDEEP_PROGRESS);
+    boolean showProbAndDist =
+        getBooleanProperty(
+            properties, "showProbAndDist", NuclearSegmentationSettings.DEFAULT_SHOW_PROB_AND_DIST);
+
+    return new NuclearSegmentationSettings(
+        modelChoice,
+        normalizeInput,
+        percentileBottom,
+        percentileTop,
+        probThresh,
+        nmsThresh,
+        "Both", // outputType - default value
+        nTiles,
+        excludeBoundary,
+        "Automatic", // roiPosition - default value
+        verbose,
+        showCsbdeepProgress,
+        showProbAndDist,
+        minNucleusSize,
+        maxNucleusSize);
+  }
+
+  private Properties createNuclearProperties(NuclearSegmentationSettings settings) {
+    Properties properties = new Properties();
+    properties.setProperty("modelChoice", settings.modelChoice());
+    properties.setProperty("normalizeInput", String.valueOf(settings.normalizeInput()));
+    properties.setProperty("percentileBottom", String.valueOf(settings.percentileBottom()));
+    properties.setProperty("percentileTop", String.valueOf(settings.percentileTop()));
+    properties.setProperty("probThresh", String.valueOf(settings.probThresh()));
+    properties.setProperty("nmsThresh", String.valueOf(settings.nmsThresh()));
+    properties.setProperty("nTiles", String.valueOf(settings.nTiles()));
+    properties.setProperty("excludeBoundary", String.valueOf(settings.excludeBoundary()));
+    properties.setProperty("verbose", String.valueOf(settings.verbose()));
+    properties.setProperty("showCsbdeepProgress", String.valueOf(settings.showCsbdeepProgress()));
+    properties.setProperty("showProbAndDist", String.valueOf(settings.showProbAndDist()));
+    properties.setProperty("minNucleusSize", String.valueOf(settings.minNucleusSize()));
+    properties.setProperty("maxNucleusSize", String.valueOf(settings.maxNucleusSize()));
+    return properties;
+  }
+
+  // === CYTOPLASM SETTINGS PROPERTY HANDLERS ===
+
+  private CytoplasmSegmentationSettings loadCytoplasmProperties(Properties properties) {
+    double voronoiExpansion =
+        getDoubleProperty(
+            properties,
+            "voronoiExpansion",
+            CytoplasmSegmentationSettings.DEFAULT_VORONOI_EXPANSION);
+    boolean useVesselExclusion =
+        getBooleanProperty(
+            properties,
+            "useVesselExclusion",
+            CytoplasmSegmentationSettings.DEFAULT_USE_VESSEL_EXCLUSION);
+    double minCellSize =
+        getDoubleProperty(
+            properties, "minCellSize", CytoplasmSegmentationSettings.DEFAULT_MIN_CELL_SIZE);
+    double maxCellSize =
+        getDoubleProperty(
+            properties, "maxCellSize", CytoplasmSegmentationSettings.DEFAULT_MAX_CELL_SIZE);
+    double gaussianBlurSigma =
+        getDoubleProperty(
+            properties,
+            "gaussianBlurSigma",
+            CytoplasmSegmentationSettings.DEFAULT_GAUSSIAN_BLUR_SIGMA);
+    double morphClosingRadius =
+        getDoubleProperty(
+            properties,
+            "morphClosingRadius",
+            CytoplasmSegmentationSettings.DEFAULT_MORPH_CLOSING_RADIUS);
+    double watershedTolerance =
+        getDoubleProperty(
+            properties,
+            "watershedTolerance",
+            CytoplasmSegmentationSettings.DEFAULT_WATERSHED_TOLERANCE);
+    double minCytoplasmArea =
+        getDoubleProperty(
+            properties,
+            "minCytoplasmArea",
+            CytoplasmSegmentationSettings.DEFAULT_MIN_CYTOPLASM_AREA);
+    double maxCytoplasmArea =
+        getDoubleProperty(
+            properties,
+            "maxCytoplasmArea",
+            CytoplasmSegmentationSettings.DEFAULT_MAX_CYTOPLASM_AREA);
+    boolean fillHoles =
+        getBooleanProperty(
+            properties, "fillHoles", CytoplasmSegmentationSettings.DEFAULT_FILL_HOLES);
+    boolean smoothBoundaries =
+        getBooleanProperty(
+            properties,
+            "smoothBoundaries",
+            CytoplasmSegmentationSettings.DEFAULT_SMOOTH_BOUNDARIES);
+    boolean verbose =
+        getBooleanProperty(properties, "verbose", CytoplasmSegmentationSettings.DEFAULT_VERBOSE);
+
+    return new CytoplasmSegmentationSettings(
+        useVesselExclusion,
+        CytoplasmSegmentationSettings.DEFAULT_ADD_IMAGE_BORDER,
+        CytoplasmSegmentationSettings.DEFAULT_BORDER_WIDTH,
+        CytoplasmSegmentationSettings.DEFAULT_APPLY_VORONOI,
+        minCellSize,
+        maxCellSize,
+        minCytoplasmArea,
+        CytoplasmSegmentationSettings.DEFAULT_VALIDATE_CELL_SHAPE,
+        CytoplasmSegmentationSettings.DEFAULT_MAX_ASPECT_RATIO,
+        CytoplasmSegmentationSettings.DEFAULT_LINK_NUCLEUS_TO_CYTOPLASM,
+        CytoplasmSegmentationSettings.DEFAULT_CREATE_CELL_ROIS,
+        CytoplasmSegmentationSettings.DEFAULT_EXCLUDE_BORDER_CELLS);
+  }
+
+  private Properties createCytoplasmProperties(CytoplasmSegmentationSettings settings) {
+    Properties properties = new Properties();
+    properties.setProperty("useVesselExclusion", String.valueOf(settings.useVesselExclusion()));
+    properties.setProperty("addImageBorder", String.valueOf(settings.addImageBorder()));
+    properties.setProperty("borderWidth", String.valueOf(settings.borderWidth()));
+    properties.setProperty("applyVoronoi", String.valueOf(settings.applyVoronoi()));
+    properties.setProperty("minCellSize", String.valueOf(settings.minCellSize()));
+    properties.setProperty("maxCellSize", String.valueOf(settings.maxCellSize()));
+    properties.setProperty("minCytoplasmSize", String.valueOf(settings.minCytoplasmSize()));
+    properties.setProperty("validateCellShape", String.valueOf(settings.validateCellShape()));
+    properties.setProperty("maxAspectRatio", String.valueOf(settings.maxAspectRatio()));
+    properties.setProperty(
+        "linkNucleusToCytoplasm", String.valueOf(settings.linkNucleusToCytoplasm()));
+    properties.setProperty("createCellROIs", String.valueOf(settings.createCellROIs()));
+    properties.setProperty("excludeBorderCells", String.valueOf(settings.excludeBorderCells()));
+    return properties;
+  }
+
+  // === MAIN SETTINGS PROPERTY HANDLERS ===
+
+  private MainSettings loadMainSettingsFromProperties(Properties properties) {
+    // Load pixel scale settings
+    double pixelsPerMicrometer =
+        getDoubleProperty(
+            properties, "pixelsPerMicrometer", MainSettings.DEFAULT_PIXELS_PER_MICROMETER);
+    String scaleUnit = getStringProperty(properties, "scaleUnit", MainSettings.DEFAULT_SCALE_UNIT);
+
+    // Load ROI appearance settings for each category
+    MainSettings.ROIAppearanceSettings vesselSettings =
+        loadROIAppearanceSettings(properties, "vessel");
+    MainSettings.ROIAppearanceSettings nucleusSettings =
+        loadROIAppearanceSettings(properties, "nucleus");
+    MainSettings.ROIAppearanceSettings cytoplasmSettings =
+        loadROIAppearanceSettings(properties, "cytoplasm");
+    MainSettings.ROIAppearanceSettings cellSettings = loadROIAppearanceSettings(properties, "cell");
+
+    return new MainSettings(
+        pixelsPerMicrometer,
+        scaleUnit,
+        vesselSettings,
+        nucleusSettings,
+        cytoplasmSettings,
+        cellSettings);
+  }
+
+  private MainSettings.ROIAppearanceSettings loadROIAppearanceSettings(
+      Properties properties, String category) {
+    // Load ROI appearance settings for specific category with fallback to defaults
+    String prefix = category + ".";
+    Color borderColor =
+        getColorProperty(properties, prefix + "borderColor", MainSettings.DEFAULT_BORDER_COLOR);
+    float fillOpacity =
+        (float)
+            getDoubleProperty(
+                properties, prefix + "fillOpacity", MainSettings.DEFAULT_FILL_OPACITY);
+    int borderWidth =
+        getIntProperty(properties, prefix + "borderWidth", MainSettings.DEFAULT_BORDER_WIDTH);
+
+    return new MainSettings.ROIAppearanceSettings(borderColor, fillOpacity, borderWidth);
+  }
+
+  private MainSettings.ROIAppearanceSettings loadROIAppearanceSettings(Properties properties) {
+    // Load default ROI appearance settings (backward compatibility)
+    Color borderColor =
+        getColorProperty(properties, "roiBorderColor", MainSettings.DEFAULT_BORDER_COLOR);
+    float fillOpacity =
+        (float) getDoubleProperty(properties, "roiFillOpacity", MainSettings.DEFAULT_FILL_OPACITY);
+    int borderWidth =
+        getIntProperty(properties, "roiBorderWidth", MainSettings.DEFAULT_BORDER_WIDTH);
+
+    return new MainSettings.ROIAppearanceSettings(borderColor, fillOpacity, borderWidth);
+  }
+
+  // This method is no longer needed since MainSettings is now immutable
+  // Loading is handled in loadMainSettingsFromProperties
+
+  private Properties createMainProperties(MainSettings settings) {
     Properties properties = new Properties();
 
     // Save scale settings
@@ -282,93 +536,134 @@ public class ConfigurationManager {
 
     // For backward compatibility, also save vessel ROI settings as legacy properties
     properties.setProperty(
-        "roiBorderColor", colorToString(settings.getVesselSettings().getBorderColor()));
+        "roiBorderColor", colorToString(settings.getVesselSettings().borderColor()));
     properties.setProperty(
-        "roiFillOpacity", String.valueOf(settings.getVesselSettings().getFillOpacity()));
+        "roiFillOpacity", String.valueOf(settings.getVesselSettings().fillOpacity()));
     properties.setProperty(
-        "roiBorderWidth", String.valueOf(settings.getVesselSettings().getBorderWidth()));
+        "roiBorderWidth", String.valueOf(settings.getVesselSettings().borderWidth()));
 
-    try (OutputStream output = Files.newOutputStream(settingsFile)) {
-      properties.store(output, "SciPathJ Main Settings");
-      LOGGER.info("Successfully saved main settings to: {}", settingsFile);
-    } catch (IOException e) {
-      LOGGER.error("Failed to save main settings to: {}", settingsFile, e);
-    }
+    return properties;
   }
 
-  /**
-   * Load ROI category settings from properties.
-   *
-   * @param properties The properties object
-   * @param categoryPrefix The category prefix (e.g., "vessel", "nucleus")
-   * @param settings The ROI appearance settings to populate
-   */
-  private void loadROICategorySettings(
-      Properties properties, String categoryPrefix, MainSettings.ROIAppearanceSettings settings) {
-    // Load border color
-    String borderColorStr = properties.getProperty(categoryPrefix + ".borderColor");
-    if (borderColorStr != null) {
-      try {
-        Color borderColor = parseColor(borderColorStr);
-        settings.setBorderColor(borderColor);
-        LOGGER.debug("Loaded {} border color: {}", categoryPrefix, borderColorStr);
-      } catch (Exception e) {
-        LOGGER.warn("Invalid {} border color value in config: {}", categoryPrefix, borderColorStr);
-      }
-    }
+  // === ROI CATEGORY SETTINGS HELPERS ===
 
-    // Load fill opacity
-    String fillOpacityStr = properties.getProperty(categoryPrefix + ".fillOpacity");
-    if (fillOpacityStr != null) {
-      try {
-        float fillOpacity = Float.parseFloat(fillOpacityStr);
-        settings.setFillOpacity(fillOpacity);
-        LOGGER.debug("Loaded {} fill opacity: {}", categoryPrefix, fillOpacity);
-      } catch (NumberFormatException e) {
-        LOGGER.warn("Invalid {} fill opacity value in config: {}", categoryPrefix, fillOpacityStr);
-      }
-    }
+  private MainSettings.ROIAppearanceSettings loadROICategorySettings(
+      Properties properties, String categoryPrefix) {
+    Color borderColor =
+        getColorProperty(
+            properties, categoryPrefix + ".borderColor", MainSettings.DEFAULT_BORDER_COLOR);
+    float fillOpacity =
+        (float)
+            getDoubleProperty(
+                properties, categoryPrefix + ".fillOpacity", MainSettings.DEFAULT_FILL_OPACITY);
+    int borderWidth =
+        getIntProperty(
+            properties, categoryPrefix + ".borderWidth", MainSettings.DEFAULT_BORDER_WIDTH);
 
-    // Load border width
-    String borderWidthStr = properties.getProperty(categoryPrefix + ".borderWidth");
-    if (borderWidthStr != null) {
-      try {
-        int borderWidth = Integer.parseInt(borderWidthStr);
-        settings.setBorderWidth(borderWidth);
-        LOGGER.debug("Loaded {} border width: {}", categoryPrefix, borderWidth);
-      } catch (NumberFormatException e) {
-        LOGGER.warn("Invalid {} border width value in config: {}", categoryPrefix, borderWidthStr);
-      }
-    }
+    return new MainSettings.ROIAppearanceSettings(borderColor, fillOpacity, borderWidth);
   }
 
-  /**
-   * Save ROI category settings to properties.
-   *
-   * @param properties The properties object
-   * @param categoryPrefix The category prefix (e.g., "vessel", "nucleus")
-   * @param settings The ROI appearance settings to save
-   */
   private void saveROICategorySettings(
       Properties properties, String categoryPrefix, MainSettings.ROIAppearanceSettings settings) {
-    properties.setProperty(
-        categoryPrefix + ".borderColor", colorToString(settings.getBorderColor()));
-    properties.setProperty(
-        categoryPrefix + ".fillOpacity", String.valueOf(settings.getFillOpacity()));
-    properties.setProperty(
-        categoryPrefix + ".borderWidth", String.valueOf(settings.getBorderWidth()));
+    properties.setProperty(categoryPrefix + ".borderColor", colorToString(settings.borderColor()));
+    properties.setProperty(categoryPrefix + ".fillOpacity", String.valueOf(settings.fillOpacity()));
+    properties.setProperty(categoryPrefix + ".borderWidth", String.valueOf(settings.borderWidth()));
   }
 
-  /**
-   * Initialize main settings by loading from file or using defaults.
-   *
-   * @return Initialized MainSettings instance
-   */
-  public MainSettings initializeMainSettings() {
-    MainSettings settings = MainSettings.getInstance();
-    loadMainSettings(settings);
-    return settings;
+  // === GENERIC PROPERTY LOADING HELPERS ===
+
+  private String getStringProperty(Properties properties, String key, String defaultValue) {
+    String value = properties.getProperty(key);
+    return value != null ? value : defaultValue;
   }
+
+  private int getIntProperty(Properties properties, String key, int defaultValue) {
+    String value = properties.getProperty(key);
+    if (value != null) {
+      try {
+        return Integer.parseInt(value);
+      } catch (NumberFormatException e) {
+        // Log warning and return default
+      }
+    }
+    return defaultValue;
+  }
+
+  private double getDoubleProperty(Properties properties, String key, double defaultValue) {
+    String value = properties.getProperty(key);
+    if (value != null) {
+      try {
+        return Double.parseDouble(value);
+      } catch (NumberFormatException e) {
+        // Log warning and return default
+      }
+    }
+    return defaultValue;
+  }
+
+  private float getFloatProperty(Properties properties, String key, float defaultValue) {
+    String value = properties.getProperty(key);
+    if (value != null) {
+      try {
+        return Float.parseFloat(value);
+      } catch (NumberFormatException e) {
+        // Log warning and return default
+      }
+    }
+    return defaultValue;
+  }
+
+  private boolean getBooleanProperty(Properties properties, String key, boolean defaultValue) {
+    String value = properties.getProperty(key);
+    return value != null ? Boolean.parseBoolean(value) : defaultValue;
+  }
+
+  private Color getColorProperty(Properties properties, String key, Color defaultValue) {
+    String value = properties.getProperty(key);
+    if (value != null) {
+      try {
+        return Color.decode(value);
+      } catch (NumberFormatException e) {
+        // Log warning and return default
+        System.err.println("Invalid color value for " + key + ": " + value);
+      }
+    }
+    return defaultValue;
+  }
+
+  private void loadStringProperty(
+      Properties properties, String key, java.util.function.Consumer<String> setter) {
+    String value = properties.getProperty(key);
+    if (value != null) {
+      setter.accept(value);
+    }
+  }
+
+  private void loadIntProperty(
+      Properties properties, String key, java.util.function.Consumer<Integer> setter) {
+    String value = properties.getProperty(key);
+    if (value != null) {
+      try {
+        setter.accept(Integer.parseInt(value));
+      } catch (NumberFormatException e) {
+        LOGGER.warn("Invalid integer value for {}: {}", key, value);
+      }
+    }
+  }
+
+  private void loadDoubleProperty(
+      Properties properties, String key, java.util.function.Consumer<Double> setter) {
+    String value = properties.getProperty(key);
+    if (value != null) {
+      try {
+        setter.accept(Double.parseDouble(value));
+      } catch (NumberFormatException e) {
+        LOGGER.warn("Invalid double value for {}: {}", key, value);
+      }
+    }
+  }
+
+  // === COLOR PARSING UTILITIES ===
 
   /**
    * Parse a color from string format "R,G,B" or "R,G,B,A".
@@ -402,324 +697,5 @@ public class ConfigurationManager {
    */
   private String colorToString(Color color) {
     return color.getRed() + "," + color.getGreen() + "," + color.getBlue();
-  }
-
-  /**
-   * Check if vessel segmentation settings file exists.
-   *
-   * @return true if the settings file exists
-   */
-  public boolean vesselSettingsFileExists() {
-    Path settingsFile = Paths.get(CONFIG_DIR, VESSEL_SETTINGS_FILE);
-    return Files.exists(settingsFile);
-  }
-
-  /**
-   * Check if main settings file exists.
-   *
-   * @return true if the settings file exists
-   */
-  public boolean mainSettingsFileExists() {
-    Path settingsFile = Paths.get(CONFIG_DIR, MAIN_SETTINGS_FILE);
-    return Files.exists(settingsFile);
-  }
-
-  /**
-   * Load nuclear segmentation settings from the properties file.
-   *
-   * @param settings The settings object to populate
-   */
-  public void loadNuclearSegmentationSettings(NuclearSegmentationSettings settings) {
-    Path settingsFile = Paths.get(CONFIG_DIR, NUCLEAR_SETTINGS_FILE);
-
-    if (!Files.exists(settingsFile)) {
-      LOGGER.info("Nuclear segmentation settings file not found, using defaults");
-      return;
-    }
-
-    Properties properties = new Properties();
-    try (InputStream input = Files.newInputStream(settingsFile)) {
-      properties.load(input);
-
-      // Load StarDist model choice
-      String modelChoice = properties.getProperty("modelChoice");
-      if (modelChoice != null) {
-        settings.setModelChoice(modelChoice);
-        LOGGER.debug("Loaded model choice: {}", modelChoice);
-      }
-
-      // Load normalization setting
-      String normalizeInputStr = properties.getProperty("normalizeInput");
-      if (normalizeInputStr != null) {
-        boolean normalizeInput = Boolean.parseBoolean(normalizeInputStr);
-        settings.setNormalizeInput(normalizeInput);
-        LOGGER.debug("Loaded normalize input: {}", normalizeInput);
-      }
-
-      // Load percentile settings
-      String percentileBottomStr = properties.getProperty("percentileBottom");
-      if (percentileBottomStr != null) {
-        try {
-          float percentileBottom = Float.parseFloat(percentileBottomStr);
-          settings.setPercentileBottom(percentileBottom);
-          LOGGER.debug("Loaded percentile bottom: {}", percentileBottom);
-        } catch (NumberFormatException e) {
-          LOGGER.warn("Invalid percentile bottom value in config: {}", percentileBottomStr);
-        }
-      }
-
-      String percentileTopStr = properties.getProperty("percentileTop");
-      if (percentileTopStr != null) {
-        try {
-          float percentileTop = Float.parseFloat(percentileTopStr);
-          settings.setPercentileTop(percentileTop);
-          LOGGER.debug("Loaded percentile top: {}", percentileTop);
-        } catch (NumberFormatException e) {
-          LOGGER.warn("Invalid percentile top value in config: {}", percentileTopStr);
-        }
-      }
-
-      // Load probability threshold
-      String probThreshStr = properties.getProperty("probThresh");
-      if (probThreshStr != null) {
-        try {
-          float probThresh = Float.parseFloat(probThreshStr);
-          settings.setProbThresh(probThresh);
-          LOGGER.debug("Loaded probability threshold: {}", probThresh);
-        } catch (NumberFormatException e) {
-          LOGGER.warn("Invalid probability threshold value in config: {}", probThreshStr);
-        }
-      }
-
-      // Load NMS threshold
-      String nmsThreshStr = properties.getProperty("nmsThresh");
-      if (nmsThreshStr != null) {
-        try {
-          float nmsThresh = Float.parseFloat(nmsThreshStr);
-          settings.setNmsThresh(nmsThresh);
-          LOGGER.debug("Loaded NMS threshold: {}", nmsThresh);
-        } catch (NumberFormatException e) {
-          LOGGER.warn("Invalid NMS threshold value in config: {}", nmsThreshStr);
-        }
-      }
-
-      // Load number of tiles
-      String nTilesStr = properties.getProperty("nTiles");
-      if (nTilesStr != null) {
-        try {
-          int nTiles = Integer.parseInt(nTilesStr);
-          settings.setNTiles(nTiles);
-          LOGGER.debug("Loaded number of tiles: {}", nTiles);
-        } catch (NumberFormatException e) {
-          LOGGER.warn("Invalid number of tiles value in config: {}", nTilesStr);
-        }
-      }
-
-      // Load nucleus size constraints
-      String minNucleusSizeStr = properties.getProperty("minNucleusSize");
-      if (minNucleusSizeStr != null) {
-        try {
-          double minNucleusSize = Double.parseDouble(minNucleusSizeStr);
-          settings.setMinNucleusSize(minNucleusSize);
-          LOGGER.debug("Loaded min nucleus size: {}", minNucleusSize);
-        } catch (NumberFormatException e) {
-          LOGGER.warn("Invalid min nucleus size value in config: {}", minNucleusSizeStr);
-        }
-      }
-
-      String maxNucleusSizeStr = properties.getProperty("maxNucleusSize");
-      if (maxNucleusSizeStr != null) {
-        try {
-          double maxNucleusSize = Double.parseDouble(maxNucleusSizeStr);
-          settings.setMaxNucleusSize(maxNucleusSize);
-          LOGGER.debug("Loaded max nucleus size: {}", maxNucleusSize);
-        } catch (NumberFormatException e) {
-          LOGGER.warn("Invalid max nucleus size value in config: {}", maxNucleusSizeStr);
-        }
-      }
-
-      LOGGER.info("Successfully loaded nuclear segmentation settings from: {}", settingsFile);
-
-    } catch (IOException e) {
-      LOGGER.error("Failed to load nuclear segmentation settings from: {}", settingsFile, e);
-    }
-  }
-
-  /**
-   * Save nuclear segmentation settings to the properties file.
-   *
-   * @param settings The settings object to save
-   */
-  public void saveNuclearSegmentationSettings(NuclearSegmentationSettings settings) {
-    Path settingsFile = Paths.get(CONFIG_DIR, NUCLEAR_SETTINGS_FILE);
-
-    Properties properties = new Properties();
-    properties.setProperty("modelChoice", settings.getModelChoice());
-    properties.setProperty("normalizeInput", String.valueOf(settings.isNormalizeInput()));
-    properties.setProperty("percentileBottom", String.valueOf(settings.getPercentileBottom()));
-    properties.setProperty("percentileTop", String.valueOf(settings.getPercentileTop()));
-    properties.setProperty("probThresh", String.valueOf(settings.getProbThresh()));
-    properties.setProperty("nmsThresh", String.valueOf(settings.getNmsThresh()));
-    properties.setProperty("outputType", settings.getOutputType());
-    properties.setProperty("nTiles", String.valueOf(settings.getNTiles()));
-    properties.setProperty("excludeBoundary", String.valueOf(settings.getExcludeBoundary()));
-    properties.setProperty("roiPosition", settings.getRoiPosition());
-    properties.setProperty("verbose", String.valueOf(settings.isVerbose()));
-    properties.setProperty("showCsbdeepProgress", String.valueOf(settings.isShowCsbdeepProgress()));
-    properties.setProperty("showProbAndDist", String.valueOf(settings.isShowProbAndDist()));
-    properties.setProperty("minNucleusSize", String.valueOf(settings.getMinNucleusSize()));
-    properties.setProperty("maxNucleusSize", String.valueOf(settings.getMaxNucleusSize()));
-
-    try (OutputStream output = Files.newOutputStream(settingsFile)) {
-      properties.store(output, "SciPathJ Nuclear Segmentation Settings");
-      LOGGER.info("Successfully saved nuclear segmentation settings to: {}", settingsFile);
-    } catch (IOException e) {
-      LOGGER.error("Failed to save nuclear segmentation settings to: {}", settingsFile, e);
-    }
-  }
-
-  /**
-   * Initialize nuclear segmentation settings by loading from file or using defaults.
-   *
-   * @return Initialized NuclearSegmentationSettings instance
-   */
-  public NuclearSegmentationSettings initializeNuclearSegmentationSettings() {
-    NuclearSegmentationSettings settings = new NuclearSegmentationSettings();
-    loadNuclearSegmentationSettings(settings);
-    return settings;
-  }
-
-  /**
-   * Check if nuclear segmentation settings file exists.
-   *
-   * @return true if the settings file exists
-   */
-  public boolean nuclearSettingsFileExists() {
-    Path settingsFile = Paths.get(CONFIG_DIR, NUCLEAR_SETTINGS_FILE);
-    return Files.exists(settingsFile);
-  }
-
-  /**
-   * Load cytoplasm segmentation settings from the properties file.
-   *
-   * @param settings The settings object to populate
-   */
-  public void loadCytoplasmSegmentationSettings(CytoplasmSegmentationSettings settings) {
-    Path settingsFile = Paths.get(CONFIG_DIR, CYTOPLASM_SETTINGS_FILE);
-
-    if (!Files.exists(settingsFile)) {
-      LOGGER.info("Cytoplasm segmentation settings file not found, using defaults");
-      return;
-    }
-
-    Properties properties = new Properties();
-    try (InputStream input = Files.newInputStream(settingsFile)) {
-      properties.load(input);
-
-      // Load exclude vessels setting
-      String excludeVesselsStr = properties.getProperty("excludeVessels");
-      if (excludeVesselsStr != null) {
-        boolean excludeVessels = Boolean.parseBoolean(excludeVesselsStr);
-        settings.setExcludeVessels(excludeVessels);
-        LOGGER.debug("Loaded exclude vessels: {}", excludeVessels);
-      }
-
-      // Load minimum cell size
-      String minCellSizeStr = properties.getProperty("minCellSize");
-      if (minCellSizeStr != null) {
-        try {
-          double minCellSize = Double.parseDouble(minCellSizeStr);
-          settings.setMinCellSize(minCellSize);
-          LOGGER.debug("Loaded min cell size: {}", minCellSize);
-        } catch (NumberFormatException e) {
-          LOGGER.warn("Invalid min cell size value in config: {}", minCellSizeStr);
-        }
-      }
-
-      // Load maximum cell size
-      String maxCellSizeStr = properties.getProperty("maxCellSize");
-      if (maxCellSizeStr != null) {
-        try {
-          double maxCellSize = Double.parseDouble(maxCellSizeStr);
-          settings.setMaxCellSize(maxCellSize);
-          LOGGER.debug("Loaded max cell size: {}", maxCellSize);
-        } catch (NumberFormatException e) {
-          LOGGER.warn("Invalid max cell size value in config: {}", maxCellSizeStr);
-        }
-      }
-
-      // Load maximum aspect ratio
-      String maxAspectRatioStr = properties.getProperty("maxAspectRatio");
-      if (maxAspectRatioStr != null) {
-        try {
-          double maxAspectRatio = Double.parseDouble(maxAspectRatioStr);
-          settings.setMaxAspectRatio(maxAspectRatio);
-          LOGGER.debug("Loaded max aspect ratio: {}", maxAspectRatio);
-        } catch (NumberFormatException e) {
-          LOGGER.warn("Invalid max aspect ratio value in config: {}", maxAspectRatioStr);
-        }
-      }
-
-      // Load minimum cytoplasm area
-      String minCytoplasmAreaStr = properties.getProperty("minCytoplasmArea");
-      if (minCytoplasmAreaStr != null) {
-        try {
-          double minCytoplasmArea = Double.parseDouble(minCytoplasmAreaStr);
-          settings.setMinCytoplasmArea(minCytoplasmArea);
-          LOGGER.debug("Loaded min cytoplasm area: {}", minCytoplasmArea);
-        } catch (NumberFormatException e) {
-          LOGGER.warn("Invalid min cytoplasm area value in config: {}", minCytoplasmAreaStr);
-        }
-      }
-
-      LOGGER.info("Successfully loaded cytoplasm segmentation settings from: {}", settingsFile);
-
-    } catch (IOException e) {
-      LOGGER.error("Failed to load cytoplasm segmentation settings from: {}", settingsFile, e);
-    }
-  }
-
-  /**
-   * Save cytoplasm segmentation settings to the properties file.
-   *
-   * @param settings The settings object to save
-   */
-  public void saveCytoplasmSegmentationSettings(CytoplasmSegmentationSettings settings) {
-    Path settingsFile = Paths.get(CONFIG_DIR, CYTOPLASM_SETTINGS_FILE);
-
-    Properties properties = new Properties();
-    properties.setProperty("excludeVessels", String.valueOf(settings.isExcludeVessels()));
-    properties.setProperty("minCellSize", String.valueOf(settings.getMinCellSize()));
-    properties.setProperty("maxCellSize", String.valueOf(settings.getMaxCellSize()));
-    properties.setProperty("maxAspectRatio", String.valueOf(settings.getMaxAspectRatio()));
-    properties.setProperty("minCytoplasmArea", String.valueOf(settings.getMinCytoplasmArea()));
-
-    try (OutputStream output = Files.newOutputStream(settingsFile)) {
-      properties.store(output, "SciPathJ Cytoplasm Segmentation Settings");
-      LOGGER.info("Successfully saved cytoplasm segmentation settings to: {}", settingsFile);
-    } catch (IOException e) {
-      LOGGER.error("Failed to save cytoplasm segmentation settings to: {}", settingsFile, e);
-    }
-  }
-
-  /**
-   * Initialize cytoplasm segmentation settings by loading from file or using defaults.
-   *
-   * @return Initialized CytoplasmSegmentationSettings instance
-   */
-  public CytoplasmSegmentationSettings initializeCytoplasmSegmentationSettings() {
-    CytoplasmSegmentationSettings settings = CytoplasmSegmentationSettings.getInstance();
-    loadCytoplasmSegmentationSettings(settings);
-    return settings;
-  }
-
-  /**
-   * Check if cytoplasm segmentation settings file exists.
-   *
-   * @return true if the settings file exists
-   */
-  public boolean cytoplasmSettingsFileExists() {
-    Path settingsFile = Paths.get(CONFIG_DIR, CYTOPLASM_SETTINGS_FILE);
-    return Files.exists(settingsFile);
   }
 }

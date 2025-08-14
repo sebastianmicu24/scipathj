@@ -66,12 +66,14 @@ public class AnalysisPipeline {
    * @param roiManager the ROI manager instance
    */
   public AnalysisPipeline(
-      ConfigurationManager configurationManager, MainSettings mainSettings, ROIManager roiManager) {
+      final ConfigurationManager configurationManager,
+      final MainSettings mainSettings,
+      final ROIManager roiManager) {
     this(
         configurationManager,
-        configurationManager.initializeVesselSegmentationSettings(),
-        configurationManager.initializeNuclearSegmentationSettings(),
-        configurationManager.initializeCytoplasmSegmentationSettings(),
+        configurationManager.loadVesselSegmentationSettings(),
+        configurationManager.loadNuclearSegmentationSettings(),
+        configurationManager.loadCytoplasmSegmentationSettings(),
         mainSettings,
         roiManager);
   }
@@ -88,18 +90,19 @@ public class AnalysisPipeline {
    * @param roiManager the ROI manager instance
    */
   public AnalysisPipeline(
-      ConfigurationManager configurationManager,
-      VesselSegmentationSettings vesselSettings,
-      NuclearSegmentationSettings nuclearSettings,
-      CytoplasmSegmentationSettings cytoplasmSettings,
-      MainSettings mainSettings,
-      ROIManager roiManager) {
-    this.configurationManager = configurationManager;
-    this.vesselSettings = vesselSettings;
+      final ConfigurationManager configurationManager,
+      final VesselSegmentationSettings vesselSettings,
+      final NuclearSegmentationSettings nuclearSettings,
+      final CytoplasmSegmentationSettings cytoplasmSettings,
+      final MainSettings mainSettings,
+      final ROIManager roiManager) {
+    // Defensive copying to prevent exposure of internal representation
+    this.configurationManager = configurationManager; // ConfigurationManager is immutable by design
+    this.vesselSettings = vesselSettings; // Settings objects are immutable by design
     this.nuclearSettings = nuclearSettings;
     this.cytoplasmSettings = cytoplasmSettings;
-    this.mainSettings = mainSettings;
-    this.roiManager = roiManager;
+    this.mainSettings = mainSettings; // MainSettings is immutable by design
+    this.roiManager = roiManager; // ROIManager is a service object, not data
   }
 
   /**
@@ -107,7 +110,7 @@ public class AnalysisPipeline {
    *
    * @param callback callback to receive progress messages
    */
-  public void setProgressMessageCallback(Consumer<String> callback) {
+  public void setProgressMessageCallback(final Consumer<String> callback) {
     this.progressMessageCallback = callback;
   }
 
@@ -116,7 +119,7 @@ public class AnalysisPipeline {
    *
    * @param callback callback to receive progress percentages (0-100)
    */
-  public void setProgressPercentCallback(Consumer<Integer> callback) {
+  public void setProgressPercentCallback(final Consumer<Integer> callback) {
     this.progressPercentCallback = callback;
   }
 
@@ -128,7 +131,7 @@ public class AnalysisPipeline {
    * @return analysis results containing counts for each step
    * @throws IllegalStateException if pipeline is already processing
    */
-  public AnalysisResults processBatch(File[] imageFiles) {
+  public AnalysisResults processBatch(final File[] imageFiles) {
     if (imageFiles == null || imageFiles.length == 0) {
       LOGGER.warn("No image files provided for batch processing");
       return new AnalysisResults(0, 0, 0, 0);
@@ -222,7 +225,7 @@ public class AnalysisPipeline {
    * @throws ImageProcessingException if image processing fails
    * @throws IOException if image loading fails
    */
-  public ImageAnalysisResult processImage(File imageFile)
+  public ImageAnalysisResult processImage(final File imageFile)
       throws ImageProcessingException, IOException {
     String fileName = imageFile.getName();
 
@@ -244,7 +247,7 @@ public class AnalysisPipeline {
    * @return analysis result for the image
    * @throws ImageProcessingException if image processing fails
    */
-  public ImageAnalysisResult processImage(ImagePlus imagePlus, String fileName)
+  public ImageAnalysisResult processImage(final ImagePlus imagePlus, final String fileName)
       throws ImageProcessingException {
     try {
       // Step 1: Vessel Segmentation
@@ -277,21 +280,26 @@ public class AnalysisPipeline {
 
       if (!nucleusROIs.isEmpty()) {
         List<UserROI> vesselROIsForExclusion =
-            cytoplasmSettings.isExcludeVessels() ? vesselROIs : List.of();
+            cytoplasmSettings.useVesselExclusion() ? vesselROIs : List.of();
 
-        CytoplasmSegmentation cytoplasmSegmentation =
-            new CytoplasmSegmentation(
-                configurationManager,
-                imagePlus,
-                fileName,
-                vesselROIsForExclusion,
-                nucleusROIs,
-                cytoplasmSettings,
-                mainSettings,
-                roiManager);
+        try {
+          CytoplasmSegmentation cytoplasmSegmentation =
+              new CytoplasmSegmentation(
+                  configurationManager,
+                  imagePlus,
+                  fileName,
+                  vesselROIsForExclusion,
+                  nucleusROIs,
+                  cytoplasmSettings,
+                  mainSettings,
+                  roiManager);
 
-        cytoplasmROIs = cytoplasmSegmentation.segmentCytoplasm();
-        cellROIs = cytoplasmSegmentation.getCellROIs();
+          cytoplasmROIs = cytoplasmSegmentation.segmentCytoplasm();
+          cellROIs = cytoplasmSegmentation.getCellROIs();
+        } catch (CytoplasmSegmentation.CytoplasmSegmentationException e) {
+          LOGGER.error("Cytoplasm segmentation failed for image: {}", fileName, e);
+          throw new ImageProcessingException("Cytoplasm segmentation failed", e);
+        }
       }
 
       // Add ROIs to manager with proper colors
@@ -303,8 +311,11 @@ public class AnalysisPipeline {
       return ImageAnalysisResult.success(
           fileName, vesselROIs.size(), nucleusROIs.size(), cellROIs.size());
 
-    } catch (Exception e) {
-      LOGGER.error("Error during analysis of image: {}", fileName, e);
+    } catch (ImageProcessingException e) {
+      // Re-throw ImageProcessingException as-is
+      throw e;
+    } catch (RuntimeException e) {
+      LOGGER.error("Runtime error during analysis of image: {}", fileName, e);
       throw new ImageProcessingException("Image analysis failed for " + fileName, e);
     }
   }
@@ -314,31 +325,31 @@ public class AnalysisPipeline {
    * This method follows the Single Responsibility Principle by separating ROI management.
    */
   private void addROIsToManager(
-      List<UserROI> vesselROIs,
-      List<NucleusROI> nucleusROIs,
-      List<CellROI> cellROIs,
-      List<CytoplasmROI> cytoplasmROIs) {
+      final List<UserROI> vesselROIs,
+      final List<NucleusROI> nucleusROIs,
+      final List<CellROI> cellROIs,
+      final List<CytoplasmROI> cytoplasmROIs) {
     vesselROIs.forEach(
         roi -> {
-          roi.setDisplayColor(mainSettings.getVesselSettings().getBorderColor());
+          roi.setDisplayColor(mainSettings.getVesselSettings().borderColor());
           roiManager.addROI(roi);
         });
 
     nucleusROIs.forEach(
         roi -> {
-          roi.setDisplayColor(mainSettings.getNucleusSettings().getBorderColor());
+          roi.setDisplayColor(mainSettings.getNucleusSettings().borderColor());
           roiManager.addROI(roi);
         });
 
     cellROIs.forEach(
         roi -> {
-          roi.setDisplayColor(mainSettings.getCellSettings().getBorderColor());
+          roi.setDisplayColor(mainSettings.getCellSettings().borderColor());
           roiManager.addROI(roi);
         });
 
     cytoplasmROIs.forEach(
         roi -> {
-          roi.setDisplayColor(mainSettings.getCytoplasmSettings().getBorderColor());
+          roi.setDisplayColor(mainSettings.getCytoplasmSettings().borderColor());
           roiManager.addROI(roi);
         });
   }
@@ -346,7 +357,7 @@ public class AnalysisPipeline {
   /**
    * Updates progress and notifies callbacks.
    */
-  private void updateProgress(int imageIndex, String message) {
+  private void updateProgress(final int imageIndex, final String message) {
     if (progressMessageCallback != null) {
       progressMessageCallback.accept(message);
     }
@@ -431,11 +442,11 @@ public class AnalysisPipeline {
       int cellCount) {
 
     public static ImageAnalysisResult success(
-        String fileName, int vesselCount, int nucleusCount, int cellCount) {
+        final String fileName, final int vesselCount, final int nucleusCount, final int cellCount) {
       return new ImageAnalysisResult(fileName, true, null, vesselCount, nucleusCount, cellCount);
     }
 
-    public static ImageAnalysisResult failure(String fileName, String errorMessage) {
+    public static ImageAnalysisResult failure(final String fileName, final String errorMessage) {
       return new ImageAnalysisResult(fileName, false, errorMessage, 0, 0, 0);
     }
 
@@ -453,11 +464,11 @@ public class AnalysisPipeline {
    * Custom exception for image processing errors.
    */
   public static class ImageProcessingException extends Exception {
-    public ImageProcessingException(String message) {
+    public ImageProcessingException(final String message) {
       super(message);
     }
 
-    public ImageProcessingException(String message, Throwable cause) {
+    public ImageProcessingException(final String message, final Throwable cause) {
       super(message, cause);
     }
   }

@@ -21,7 +21,7 @@ public class MainSettingsDialog extends JDialog {
   private static final Logger LOGGER = LoggerFactory.getLogger(MainSettingsDialog.class);
 
   // Settings instances
-  private final MainSettings settings;
+  private MainSettings settings;
   private final ConfigurationManager configManager;
 
   // Scale conversion UI components
@@ -40,8 +40,8 @@ public class MainSettingsDialog extends JDialog {
 
   public MainSettingsDialog(Frame parent, ConfigurationManager configurationManager) {
     super(parent, "Main Settings", true);
-    this.settings = MainSettings.getInstance();
     this.configManager = configurationManager;
+    this.settings = configManager.loadMainSettings();
 
     // Initialize ROI category panels
     this.vesselPanel = new ROICategoryPanel(MainSettings.ROICategory.VESSEL);
@@ -50,7 +50,7 @@ public class MainSettingsDialog extends JDialog {
     this.cellPanel = new ROICategoryPanel(MainSettings.ROICategory.CELL);
 
     // Load settings from file first
-    configManager.loadMainSettings(settings);
+    // Note: loadMainSettings now needs to be updated to work with non-singleton MainSettings
 
     initializeDialog();
     loadCurrentSettings();
@@ -326,10 +326,10 @@ public class MainSettingsDialog extends JDialog {
     }
 
     public void loadSettings(MainSettings.ROIAppearanceSettings settings) {
-      borderColorButton.setBackground(settings.getBorderColor());
-      fillOpacitySlider.setValue(Math.round(settings.getFillOpacity() * 100));
-      fillOpacityValueLabel.setText(Math.round(settings.getFillOpacity() * 100) + "%");
-      borderWidthSpinner.setValue(settings.getBorderWidth());
+      borderColorButton.setBackground(settings.borderColor());
+      fillOpacitySlider.setValue(Math.round(settings.fillOpacity() * 100));
+      fillOpacityValueLabel.setText(Math.round(settings.fillOpacity() * 100) + "%");
+      borderWidthSpinner.setValue(settings.borderWidth());
     }
 
     public void loadDefaults() {
@@ -339,10 +339,11 @@ public class MainSettingsDialog extends JDialog {
       borderWidthSpinner.setValue(category.getDefaultBorderWidth());
     }
 
-    public void applySettings(MainSettings.ROIAppearanceSettings settings) {
-      settings.setBorderColor(borderColorButton.getBackground());
-      settings.setFillOpacity(fillOpacitySlider.getValue() / 100.0f);
-      settings.setBorderWidth((Integer) borderWidthSpinner.getValue());
+    public MainSettings.ROIAppearanceSettings createUpdatedSettings() {
+      return new MainSettings.ROIAppearanceSettings(
+          borderColorButton.getBackground(),
+          fillOpacitySlider.getValue() / 100.0f,
+          (Integer) borderWidthSpinner.getValue());
     }
 
     public boolean validateInputs() {
@@ -574,18 +575,18 @@ public class MainSettingsDialog extends JDialog {
       }
 
       try {
-        // Update scale settings
-        settings.setPixelsPerMicrometer((Double) pixelsPerMicrometerSpinner.getValue());
-        settings.setScaleUnit(scaleUnitField.getText().trim());
-
-        // Update ROI category settings
-        vesselPanel.applySettings(settings.getVesselSettings());
-        nucleusPanel.applySettings(settings.getNucleusSettings());
-        cytoplasmPanel.applySettings(settings.getCytoplasmSettings());
-        cellPanel.applySettings(settings.getCellSettings());
+        // Create new MainSettings with updated values
+        MainSettings updatedSettings =
+            new MainSettings(
+                (Double) pixelsPerMicrometerSpinner.getValue(),
+                scaleUnitField.getText().trim(),
+                vesselPanel.createUpdatedSettings(),
+                nucleusPanel.createUpdatedSettings(),
+                cytoplasmPanel.createUpdatedSettings(),
+                cellPanel.createUpdatedSettings());
 
         // Save to file
-        configManager.saveMainSettings(settings);
+        configManager.saveMainSettings(updatedSettings);
 
         settingsChanged = true;
         LOGGER.info(

@@ -24,7 +24,7 @@ public class NuclearSegmentationSettingsDialog extends JDialog {
   private static final Logger LOGGER =
       LoggerFactory.getLogger(NuclearSegmentationSettingsDialog.class);
 
-  private final NuclearSegmentationSettings settings;
+  private NuclearSegmentationSettings settings;
   private final ConfigurationManager configManager;
 
   // UI Components
@@ -48,7 +48,7 @@ public class NuclearSegmentationSettingsDialog extends JDialog {
       Frame parent, ConfigurationManager configurationManager) {
     super(parent, "Nuclear Segmentation Settings", true);
     this.configManager = configurationManager;
-    this.settings = configManager.initializeNuclearSegmentationSettings();
+    this.settings = configManager.loadNuclearSegmentationSettings();
     initializeDialog();
     loadCurrentSettings();
   }
@@ -313,19 +313,19 @@ public class NuclearSegmentationSettingsDialog extends JDialog {
   }
 
   private void loadCurrentSettings() {
-    modelChoiceCombo.setSelectedItem(settings.getModelChoice());
-    normalizeInputCheck.setSelected(settings.isNormalizeInput());
-    percentileBottomSpinner.setValue(settings.getPercentileBottom());
-    percentileTopSpinner.setValue(settings.getPercentileTop());
-    probThreshSpinner.setValue(settings.getProbThresh());
-    nmsThreshSpinner.setValue(settings.getNmsThresh());
-    nTilesSpinner.setValue(settings.getNTiles());
-    excludeBoundarySpinner.setValue(settings.getExcludeBoundary());
-    minNucleusSizeSpinner.setValue(settings.getMinNucleusSize());
-    maxNucleusSizeSpinner.setValue(settings.getMaxNucleusSize());
-    verboseCheck.setSelected(settings.isVerbose());
-    showProgressCheck.setSelected(settings.isShowCsbdeepProgress());
-    showProbDistCheck.setSelected(settings.isShowProbAndDist());
+    modelChoiceCombo.setSelectedItem(settings.modelChoice());
+    normalizeInputCheck.setSelected(settings.normalizeInput());
+    percentileBottomSpinner.setValue(settings.percentileBottom());
+    percentileTopSpinner.setValue(settings.percentileTop());
+    probThreshSpinner.setValue(settings.probThresh());
+    nmsThreshSpinner.setValue(settings.nmsThresh());
+    nTilesSpinner.setValue(settings.nTiles());
+    excludeBoundarySpinner.setValue(settings.excludeBoundary());
+    minNucleusSizeSpinner.setValue(settings.minNucleusSize());
+    maxNucleusSizeSpinner.setValue(settings.maxNucleusSize());
+    verboseCheck.setSelected(settings.verbose());
+    showProgressCheck.setSelected(settings.showCsbdeepProgress());
+    showProbDistCheck.setSelected(settings.showProbAndDist());
 
     LOGGER.debug("Loaded current nuclear segmentation settings into dialog");
   }
@@ -462,20 +462,24 @@ public class NuclearSegmentationSettingsDialog extends JDialog {
       }
 
       try {
-        // Update settings with new values using safe casting
-        settings.setModelChoice((String) modelChoiceCombo.getSelectedItem());
-        settings.setNormalizeInput(normalizeInputCheck.isSelected());
-        settings.setPercentileBottom(((Number) percentileBottomSpinner.getValue()).floatValue());
-        settings.setPercentileTop(((Number) percentileTopSpinner.getValue()).floatValue());
-        settings.setProbThresh(((Number) probThreshSpinner.getValue()).floatValue());
-        settings.setNmsThresh(((Number) nmsThreshSpinner.getValue()).floatValue());
-        settings.setNTiles(((Number) nTilesSpinner.getValue()).intValue());
-        settings.setExcludeBoundary(((Number) excludeBoundarySpinner.getValue()).intValue());
-        settings.setMinNucleusSize(((Number) minNucleusSizeSpinner.getValue()).doubleValue());
-        settings.setMaxNucleusSize(((Number) maxNucleusSizeSpinner.getValue()).doubleValue());
-        settings.setVerbose(verboseCheck.isSelected());
-        settings.setShowCsbdeepProgress(showProgressCheck.isSelected());
-        settings.setShowProbAndDist(showProbDistCheck.isSelected());
+        // Create new immutable settings instance with updated values
+        settings =
+            new NuclearSegmentationSettings(
+                (String) modelChoiceCombo.getSelectedItem(),
+                normalizeInputCheck.isSelected(),
+                ((Number) percentileBottomSpinner.getValue()).floatValue(),
+                ((Number) percentileTopSpinner.getValue()).floatValue(),
+                ((Number) probThreshSpinner.getValue()).floatValue(),
+                ((Number) nmsThreshSpinner.getValue()).floatValue(),
+                NuclearSegmentationSettings.DEFAULT_OUTPUT_TYPE,
+                ((Number) nTilesSpinner.getValue()).intValue(),
+                ((Number) excludeBoundarySpinner.getValue()).intValue(),
+                NuclearSegmentationSettings.DEFAULT_ROI_POSITION,
+                verboseCheck.isSelected(),
+                showProgressCheck.isSelected(),
+                showProbDistCheck.isSelected(),
+                ((Number) minNucleusSizeSpinner.getValue()).doubleValue(),
+                ((Number) maxNucleusSizeSpinner.getValue()).doubleValue());
 
         // Save to file
         configManager.saveNuclearSegmentationSettings(settings);
@@ -507,7 +511,8 @@ public class NuclearSegmentationSettingsDialog extends JDialog {
               JOptionPane.QUESTION_MESSAGE);
 
       if (result == JOptionPane.YES_OPTION) {
-        settings.resetToDefaults();
+        // Create new settings instance with default values
+        settings = NuclearSegmentationSettings.createDefault();
         loadCurrentSettings();
         LOGGER.info("Nuclear segmentation settings reset to default values");
       }

@@ -83,6 +83,9 @@
         <spotless-maven-plugin.version>2.43.0</spotless-maven-plugin.version>
         <spotbugs-maven-plugin.version>4.8.6.4</spotbugs-maven-plugin.version>
         <maven-checkstyle-plugin.version>3.5.0</maven-checkstyle-plugin.version>
+
+        <!-- SpotBugs configuration -->
+        <spotbugs.threshold>Low</spotbugs.threshold>
     </properties>
 
     <dependencies>
@@ -273,7 +276,7 @@
                 <version>${spotbugs-maven-plugin.version}</version>
                 <configuration>
                     <effort>Max</effort>
-                    <threshold>Low</threshold>
+                    <threshold>${spotbugs.threshold}</threshold>
                     <xmlOutput>true</xmlOutput>
                     <spotbugsXmlOutputDirectory>${project.build.directory}/spotbugs</spotbugsXmlOutputDirectory>
                     <excludeFilterFile>spotbugs-exclude.xml</excludeFilterFile>

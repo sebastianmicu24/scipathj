@@ -166,13 +166,13 @@ public class AnalysisController {
 
               // Create analysis pipeline with current settings
               VesselSegmentationSettings vesselSettings =
-                  configurationManager.initializeVesselSegmentationSettings();
+                  configurationManager.loadVesselSegmentationSettings();
               NuclearSegmentationSettings nuclearSettings =
-                  configurationManager.initializeNuclearSegmentationSettings();
+                  configurationManager.loadNuclearSegmentationSettings();
 
               // Create required dependencies for AnalysisPipeline
               com.scipath.scipathj.core.config.MainSettings mainSettings =
-                  configurationManager.initializeMainSettings();
+                  configurationManager.loadMainSettings();
               com.scipath.scipathj.ui.components.ROIManager roiManager =
                   com.scipath.scipathj.ui.components.ROIManager.getInstance();
 

@@ -62,10 +62,10 @@ public class ROIOverlay extends JComponent {
     void onROIDeselected();
   }
 
-  public ROIOverlay() {
+  public ROIOverlay(MainSettings mainSettings) {
     this.displayedROIs = new CopyOnWriteArrayList<>();
     this.listeners = new CopyOnWriteArrayList<>();
-    this.mainSettings = MainSettings.getInstance();
+    this.mainSettings = mainSettings;
 
     setOpaque(false);
     setBackground(new Color(0, 0, 0, 0)); // Fully transparent
@@ -74,6 +74,14 @@ public class ROIOverlay extends JComponent {
 
     // Listen for settings changes to refresh the display
     mainSettings.addSettingsChangeListener(this::onSettingsChanged);
+  }
+
+  /**
+   * @deprecated Use ROIOverlay(MainSettings) constructor instead
+   */
+  @Deprecated
+  public ROIOverlay() {
+    this(MainSettings.createDefault());
   }
 
   /**
@@ -254,10 +262,9 @@ public class ROIOverlay extends JComponent {
       borderColor = SELECTION_COLOR;
     } else {
       stroke =
-          new BasicStroke(settings.getBorderWidth(), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
+          new BasicStroke(settings.borderWidth(), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
       // Use ROI's specific color if set, otherwise use category-specific border color
-      borderColor =
-          roi.getDisplayColor() != null ? roi.getDisplayColor() : settings.getBorderColor();
+      borderColor = roi.getDisplayColor() != null ? roi.getDisplayColor() : settings.borderColor();
     }
 
     g2d.setStroke(stroke);
@@ -454,11 +461,10 @@ public class ROIOverlay extends JComponent {
 
     // Use vessel ROI settings for creation preview
     MainSettings.ROIAppearanceSettings settings = mainSettings.getVesselSettings();
-    Color borderColor = settings.getBorderColor();
+    Color borderColor = settings.borderColor();
 
     // Draw fill with lower opacity for creation preview
-    float previewOpacity =
-        Math.max(0.1f, settings.getFillOpacity() * 0.5f); // Half the normal opacity
+    float previewOpacity = Math.max(0.1f, settings.fillOpacity() * 0.5f); // Half the normal opacity
     Color fillColor =
         new Color(
             borderColor.getRed(),
@@ -487,7 +493,7 @@ public class ROIOverlay extends JComponent {
     // Draw dashed outline on top
     g2d.setStroke(
         new BasicStroke(
-            settings.getBorderWidth(),
+            settings.borderWidth(),
             BasicStroke.CAP_ROUND,
             BasicStroke.JOIN_ROUND,
             0,

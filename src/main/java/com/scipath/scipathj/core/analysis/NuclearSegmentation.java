@@ -69,7 +69,7 @@ public class NuclearSegmentation implements AutoCloseable {
         configurationManager,
         originalImage,
         imageFileName,
-        configurationManager.initializeNuclearSegmentationSettings(),
+        configurationManager.loadNuclearSegmentationSettings(),
         roiManager);
   }
 
@@ -299,7 +299,7 @@ public class NuclearSegmentation implements AutoCloseable {
    */
   private List<NucleusROI> executeStarDistHE(Dataset inputDataset)
       throws NuclearSegmentationException {
-    LOGGER.info("Executing StarDist2D with H&E model choice: {}", settings.getModelChoice());
+    LOGGER.info("Executing StarDist2D with H&E model choice: {}", settings.modelChoice());
 
     // Clear any existing ROI Manager
     RoiManager ijRoiManager = RoiManager.getInstance();
@@ -356,27 +356,29 @@ public class NuclearSegmentation implements AutoCloseable {
 
     // Input and model selection
     params.put("input", inputDataset);
-    params.put("modelChoice", settings.getModelChoice());
+    params.put("modelChoice", settings.modelChoice());
 
     // Normalization settings from configuration
-    params.put("normalizeInput", settings.isNormalizeInput());
-    params.put("percentileBottom", (double) settings.getPercentileBottom());
-    params.put("percentileTop", (double) settings.getPercentileTop());
+    params.put("normalizeInput", settings.normalizeInput());
+    params.put("percentileBottom", (double) settings.percentileBottom());
+    params.put("percentileTop", (double) settings.percentileTop());
 
     // Detection thresholds from configuration
-    params.put("probThresh", (double) settings.getProbThresh());
-    params.put("nmsThresh", (double) settings.getNmsThresh());
+    params.put("probThresh", (double) settings.probThresh());
+    params.put("nmsThresh", (double) settings.nmsThresh());
 
-    // Output settings from configuration
-    params.put("outputType", settings.getOutputType());
-    params.put("excludeBoundary", settings.getExcludeBoundary());
-    params.put("roiPosition", settings.getRoiPosition());
+    // Output settings from configuration - force ROI only output to avoid display issues
+    params.put("outputType", "ROI Manager");
+    params.put("excludeBoundary", settings.excludeBoundary());
+    params.put("roiPosition", settings.roiPosition());
 
     // Performance settings from configuration
-    params.put("nTiles", settings.getNTiles());
-    params.put("verbose", settings.isVerbose());
-    params.put("showCsbdeepProgress", settings.isShowCsbdeepProgress());
-    params.put("showProbAndDist", settings.isShowProbAndDist());
+    params.put("nTiles", settings.nTiles());
+    params.put("verbose", settings.verbose());
+
+    // Disable visual outputs to prevent display service errors
+    params.put("showCsbdeepProgress", false);
+    params.put("showProbAndDist", false);
 
     return params;
   }
@@ -410,12 +412,12 @@ public class NuclearSegmentation implements AutoCloseable {
           String.format(
               "Nucleus detected by StarDist %s model. "
                   + "Prob threshold: %.3f, NMS threshold: %.3f, Normalization: %s (%.1f-%.1f%%)",
-              settings.getModelChoice(),
-              settings.getProbThresh(),
-              settings.getNmsThresh(),
-              settings.isNormalizeInput() ? "enabled" : "disabled",
-              settings.getPercentileBottom(),
-              settings.getPercentileTop()));
+              settings.modelChoice(),
+              settings.probThresh(),
+              settings.nmsThresh(),
+              settings.normalizeInput() ? "enabled" : "disabled",
+              settings.percentileBottom(),
+              settings.percentileTop()));
 
       nucleiROIs.add(nucleusROI);
     }
@@ -481,7 +483,7 @@ public class NuclearSegmentation implements AutoCloseable {
   public String toString() {
     return String.format(
         "NuclearSegmentation[image=%s, model=%s, probThresh=%.3f, available=%s]",
-        imageFileName, settings.getModelChoice(), settings.getProbThresh(), isAvailable());
+        imageFileName, settings.modelChoice(), settings.probThresh(), isAvailable());
   }
 
   /**

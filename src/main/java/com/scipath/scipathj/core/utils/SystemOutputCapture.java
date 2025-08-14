@@ -3,6 +3,7 @@ package com.scipath.scipathj.core.utils;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -97,8 +98,9 @@ public class SystemOutputCapture {
     private final PrintStream originalStream;
     private final ByteArrayOutputStream buffer;
 
+    @SuppressWarnings("DM_DEFAULT_ENCODING")
     public LoggingPrintStream(Logger logger, boolean isError, PrintStream originalStream) {
-      super(new ByteArrayOutputStream());
+      super(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8);
       this.logger = logger;
       this.isError = isError;
       this.originalStream = originalStream;

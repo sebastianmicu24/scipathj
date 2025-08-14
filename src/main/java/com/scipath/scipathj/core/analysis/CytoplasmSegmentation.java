@@ -75,7 +75,7 @@ public class CytoplasmSegmentation {
         imageFileName,
         vesselROIs,
         nucleusROIs,
-        configurationManager.initializeCytoplasmSegmentationSettings(),
+        configurationManager.loadCytoplasmSegmentationSettings(),
         mainSettings,
         roiManager);
   }
@@ -112,7 +112,7 @@ public class CytoplasmSegmentation {
     this.cytoplasmROIs = new ArrayList<>();
 
     // Create background mask from vessels if vessel exclusion is enabled
-    if (this.settings.isUseVesselExclusion() && !this.vesselROIs.isEmpty()) {
+    if (this.settings.useVesselExclusion() && !this.vesselROIs.isEmpty()) {
       this.backgroundMask = createBackgroundMaskFromVessels();
     }
   }
@@ -221,7 +221,7 @@ public class CytoplasmSegmentation {
     IJ.run(voronoiImage, "Convert to Mask", "");
 
     // Apply Voronoi tessellation
-    if (settings.isApplyVoronoi()) {
+    if (settings.applyVoronoi()) {
       IJ.run(voronoiImage, "Voronoi", "");
 
       // Threshold to make borders black
@@ -233,7 +233,7 @@ public class CytoplasmSegmentation {
     }
 
     // Add image border if enabled
-    if (settings.isAddImageBorder()) {
+    if (settings.addImageBorder()) {
       addImageBorder(voronoiImage);
     }
 
@@ -246,7 +246,7 @@ public class CytoplasmSegmentation {
   private void addImageBorder(ImagePlus image) {
     int width = image.getWidth();
     int height = image.getHeight();
-    int borderWidth = settings.getBorderWidth();
+    int borderWidth = settings.borderWidth();
 
     IJ.setForegroundColor(255, 255, 255); // White foreground
 
@@ -271,7 +271,7 @@ public class CytoplasmSegmentation {
    * Applies vessel exclusion to the Voronoi image if enabled.
    */
   private ImagePlus applyVesselExclusion(ImagePlus voronoiImage) {
-    if (settings.isUseVesselExclusion() && backgroundMask != null) {
+    if (settings.useVesselExclusion() && backgroundMask != null) {
       ImageCalculator ic = new ImageCalculator();
       ImagePlus result = ic.run("Max create", voronoiImage, backgroundMask);
       result.setTitle("Cytoplasm_" + System.currentTimeMillis());
@@ -360,7 +360,7 @@ public class CytoplasmSegmentation {
     String cellName = "Cell_" + nucleusNumber;
 
     CellROI cell = new CellROI(cellRoiCopy, imageFileName, cellName, nucleusROI);
-    cell.setDisplayColor(mainSettings.getCellSettings().getBorderColor());
+    cell.setDisplayColor(mainSettings.getCellSettings().borderColor());
     cell.setSegmentationMethod("Voronoi_Tessellation");
 
     return cell;
@@ -382,7 +382,7 @@ public class CytoplasmSegmentation {
         String cytoplasmName = "Cytoplasm_" + nucleusNumber;
         CytoplasmROI cytoplasm =
             new CytoplasmROI(cytoplasmShape, imageFileName, cytoplasmName, nucleusROI);
-        cytoplasm.setDisplayColor(mainSettings.getCytoplasmSettings().getBorderColor());
+        cytoplasm.setDisplayColor(mainSettings.getCytoplasmSettings().borderColor());
         cytoplasm.setSegmentationMethod("Voronoi_Subtraction");
 
         return cytoplasm;
@@ -402,15 +402,15 @@ public class CytoplasmSegmentation {
     if (cellRoi == null) return false;
 
     double area = cellRoi.getStatistics().area;
-    if (area < settings.getMinCellSize() || area > settings.getMaxCellSize()) {
+    if (area < settings.minCellSize() || area > settings.maxCellSize()) {
       return false;
     }
 
-    if (settings.isValidateCellShape()) {
+    if (settings.validateCellShape()) {
       Rectangle bounds = cellRoi.getBounds();
       double aspectRatio =
           (double) Math.max(bounds.width, bounds.height) / Math.min(bounds.width, bounds.height);
-      if (aspectRatio > settings.getMaxAspectRatio()) {
+      if (aspectRatio > settings.maxAspectRatio()) {
         return false;
       }
     }
@@ -425,14 +425,14 @@ public class CytoplasmSegmentation {
     if (cytoplasm == null) return false;
 
     double area = cytoplasm.getCytoplasmArea();
-    return area >= settings.getMinCytoplasmSize();
+    return area >= settings.minCytoplasmSize();
   }
 
   /**
    * Links nuclei to their cytoplasm and adds ROIs to the manager.
    */
   private void linkNucleiToCytoplasm() {
-    if (settings.isLinkNucleusToCytoplasm()) {
+    if (settings.linkNucleusToCytoplasm()) {
       cytoplasmROIs.forEach(
           cytoplasm -> {
             NucleusROI nucleus = cytoplasm.getAssociatedNucleus();
@@ -443,7 +443,7 @@ public class CytoplasmSegmentation {
     }
 
     // Add ROIs to manager
-    if (settings.isCreateCellROIs()) {
+    if (settings.createCellROIs()) {
       cellROIs.forEach(roiManager::addROI);
     }
 

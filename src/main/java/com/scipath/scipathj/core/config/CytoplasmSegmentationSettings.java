@@ -1,23 +1,40 @@
 package com.scipath.scipathj.core.config;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 /**
- * Configuration settings for cytoplasm segmentation using Voronoi tessellation.
- * This class manages all parameters related to cytoplasm detection and cell creation.
+ * Settings record for cytoplasm segmentation using Voronoi tessellation.
+ * Immutable data carrier that manages all parameters related to cytoplasm detection and cell creation.
+ * Uses Java 16+ record syntax for conciseness and immutability.
+ *
+ * @param useVesselExclusion Whether vessels should be excluded from cytoplasm regions
+ * @param addImageBorder Whether to add a border around the image
+ * @param borderWidth The width of the image border in pixels
+ * @param applyVoronoi Whether Voronoi tessellation should be applied
+ * @param minCellSize The minimum cell size in pixels
+ * @param maxCellSize The maximum cell size in pixels
+ * @param minCytoplasmSize The minimum cytoplasm size in pixels
+ * @param validateCellShape Whether cell shape validation should be performed
+ * @param maxAspectRatio The maximum allowed aspect ratio for cells
+ * @param linkNucleusToCytoplasm Whether nucleus-cytoplasm linking should be performed
+ * @param createCellROIs Whether cell ROIs should be created
+ * @param excludeBorderCells Whether border cells should be excluded
  *
  * @author Sebastian Micu
  * @version 1.0.0
  * @since 1.0.0
  */
-public class CytoplasmSegmentationSettings {
-
-  private static final Logger LOGGER = LoggerFactory.getLogger(CytoplasmSegmentationSettings.class);
-
-  // Singleton instance
-  private static CytoplasmSegmentationSettings instance;
+public record CytoplasmSegmentationSettings(
+    boolean useVesselExclusion,
+    boolean addImageBorder,
+    int borderWidth,
+    boolean applyVoronoi,
+    double minCellSize,
+    double maxCellSize,
+    double minCytoplasmSize,
+    boolean validateCellShape,
+    double maxAspectRatio,
+    boolean linkNucleusToCytoplasm,
+    boolean createCellROIs,
+    boolean excludeBorderCells) {
 
   // Default values based on SCHELI implementation
   public static final boolean DEFAULT_USE_VESSEL_EXCLUSION = true;
@@ -33,72 +50,75 @@ public class CytoplasmSegmentationSettings {
   public static final boolean DEFAULT_CREATE_CELL_ROIS = true;
   public static final boolean DEFAULT_EXCLUDE_BORDER_CELLS = false;
 
-  @JsonProperty("useVesselExclusion")
-  private boolean useVesselExclusion = DEFAULT_USE_VESSEL_EXCLUSION;
-
-  @JsonProperty("addImageBorder")
-  private boolean addImageBorder = DEFAULT_ADD_IMAGE_BORDER;
-
-  @JsonProperty("borderWidth")
-  private int borderWidth = DEFAULT_BORDER_WIDTH;
-
-  @JsonProperty("applyVoronoi")
-  private boolean applyVoronoi = DEFAULT_APPLY_VORONOI;
-
-  @JsonProperty("minCellSize")
-  private double minCellSize = DEFAULT_MIN_CELL_SIZE;
-
-  @JsonProperty("maxCellSize")
-  private double maxCellSize = DEFAULT_MAX_CELL_SIZE;
-
-  @JsonProperty("minCytoplasmSize")
-  private double minCytoplasmSize = DEFAULT_MIN_CYTOPLASM_SIZE;
-
-  @JsonProperty("validateCellShape")
-  private boolean validateCellShape = DEFAULT_VALIDATE_CELL_SHAPE;
-
-  @JsonProperty("maxAspectRatio")
-  private double maxAspectRatio = DEFAULT_MAX_ASPECT_RATIO;
-
-  @JsonProperty("linkNucleusToCytoplasm")
-  private boolean linkNucleusToCytoplasm = DEFAULT_LINK_NUCLEUS_TO_CYTOPLASM;
-
-  @JsonProperty("createCellROIs")
-  private boolean createCellROIs = DEFAULT_CREATE_CELL_ROIS;
-
-  @JsonProperty("excludeBorderCells")
-  private boolean excludeBorderCells = DEFAULT_EXCLUDE_BORDER_CELLS;
+  // Additional constants needed by ConfigurationManager
+  public static final double DEFAULT_VORONOI_EXPANSION = 5.0;
+  public static final double DEFAULT_GAUSSIAN_BLUR_SIGMA = 1.0;
+  public static final double DEFAULT_MORPH_CLOSING_RADIUS = 2.0;
+  public static final double DEFAULT_WATERSHED_TOLERANCE = 0.5;
+  public static final double DEFAULT_MIN_CYTOPLASM_AREA = 50.0;
+  public static final double DEFAULT_MAX_CYTOPLASM_AREA = 10000.0;
+  public static final boolean DEFAULT_FILL_HOLES = true;
+  public static final boolean DEFAULT_SMOOTH_BOUNDARIES = true;
+  public static final boolean DEFAULT_VERBOSE = false;
 
   /**
-   * Private constructor for singleton pattern.
-   */
-  private CytoplasmSegmentationSettings() {
-    LOGGER.debug("Created CytoplasmSegmentationSettings with default values");
-  }
-
-  /**
-   * Gets the singleton instance of CytoplasmSegmentationSettings.
+   * Creates a new CytoplasmSegmentationSettings with validation.
    *
-   * @return the singleton instance
+   * @throws IllegalArgumentException if any parameter is invalid
    */
-  public static synchronized CytoplasmSegmentationSettings getInstance() {
-    if (instance == null) {
-      instance = new CytoplasmSegmentationSettings();
+  public CytoplasmSegmentationSettings {
+    if (borderWidth < 1) {
+      throw new IllegalArgumentException("Border width must be at least 1, got: " + borderWidth);
     }
-    return instance;
+    if (minCellSize < 0) {
+      throw new IllegalArgumentException(
+          "Minimum cell size must be non-negative, got: " + minCellSize);
+    }
+    if (maxCellSize < 0) {
+      throw new IllegalArgumentException(
+          "Maximum cell size must be non-negative, got: " + maxCellSize);
+    }
+    if (minCellSize >= maxCellSize) {
+      throw new IllegalArgumentException(
+          "Minimum cell size ("
+              + minCellSize
+              + ") must be less than maximum cell size ("
+              + maxCellSize
+              + ")");
+    }
+    if (minCytoplasmSize < 0) {
+      throw new IllegalArgumentException(
+          "Minimum cytoplasm size must be non-negative, got: " + minCytoplasmSize);
+    }
+    if (maxAspectRatio < 1.0) {
+      throw new IllegalArgumentException(
+          "Maximum aspect ratio must be at least 1.0, got: " + maxAspectRatio);
+    }
   }
 
   /**
-   * Gets whether vessel exclusion should be used.
+   * Creates a new CytoplasmSegmentationSettings instance with default values.
    *
-   * @return true if vessels should be excluded from cytoplasm regions
+   * @return A new instance with default settings
    */
-  public boolean isUseVesselExclusion() {
-    return useVesselExclusion;
+  public static CytoplasmSegmentationSettings createDefault() {
+    return new CytoplasmSegmentationSettings(
+        DEFAULT_USE_VESSEL_EXCLUSION,
+        DEFAULT_ADD_IMAGE_BORDER,
+        DEFAULT_BORDER_WIDTH,
+        DEFAULT_APPLY_VORONOI,
+        DEFAULT_MIN_CELL_SIZE,
+        DEFAULT_MAX_CELL_SIZE,
+        DEFAULT_MIN_CYTOPLASM_SIZE,
+        DEFAULT_VALIDATE_CELL_SHAPE,
+        DEFAULT_MAX_ASPECT_RATIO,
+        DEFAULT_LINK_NUCLEUS_TO_CYTOPLASM,
+        DEFAULT_CREATE_CELL_ROIS,
+        DEFAULT_EXCLUDE_BORDER_CELLS);
   }
 
   /**
-   * Alias for isUseVesselExclusion() for compatibility.
+   * Alias for useVesselExclusion() for compatibility.
    *
    * @return true if vessels should be excluded from cytoplasm regions
    */
@@ -107,140 +127,7 @@ public class CytoplasmSegmentationSettings {
   }
 
   /**
-   * Sets whether vessel exclusion should be used.
-   *
-   * @param useVesselExclusion true to exclude vessels from cytoplasm regions
-   */
-  public void setUseVesselExclusion(boolean useVesselExclusion) {
-    this.useVesselExclusion = useVesselExclusion;
-    LOGGER.debug("Set use vessel exclusion to: {}", useVesselExclusion);
-  }
-
-  /**
-   * Alias for setUseVesselExclusion() for compatibility.
-   *
-   * @param excludeVessels true to exclude vessels from cytoplasm regions
-   */
-  public void setExcludeVessels(boolean excludeVessels) {
-    setUseVesselExclusion(excludeVessels);
-  }
-
-  /**
-   * Gets whether to add a border around the image.
-   *
-   * @return true if image border should be added
-   */
-  public boolean isAddImageBorder() {
-    return addImageBorder;
-  }
-
-  /**
-   * Sets whether to add a border around the image.
-   *
-   * @param addImageBorder true to add image border
-   */
-  public void setAddImageBorder(boolean addImageBorder) {
-    this.addImageBorder = addImageBorder;
-    LOGGER.debug("Set add image border to: {}", addImageBorder);
-  }
-
-  /**
-   * Gets the width of the image border in pixels.
-   *
-   * @return the border width
-   */
-  public int getBorderWidth() {
-    return borderWidth;
-  }
-
-  /**
-   * Sets the width of the image border in pixels.
-   *
-   * @param borderWidth the border width (must be positive)
-   */
-  public void setBorderWidth(int borderWidth) {
-    this.borderWidth = Math.max(1, borderWidth);
-    LOGGER.debug("Set border width to: {}", this.borderWidth);
-  }
-
-  /**
-   * Gets whether Voronoi tessellation should be applied.
-   *
-   * @return true if Voronoi tessellation should be applied
-   */
-  public boolean isApplyVoronoi() {
-    return applyVoronoi;
-  }
-
-  /**
-   * Sets whether Voronoi tessellation should be applied.
-   *
-   * @param applyVoronoi true to apply Voronoi tessellation
-   */
-  public void setApplyVoronoi(boolean applyVoronoi) {
-    this.applyVoronoi = applyVoronoi;
-    LOGGER.debug("Set apply Voronoi to: {}", applyVoronoi);
-  }
-
-  /**
-   * Gets the minimum cell size in pixels.
-   *
-   * @return the minimum cell size
-   */
-  public double getMinCellSize() {
-    return minCellSize;
-  }
-
-  /**
-   * Sets the minimum cell size in pixels.
-   *
-   * @param minCellSize the minimum cell size (must be positive)
-   */
-  public void setMinCellSize(double minCellSize) {
-    this.minCellSize = Math.max(0.0, minCellSize);
-    LOGGER.debug("Set minimum cell size to: {}", this.minCellSize);
-  }
-
-  /**
-   * Gets the maximum cell size in pixels.
-   *
-   * @return the maximum cell size
-   */
-  public double getMaxCellSize() {
-    return maxCellSize;
-  }
-
-  /**
-   * Sets the maximum cell size in pixels.
-   *
-   * @param maxCellSize the maximum cell size (must be positive)
-   */
-  public void setMaxCellSize(double maxCellSize) {
-    this.maxCellSize = Math.max(0.0, maxCellSize);
-    LOGGER.debug("Set maximum cell size to: {}", this.maxCellSize);
-  }
-
-  /**
-   * Gets the minimum cytoplasm size in pixels.
-   *
-   * @return the minimum cytoplasm size
-   */
-  public double getMinCytoplasmSize() {
-    return minCytoplasmSize;
-  }
-
-  /**
-   * Sets the minimum cytoplasm size in pixels.
-   *
-   * @param minCytoplasmSize the minimum cytoplasm size (must be positive)
-   */
-  public void setMinCytoplasmSize(double minCytoplasmSize) {
-    this.minCytoplasmSize = Math.max(0.0, minCytoplasmSize);
-    LOGGER.debug("Set minimum cytoplasm size to: {}", this.minCytoplasmSize);
-  }
-
-  /**
-   * Alias for getMinCytoplasmSize() for compatibility.
+   * Alias for minCytoplasmSize() for compatibility.
    *
    * @return the minimum cytoplasm area
    */
@@ -249,107 +136,294 @@ public class CytoplasmSegmentationSettings {
   }
 
   /**
-   * Alias for setMinCytoplasmSize() for compatibility.
+   * Creates a new instance with updated vessel exclusion setting.
    *
-   * @param minCytoplasmArea the minimum cytoplasm area (must be positive)
+   * @param newUseVesselExclusion Whether to exclude vessels from cytoplasm regions
+   * @return A new instance with the updated setting
    */
-  public void setMinCytoplasmArea(double minCytoplasmArea) {
-    setMinCytoplasmSize(minCytoplasmArea);
+  public CytoplasmSegmentationSettings withUseVesselExclusion(boolean newUseVesselExclusion) {
+    return new CytoplasmSegmentationSettings(
+        newUseVesselExclusion,
+        addImageBorder,
+        borderWidth,
+        applyVoronoi,
+        minCellSize,
+        maxCellSize,
+        minCytoplasmSize,
+        validateCellShape,
+        maxAspectRatio,
+        linkNucleusToCytoplasm,
+        createCellROIs,
+        excludeBorderCells);
   }
 
   /**
-   * Gets whether cell shape validation should be performed.
+   * Alias for withUseVesselExclusion() for compatibility.
    *
-   * @return true if cell shapes should be validated
+   * @param excludeVessels Whether to exclude vessels from cytoplasm regions
+   * @return A new instance with the updated setting
    */
-  public boolean isValidateCellShape() {
-    return validateCellShape;
+  public CytoplasmSegmentationSettings withExcludeVessels(boolean excludeVessels) {
+    return withUseVesselExclusion(excludeVessels);
   }
 
   /**
-   * Sets whether cell shape validation should be performed.
+   * Creates a new instance with updated image border setting.
    *
-   * @param validateCellShape true to validate cell shapes
+   * @param newAddImageBorder Whether to add image border
+   * @return A new instance with the updated setting
    */
-  public void setValidateCellShape(boolean validateCellShape) {
-    this.validateCellShape = validateCellShape;
-    LOGGER.debug("Set validate cell shape to: {}", validateCellShape);
+  public CytoplasmSegmentationSettings withAddImageBorder(boolean newAddImageBorder) {
+    return new CytoplasmSegmentationSettings(
+        useVesselExclusion,
+        newAddImageBorder,
+        borderWidth,
+        applyVoronoi,
+        minCellSize,
+        maxCellSize,
+        minCytoplasmSize,
+        validateCellShape,
+        maxAspectRatio,
+        linkNucleusToCytoplasm,
+        createCellROIs,
+        excludeBorderCells);
   }
 
   /**
-   * Gets the maximum allowed aspect ratio for cells.
+   * Creates a new instance with updated border width.
    *
-   * @return the maximum aspect ratio
+   * @param newBorderWidth The new border width (must be at least 1)
+   * @return A new instance with the updated border width
+   * @throws IllegalArgumentException if borderWidth is invalid
    */
-  public double getMaxAspectRatio() {
-    return maxAspectRatio;
+  public CytoplasmSegmentationSettings withBorderWidth(int newBorderWidth) {
+    return new CytoplasmSegmentationSettings(
+        useVesselExclusion,
+        addImageBorder,
+        newBorderWidth,
+        applyVoronoi,
+        minCellSize,
+        maxCellSize,
+        minCytoplasmSize,
+        validateCellShape,
+        maxAspectRatio,
+        linkNucleusToCytoplasm,
+        createCellROIs,
+        excludeBorderCells);
   }
 
   /**
-   * Sets the maximum allowed aspect ratio for cells.
+   * Creates a new instance with updated Voronoi application setting.
    *
-   * @param maxAspectRatio the maximum aspect ratio (must be >= 1.0)
+   * @param newApplyVoronoi Whether to apply Voronoi tessellation
+   * @return A new instance with the updated setting
    */
-  public void setMaxAspectRatio(double maxAspectRatio) {
-    this.maxAspectRatio = Math.max(1.0, maxAspectRatio);
-    LOGGER.debug("Set maximum aspect ratio to: {}", this.maxAspectRatio);
+  public CytoplasmSegmentationSettings withApplyVoronoi(boolean newApplyVoronoi) {
+    return new CytoplasmSegmentationSettings(
+        useVesselExclusion,
+        addImageBorder,
+        borderWidth,
+        newApplyVoronoi,
+        minCellSize,
+        maxCellSize,
+        minCytoplasmSize,
+        validateCellShape,
+        maxAspectRatio,
+        linkNucleusToCytoplasm,
+        createCellROIs,
+        excludeBorderCells);
   }
 
   /**
-   * Gets whether nucleus-cytoplasm linking should be performed.
+   * Creates a new instance with updated minimum cell size.
    *
-   * @return true if nucleus and cytoplasm should be linked
+   * @param newMinCellSize The new minimum cell size (must be non-negative)
+   * @return A new instance with the updated minimum cell size
+   * @throws IllegalArgumentException if minCellSize is invalid
    */
-  public boolean isLinkNucleusToCytoplasm() {
-    return linkNucleusToCytoplasm;
+  public CytoplasmSegmentationSettings withMinCellSize(double newMinCellSize) {
+    return new CytoplasmSegmentationSettings(
+        useVesselExclusion,
+        addImageBorder,
+        borderWidth,
+        applyVoronoi,
+        newMinCellSize,
+        maxCellSize,
+        minCytoplasmSize,
+        validateCellShape,
+        maxAspectRatio,
+        linkNucleusToCytoplasm,
+        createCellROIs,
+        excludeBorderCells);
   }
 
   /**
-   * Sets whether nucleus-cytoplasm linking should be performed.
+   * Creates a new instance with updated maximum cell size.
    *
-   * @param linkNucleusToCytoplasm true to link nucleus and cytoplasm
+   * @param newMaxCellSize The new maximum cell size (must be non-negative)
+   * @return A new instance with the updated maximum cell size
+   * @throws IllegalArgumentException if maxCellSize is invalid
    */
-  public void setLinkNucleusToCytoplasm(boolean linkNucleusToCytoplasm) {
-    this.linkNucleusToCytoplasm = linkNucleusToCytoplasm;
-    LOGGER.debug("Set link nucleus to cytoplasm to: {}", linkNucleusToCytoplasm);
+  public CytoplasmSegmentationSettings withMaxCellSize(double newMaxCellSize) {
+    return new CytoplasmSegmentationSettings(
+        useVesselExclusion,
+        addImageBorder,
+        borderWidth,
+        applyVoronoi,
+        minCellSize,
+        newMaxCellSize,
+        minCytoplasmSize,
+        validateCellShape,
+        maxAspectRatio,
+        linkNucleusToCytoplasm,
+        createCellROIs,
+        excludeBorderCells);
   }
 
   /**
-   * Gets whether cell ROIs should be created.
+   * Creates a new instance with updated minimum cytoplasm size.
    *
-   * @return true if cell ROIs should be created
+   * @param newMinCytoplasmSize The new minimum cytoplasm size (must be non-negative)
+   * @return A new instance with the updated minimum cytoplasm size
+   * @throws IllegalArgumentException if minCytoplasmSize is invalid
    */
-  public boolean isCreateCellROIs() {
-    return createCellROIs;
+  public CytoplasmSegmentationSettings withMinCytoplasmSize(double newMinCytoplasmSize) {
+    return new CytoplasmSegmentationSettings(
+        useVesselExclusion,
+        addImageBorder,
+        borderWidth,
+        applyVoronoi,
+        minCellSize,
+        maxCellSize,
+        newMinCytoplasmSize,
+        validateCellShape,
+        maxAspectRatio,
+        linkNucleusToCytoplasm,
+        createCellROIs,
+        excludeBorderCells);
   }
 
   /**
-   * Sets whether cell ROIs should be created.
+   * Alias for withMinCytoplasmSize() for compatibility.
    *
-   * @param createCellROIs true to create cell ROIs
+   * @param newMinCytoplasmArea The new minimum cytoplasm area (must be non-negative)
+   * @return A new instance with the updated minimum cytoplasm area
+   * @throws IllegalArgumentException if minCytoplasmArea is invalid
    */
-  public void setCreateCellROIs(boolean createCellROIs) {
-    this.createCellROIs = createCellROIs;
-    LOGGER.debug("Set create cell ROIs to: {}", createCellROIs);
+  public CytoplasmSegmentationSettings withMinCytoplasmArea(double newMinCytoplasmArea) {
+    return withMinCytoplasmSize(newMinCytoplasmArea);
   }
 
   /**
-   * Gets whether border cells should be excluded.
+   * Creates a new instance with updated cell shape validation setting.
    *
-   * @return true if border cells should be excluded
+   * @param newValidateCellShape Whether to validate cell shapes
+   * @return A new instance with the updated setting
    */
-  public boolean isExcludeBorderCells() {
-    return excludeBorderCells;
+  public CytoplasmSegmentationSettings withValidateCellShape(boolean newValidateCellShape) {
+    return new CytoplasmSegmentationSettings(
+        useVesselExclusion,
+        addImageBorder,
+        borderWidth,
+        applyVoronoi,
+        minCellSize,
+        maxCellSize,
+        minCytoplasmSize,
+        newValidateCellShape,
+        maxAspectRatio,
+        linkNucleusToCytoplasm,
+        createCellROIs,
+        excludeBorderCells);
   }
 
   /**
-   * Sets whether border cells should be excluded.
+   * Creates a new instance with updated maximum aspect ratio.
    *
-   * @param excludeBorderCells true to exclude border cells
+   * @param newMaxAspectRatio The new maximum aspect ratio (must be at least 1.0)
+   * @return A new instance with the updated maximum aspect ratio
+   * @throws IllegalArgumentException if maxAspectRatio is invalid
    */
-  public void setExcludeBorderCells(boolean excludeBorderCells) {
-    this.excludeBorderCells = excludeBorderCells;
-    LOGGER.debug("Set exclude border cells to: {}", excludeBorderCells);
+  public CytoplasmSegmentationSettings withMaxAspectRatio(double newMaxAspectRatio) {
+    return new CytoplasmSegmentationSettings(
+        useVesselExclusion,
+        addImageBorder,
+        borderWidth,
+        applyVoronoi,
+        minCellSize,
+        maxCellSize,
+        minCytoplasmSize,
+        validateCellShape,
+        newMaxAspectRatio,
+        linkNucleusToCytoplasm,
+        createCellROIs,
+        excludeBorderCells);
+  }
+
+  /**
+   * Creates a new instance with updated nucleus-cytoplasm linking setting.
+   *
+   * @param newLinkNucleusToCytoplasm Whether to link nucleus and cytoplasm
+   * @return A new instance with the updated setting
+   */
+  public CytoplasmSegmentationSettings withLinkNucleusToCytoplasm(
+      boolean newLinkNucleusToCytoplasm) {
+    return new CytoplasmSegmentationSettings(
+        useVesselExclusion,
+        addImageBorder,
+        borderWidth,
+        applyVoronoi,
+        minCellSize,
+        maxCellSize,
+        minCytoplasmSize,
+        validateCellShape,
+        maxAspectRatio,
+        newLinkNucleusToCytoplasm,
+        createCellROIs,
+        excludeBorderCells);
+  }
+
+  /**
+   * Creates a new instance with updated cell ROI creation setting.
+   *
+   * @param newCreateCellROIs Whether to create cell ROIs
+   * @return A new instance with the updated setting
+   */
+  public CytoplasmSegmentationSettings withCreateCellROIs(boolean newCreateCellROIs) {
+    return new CytoplasmSegmentationSettings(
+        useVesselExclusion,
+        addImageBorder,
+        borderWidth,
+        applyVoronoi,
+        minCellSize,
+        maxCellSize,
+        minCytoplasmSize,
+        validateCellShape,
+        maxAspectRatio,
+        linkNucleusToCytoplasm,
+        newCreateCellROIs,
+        excludeBorderCells);
+  }
+
+  /**
+   * Creates a new instance with updated border cell exclusion setting.
+   *
+   * @param newExcludeBorderCells Whether to exclude border cells
+   * @return A new instance with the updated setting
+   */
+  public CytoplasmSegmentationSettings withExcludeBorderCells(boolean newExcludeBorderCells) {
+    return new CytoplasmSegmentationSettings(
+        useVesselExclusion,
+        addImageBorder,
+        borderWidth,
+        applyVoronoi,
+        minCellSize,
+        maxCellSize,
+        minCytoplasmSize,
+        validateCellShape,
+        maxAspectRatio,
+        linkNucleusToCytoplasm,
+        createCellROIs,
+        newExcludeBorderCells);
   }
 
   /**
@@ -358,51 +432,44 @@ public class CytoplasmSegmentationSettings {
    * @return true if settings are valid, false otherwise
    */
   public boolean isValid() {
-    boolean valid = true;
-
-    if (minCellSize >= maxCellSize) {
-      LOGGER.warn("Invalid cell size range: min ({}) >= max ({})", minCellSize, maxCellSize);
-      valid = false;
+    try {
+      validate();
+      return true;
+    } catch (IllegalStateException e) {
+      return false;
     }
-
-    if (minCytoplasmSize < 0) {
-      LOGGER.warn("Invalid minimum cytoplasm size: {} (must be >= 0)", minCytoplasmSize);
-      valid = false;
-    }
-
-    if (maxAspectRatio < 1.0) {
-      LOGGER.warn("Invalid maximum aspect ratio: {} (must be >= 1.0)", maxAspectRatio);
-      valid = false;
-    }
-
-    if (borderWidth < 1) {
-      LOGGER.warn("Invalid border width: {} (must be >= 1)", borderWidth);
-      valid = false;
-    }
-
-    return valid;
   }
 
   /**
-   * Resets all settings to their default values.
+   * Validate that all current settings are within acceptable ranges.
+   * This method is called automatically by the constructor, but can be used
+   * for additional validation if needed.
+   *
+   * @throws IllegalStateException if any setting is invalid
    */
-  public void resetToDefaults() {
-    this.useVesselExclusion = DEFAULT_USE_VESSEL_EXCLUSION;
-    this.addImageBorder = DEFAULT_ADD_IMAGE_BORDER;
-    this.borderWidth = DEFAULT_BORDER_WIDTH;
-    this.applyVoronoi = DEFAULT_APPLY_VORONOI;
-    this.minCellSize = DEFAULT_MIN_CELL_SIZE;
-    this.maxCellSize = DEFAULT_MAX_CELL_SIZE;
-    this.minCytoplasmSize = DEFAULT_MIN_CYTOPLASM_SIZE;
-    this.validateCellShape = DEFAULT_VALIDATE_CELL_SHAPE;
-    this.maxAspectRatio = DEFAULT_MAX_ASPECT_RATIO;
-    this.linkNucleusToCytoplasm = DEFAULT_LINK_NUCLEUS_TO_CYTOPLASM;
-    this.createCellROIs = DEFAULT_CREATE_CELL_ROIS;
-    this.excludeBorderCells = DEFAULT_EXCLUDE_BORDER_CELLS;
-
-    LOGGER.info("Reset cytoplasm segmentation settings to defaults");
+  public void validate() {
+    if (minCellSize >= maxCellSize) {
+      throw new IllegalStateException(
+          "Invalid cell size range: min (" + minCellSize + ") >= max (" + maxCellSize + ")");
+    }
+    if (minCytoplasmSize < 0) {
+      throw new IllegalStateException(
+          "Invalid minimum cytoplasm size: " + minCytoplasmSize + " (must be >= 0)");
+    }
+    if (maxAspectRatio < 1.0) {
+      throw new IllegalStateException(
+          "Invalid maximum aspect ratio: " + maxAspectRatio + " (must be >= 1.0)");
+    }
+    if (borderWidth < 1) {
+      throw new IllegalStateException("Invalid border width: " + borderWidth + " (must be >= 1)");
+    }
   }
 
+  /**
+   * Get a string representation of current settings.
+   *
+   * @return String representation of settings
+   */
   @Override
   public String toString() {
     return String.format(

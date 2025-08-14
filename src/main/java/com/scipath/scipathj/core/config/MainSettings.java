@@ -9,6 +9,11 @@ import org.slf4j.LoggerFactory;
 /**
  * Main application settings class for global configuration.
  * Manages scale conversion, type-specific ROI appearance, and other global settings with persistence.
+ * Uses dependency injection instead of singleton pattern for better testability and flexibility.
+ *
+ * @author Sebastian Micu
+ * @version 1.0.0
+ * @since 1.0.0
  */
 public class MainSettings {
 
@@ -57,70 +62,149 @@ public class MainSettings {
   }
 
   /**
-   * Settings for a specific ROI type
+   * Immutable settings record for ROI appearance configuration.
+   * Uses Java 16+ record syntax for conciseness and immutability.
+   *
+   * @param borderColor The border color for the ROI
+   * @param fillOpacity The fill opacity (0.0-1.0)
+   * @param borderWidth The border width in pixels (must be at least 1)
+   *
+   * @author Sebastian Micu
+   * @version 1.0.0
+   * @since 1.0.0
    */
-  public static class ROIAppearanceSettings {
-    private Color borderColor;
-    private Color fillColor;
-    private float fillOpacity;
-    private int borderWidth;
+  public record ROIAppearanceSettings(Color borderColor, float fillOpacity, int borderWidth) {
 
-    public ROIAppearanceSettings(Color borderColor, float fillOpacity, int borderWidth) {
-      this.borderColor = borderColor;
-      this.fillOpacity = fillOpacity;
-      this.borderWidth = borderWidth;
-      updateFillColor();
-    }
-
-    private void updateFillColor() {
-      int alpha = Math.round(fillOpacity * 255);
-      this.fillColor =
-          new Color(borderColor.getRed(), borderColor.getGreen(), borderColor.getBlue(), alpha);
-    }
-
-    // Getters
-    public Color getBorderColor() {
-      return borderColor;
-    }
-
-    public Color getFillColor() {
-      return fillColor;
-    }
-
-    public float getFillOpacity() {
-      return fillOpacity;
-    }
-
-    public int getBorderWidth() {
-      return borderWidth;
-    }
-
-    // Setters with validation
-    public void setBorderColor(Color borderColor) {
+    /**
+     * Creates a new ROIAppearanceSettings with validation.
+     *
+     * @throws IllegalArgumentException if any parameter is invalid
+     */
+    public ROIAppearanceSettings {
       if (borderColor == null) {
         throw new IllegalArgumentException("Border color cannot be null");
       }
-      this.borderColor = borderColor;
-      updateFillColor();
-    }
-
-    public void setFillOpacity(float fillOpacity) {
       if (fillOpacity < 0.0f || fillOpacity > 1.0f) {
-        throw new IllegalArgumentException("Fill opacity must be between 0.0 and 1.0");
+        throw new IllegalArgumentException(
+            "Fill opacity must be between 0.0 and 1.0, got: " + fillOpacity);
       }
-      this.fillOpacity = fillOpacity;
-      updateFillColor();
-    }
-
-    public void setBorderWidth(int borderWidth) {
       if (borderWidth < 1) {
-        throw new IllegalArgumentException("Border width must be at least 1");
+        throw new IllegalArgumentException("Border width must be at least 1, got: " + borderWidth);
       }
-      this.borderWidth = borderWidth;
     }
 
+    /**
+     * Creates a new ROIAppearanceSettings from a ROI category's defaults.
+     *
+     * @param category The ROI category to use for default values
+     * @return A new instance with the category's default settings
+     */
+    public static ROIAppearanceSettings fromCategory(ROICategory category) {
+      return new ROIAppearanceSettings(
+          category.getDefaultBorderColor(),
+          category.getDefaultFillOpacity(),
+          category.getDefaultBorderWidth());
+    }
+
+    /**
+     * Gets the fill color with the appropriate alpha channel based on fill opacity.
+     *
+     * @return Color with alpha channel applied
+     */
+    public Color getFillColor() {
+      int alpha = Math.round(fillOpacity * 255);
+      return new Color(borderColor.getRed(), borderColor.getGreen(), borderColor.getBlue(), alpha);
+    }
+
+    /**
+     * Creates a new instance with updated border color.
+     *
+     * @param newBorderColor The new border color
+     * @return A new instance with the updated border color
+     * @throws IllegalArgumentException if borderColor is null
+     */
+    public ROIAppearanceSettings withBorderColor(Color newBorderColor) {
+      return new ROIAppearanceSettings(newBorderColor, fillOpacity, borderWidth);
+    }
+
+    /**
+     * Creates a new instance with updated fill opacity.
+     *
+     * @param newFillOpacity The new fill opacity (0.0-1.0)
+     * @return A new instance with the updated fill opacity
+     * @throws IllegalArgumentException if fillOpacity is invalid
+     */
+    public ROIAppearanceSettings withFillOpacity(float newFillOpacity) {
+      return new ROIAppearanceSettings(borderColor, newFillOpacity, borderWidth);
+    }
+
+    /**
+     * Creates a new instance with updated border width.
+     *
+     * @param newBorderWidth The new border width (must be at least 1)
+     * @return A new instance with the updated border width
+     * @throws IllegalArgumentException if borderWidth is invalid
+     */
+    public ROIAppearanceSettings withBorderWidth(int newBorderWidth) {
+      return new ROIAppearanceSettings(borderColor, fillOpacity, newBorderWidth);
+    }
+
+    /**
+     * Creates a copy of this settings instance.
+     *
+     * @return A new instance with the same values
+     */
     public ROIAppearanceSettings copy() {
       return new ROIAppearanceSettings(new Color(borderColor.getRGB()), fillOpacity, borderWidth);
+    }
+
+    /**
+     * Validates the current settings and returns whether they are valid.
+     *
+     * @return true if settings are valid, false otherwise
+     */
+    public boolean isValid() {
+      try {
+        validate();
+        return true;
+      } catch (IllegalStateException e) {
+        return false;
+      }
+    }
+
+    /**
+     * Validate that all current settings are within acceptable ranges.
+     *
+     * @throws IllegalStateException if any setting is invalid
+     */
+    public void validate() {
+      if (borderColor == null) {
+        throw new IllegalStateException("Border color cannot be null");
+      }
+      if (fillOpacity < 0.0f || fillOpacity > 1.0f) {
+        throw new IllegalStateException(
+            "Invalid fill opacity: " + fillOpacity + " (must be 0.0-1.0)");
+      }
+      if (borderWidth < 1) {
+        throw new IllegalStateException(
+            "Invalid border width: " + borderWidth + " (must be at least 1)");
+      }
+    }
+
+    /**
+     * Get a string representation of current settings.
+     *
+     * @return String representation of settings
+     */
+    @Override
+    public String toString() {
+      return String.format(
+          "ROIAppearanceSettings[RGB(%d,%d,%d), opacity=%.2f, width=%d]",
+          borderColor.getRed(),
+          borderColor.getGreen(),
+          borderColor.getBlue(),
+          fillOpacity,
+          borderWidth);
     }
   }
 
@@ -129,15 +213,23 @@ public class MainSettings {
       1.0; // 1 pixel = 1 micrometer by default
   public static final String DEFAULT_SCALE_UNIT = "μm"; // micrometers
 
+  // Additional constants needed by ConfigurationManager
+  public static final double DEFAULT_PIXEL_WIDTH = 1.0;
+  public static final double DEFAULT_PIXEL_HEIGHT = 1.0;
+  public static final String DEFAULT_PIXEL_UNIT = "μm";
+  public static final Color DEFAULT_BORDER_COLOR = new Color(255, 0, 0); // Red
+  public static final float DEFAULT_FILL_OPACITY = 0.2f;
+  public static final int DEFAULT_BORDER_WIDTH = 2;
+
   // Current values (initialized with defaults)
   private double pixelsPerMicrometer = DEFAULT_PIXELS_PER_MICROMETER;
   private String scaleUnit = DEFAULT_SCALE_UNIT;
 
-  // Type-specific ROI appearance settings
-  private final ROIAppearanceSettings vesselSettings;
-  private final ROIAppearanceSettings nucleusSettings;
-  private final ROIAppearanceSettings cytoplasmSettings;
-  private final ROIAppearanceSettings cellSettings;
+  // Type-specific ROI appearance settings (mutable references to immutable records)
+  private ROIAppearanceSettings vesselSettings;
+  private ROIAppearanceSettings nucleusSettings;
+  private ROIAppearanceSettings cytoplasmSettings;
+  private ROIAppearanceSettings cellSettings;
 
   // Settings change listeners
   private final List<SettingsChangeListener> listeners;
@@ -146,46 +238,48 @@ public class MainSettings {
     void onSettingsChanged();
   }
 
-  // Singleton instance
-  private static MainSettings instance;
-
-  private MainSettings() {
+  /**
+   * Creates a new MainSettings instance with default values.
+   * Uses dependency injection pattern instead of singleton for better testability.
+   */
+  public MainSettings() {
     // Initialize type-specific settings with defaults
-    this.vesselSettings =
-        new ROIAppearanceSettings(
-            ROICategory.VESSEL.getDefaultBorderColor(),
-            ROICategory.VESSEL.getDefaultFillOpacity(),
-            ROICategory.VESSEL.getDefaultBorderWidth());
-    this.nucleusSettings =
-        new ROIAppearanceSettings(
-            ROICategory.NUCLEUS.getDefaultBorderColor(),
-            ROICategory.NUCLEUS.getDefaultFillOpacity(),
-            ROICategory.NUCLEUS.getDefaultBorderWidth());
-    this.cytoplasmSettings =
-        new ROIAppearanceSettings(
-            ROICategory.CYTOPLASM.getDefaultBorderColor(),
-            ROICategory.CYTOPLASM.getDefaultFillOpacity(),
-            ROICategory.CYTOPLASM.getDefaultBorderWidth());
-    this.cellSettings =
-        new ROIAppearanceSettings(
-            ROICategory.CELL.getDefaultBorderColor(),
-            ROICategory.CELL.getDefaultFillOpacity(),
-            ROICategory.CELL.getDefaultBorderWidth());
+    this.vesselSettings = ROIAppearanceSettings.fromCategory(ROICategory.VESSEL);
+    this.nucleusSettings = ROIAppearanceSettings.fromCategory(ROICategory.NUCLEUS);
+    this.cytoplasmSettings = ROIAppearanceSettings.fromCategory(ROICategory.CYTOPLASM);
+    this.cellSettings = ROIAppearanceSettings.fromCategory(ROICategory.CELL);
 
     this.listeners = new CopyOnWriteArrayList<>();
     LOGGER.debug("MainSettings initialized with default values for all ROI types");
   }
 
   /**
-   * Get the singleton instance of MainSettings.
+   * Creates a new MainSettings instance with custom values.
    *
-   * @return The singleton instance
+   * @param pixelsPerMicrometer The scale conversion factor
+   * @param scaleUnit The unit for scale display
+   * @param vesselSettings Settings for vessel ROIs
+   * @param nucleusSettings Settings for nucleus ROIs
+   * @param cytoplasmSettings Settings for cytoplasm ROIs
+   * @param cellSettings Settings for cell ROIs
    */
-  public static synchronized MainSettings getInstance() {
-    if (instance == null) {
-      instance = new MainSettings();
-    }
-    return instance;
+  public MainSettings(
+      double pixelsPerMicrometer,
+      String scaleUnit,
+      ROIAppearanceSettings vesselSettings,
+      ROIAppearanceSettings nucleusSettings,
+      ROIAppearanceSettings cytoplasmSettings,
+      ROIAppearanceSettings cellSettings) {
+    this.pixelsPerMicrometer = pixelsPerMicrometer;
+    this.scaleUnit = scaleUnit;
+    this.vesselSettings = vesselSettings;
+    this.nucleusSettings = nucleusSettings;
+    this.cytoplasmSettings = cytoplasmSettings;
+    this.cellSettings = cellSettings;
+    this.listeners = new CopyOnWriteArrayList<>();
+
+    validate(); // Validate all settings on construction
+    LOGGER.debug("MainSettings initialized with custom values");
   }
 
   // Scale conversion getters
@@ -236,7 +330,7 @@ public class MainSettings {
 
   // Convenience methods for backward compatibility (use vessel settings as default)
   public Color getRoiBorderColor() {
-    return vesselSettings.getBorderColor();
+    return vesselSettings.borderColor();
   }
 
   public Color getRoiFillColor() {
@@ -244,7 +338,7 @@ public class MainSettings {
   }
 
   public float getRoiFillOpacity() {
-    return vesselSettings.getFillOpacity();
+    return vesselSettings.fillOpacity();
   }
 
   /**
@@ -282,10 +376,46 @@ public class MainSettings {
     LOGGER.debug("Scale unit set to: {}", scaleUnit);
   }
 
+  // ROI settings setters (creates new immutable instances)
+  public void setVesselSettings(ROIAppearanceSettings newSettings) {
+    if (newSettings == null) {
+      throw new IllegalArgumentException("Vessel settings cannot be null");
+    }
+    this.vesselSettings = newSettings;
+    notifySettingsChanged();
+    LOGGER.debug("Vessel settings updated: {}", newSettings);
+  }
+
+  public void setNucleusSettings(ROIAppearanceSettings newSettings) {
+    if (newSettings == null) {
+      throw new IllegalArgumentException("Nucleus settings cannot be null");
+    }
+    this.nucleusSettings = newSettings;
+    notifySettingsChanged();
+    LOGGER.debug("Nucleus settings updated: {}", newSettings);
+  }
+
+  public void setCytoplasmSettings(ROIAppearanceSettings newSettings) {
+    if (newSettings == null) {
+      throw new IllegalArgumentException("Cytoplasm settings cannot be null");
+    }
+    this.cytoplasmSettings = newSettings;
+    notifySettingsChanged();
+    LOGGER.debug("Cytoplasm settings updated: {}", newSettings);
+  }
+
+  public void setCellSettings(ROIAppearanceSettings newSettings) {
+    if (newSettings == null) {
+      throw new IllegalArgumentException("Cell settings cannot be null");
+    }
+    this.cellSettings = newSettings;
+    notifySettingsChanged();
+    LOGGER.debug("Cell settings updated: {}", newSettings);
+  }
+
   // Convenience setters for backward compatibility (delegates to vessel settings)
   public void setRoiBorderColor(Color roiBorderColor) {
-    vesselSettings.setBorderColor(roiBorderColor);
-    notifySettingsChanged();
+    setVesselSettings(vesselSettings.withBorderColor(roiBorderColor));
     LOGGER.debug(
         "Vessel ROI border color set to: RGB({}, {}, {})",
         roiBorderColor.getRed(),
@@ -294,14 +424,12 @@ public class MainSettings {
   }
 
   public void setRoiFillOpacity(float roiFillOpacity) {
-    vesselSettings.setFillOpacity(roiFillOpacity);
-    notifySettingsChanged();
+    setVesselSettings(vesselSettings.withFillOpacity(roiFillOpacity));
     LOGGER.debug("Vessel ROI fill opacity set to: {}", roiFillOpacity);
   }
 
   public void setRoiBorderWidth(int roiBorderWidth) {
-    vesselSettings.setBorderWidth(roiBorderWidth);
-    notifySettingsChanged();
+    setVesselSettings(vesselSettings.withBorderWidth(roiBorderWidth));
     LOGGER.debug("Vessel ROI border width set to: {}", roiBorderWidth);
   }
 
@@ -310,11 +438,26 @@ public class MainSettings {
    */
   public void updateCategorySettings(
       ROICategory category, Color borderColor, float fillOpacity, int borderWidth) {
-    ROIAppearanceSettings settings = getSettingsForCategory(category);
-    settings.setBorderColor(borderColor);
-    settings.setFillOpacity(fillOpacity);
-    settings.setBorderWidth(borderWidth);
-    notifySettingsChanged();
+    ROIAppearanceSettings newSettings =
+        new ROIAppearanceSettings(borderColor, fillOpacity, borderWidth);
+
+    switch (category) {
+      case VESSEL:
+        setVesselSettings(newSettings);
+        break;
+      case NUCLEUS:
+        setNucleusSettings(newSettings);
+        break;
+      case CYTOPLASM:
+        setCytoplasmSettings(newSettings);
+        break;
+      case CELL:
+        setCellSettings(newSettings);
+        break;
+      default:
+        throw new IllegalArgumentException("Unknown ROI category: " + category);
+    }
+
     LOGGER.debug(
         "Updated {} settings: color=RGB({},{},{}), opacity={}, width={}",
         category.getDisplayName(),
@@ -364,21 +507,10 @@ public class MainSettings {
     scaleUnit = DEFAULT_SCALE_UNIT;
 
     // Reset all ROI category settings to defaults
-    vesselSettings.setBorderColor(ROICategory.VESSEL.getDefaultBorderColor());
-    vesselSettings.setFillOpacity(ROICategory.VESSEL.getDefaultFillOpacity());
-    vesselSettings.setBorderWidth(ROICategory.VESSEL.getDefaultBorderWidth());
-
-    nucleusSettings.setBorderColor(ROICategory.NUCLEUS.getDefaultBorderColor());
-    nucleusSettings.setFillOpacity(ROICategory.NUCLEUS.getDefaultFillOpacity());
-    nucleusSettings.setBorderWidth(ROICategory.NUCLEUS.getDefaultBorderWidth());
-
-    cytoplasmSettings.setBorderColor(ROICategory.CYTOPLASM.getDefaultBorderColor());
-    cytoplasmSettings.setFillOpacity(ROICategory.CYTOPLASM.getDefaultFillOpacity());
-    cytoplasmSettings.setBorderWidth(ROICategory.CYTOPLASM.getDefaultBorderWidth());
-
-    cellSettings.setBorderColor(ROICategory.CELL.getDefaultBorderColor());
-    cellSettings.setFillOpacity(ROICategory.CELL.getDefaultFillOpacity());
-    cellSettings.setBorderWidth(ROICategory.CELL.getDefaultBorderWidth());
+    vesselSettings = ROIAppearanceSettings.fromCategory(ROICategory.VESSEL);
+    nucleusSettings = ROIAppearanceSettings.fromCategory(ROICategory.NUCLEUS);
+    cytoplasmSettings = ROIAppearanceSettings.fromCategory(ROICategory.CYTOPLASM);
+    cellSettings = ROIAppearanceSettings.fromCategory(ROICategory.CELL);
 
     notifySettingsChanged();
     LOGGER.info(
@@ -397,18 +529,16 @@ public class MainSettings {
   }
 
   private boolean hasCustomROISettings() {
-    return !vesselSettings.getBorderColor().equals(ROICategory.VESSEL.getDefaultBorderColor())
-        || vesselSettings.getFillOpacity() != ROICategory.VESSEL.getDefaultFillOpacity()
-        || vesselSettings.getBorderWidth() != ROICategory.VESSEL.getDefaultBorderWidth()
-        || !nucleusSettings.getBorderColor().equals(ROICategory.NUCLEUS.getDefaultBorderColor())
-        || nucleusSettings.getFillOpacity() != ROICategory.NUCLEUS.getDefaultFillOpacity()
-        || nucleusSettings.getBorderWidth() != ROICategory.NUCLEUS.getDefaultBorderWidth()
-        || !cytoplasmSettings.getBorderColor().equals(ROICategory.CYTOPLASM.getDefaultBorderColor())
-        || cytoplasmSettings.getFillOpacity() != ROICategory.CYTOPLASM.getDefaultFillOpacity()
-        || cytoplasmSettings.getBorderWidth() != ROICategory.CYTOPLASM.getDefaultBorderWidth()
-        || !cellSettings.getBorderColor().equals(ROICategory.CELL.getDefaultBorderColor())
-        || cellSettings.getFillOpacity() != ROICategory.CELL.getDefaultFillOpacity()
-        || cellSettings.getBorderWidth() != ROICategory.CELL.getDefaultBorderWidth();
+    ROIAppearanceSettings defaultVessel = ROIAppearanceSettings.fromCategory(ROICategory.VESSEL);
+    ROIAppearanceSettings defaultNucleus = ROIAppearanceSettings.fromCategory(ROICategory.NUCLEUS);
+    ROIAppearanceSettings defaultCytoplasm =
+        ROIAppearanceSettings.fromCategory(ROICategory.CYTOPLASM);
+    ROIAppearanceSettings defaultCell = ROIAppearanceSettings.fromCategory(ROICategory.CELL);
+
+    return !vesselSettings.equals(defaultVessel)
+        || !nucleusSettings.equals(defaultNucleus)
+        || !cytoplasmSettings.equals(defaultCytoplasm)
+        || !cellSettings.equals(defaultCell);
   }
 
   /**
@@ -433,11 +563,11 @@ public class MainSettings {
     return String.format(
         "%s[RGB(%d,%d,%d),opacity=%.2f,width=%d]",
         type,
-        settings.getBorderColor().getRed(),
-        settings.getBorderColor().getGreen(),
-        settings.getBorderColor().getBlue(),
-        settings.getFillOpacity(),
-        settings.getBorderWidth());
+        settings.borderColor().getRed(),
+        settings.borderColor().getGreen(),
+        settings.borderColor().getBlue(),
+        settings.fillOpacity(),
+        settings.borderWidth());
   }
 
   /**
@@ -461,19 +591,39 @@ public class MainSettings {
   }
 
   private void validateROISettings(String categoryName, ROIAppearanceSettings settings) {
-    if (settings.getBorderColor() == null) {
-      throw new IllegalStateException(categoryName + " border color cannot be null");
+    if (settings == null) {
+      throw new IllegalStateException(categoryName + " settings cannot be null");
     }
-    if (settings.getFillColor() == null) {
-      throw new IllegalStateException(categoryName + " fill color cannot be null");
-    }
-    if (settings.getFillOpacity() < 0.0f || settings.getFillOpacity() > 1.0f) {
+    try {
+      settings.validate();
+    } catch (IllegalStateException e) {
       throw new IllegalStateException(
-          "Invalid " + categoryName + " fill opacity: " + settings.getFillOpacity());
+          "Invalid " + categoryName + " settings: " + e.getMessage(), e);
     }
-    if (settings.getBorderWidth() < 1) {
-      throw new IllegalStateException(
-          "Invalid " + categoryName + " border width: " + settings.getBorderWidth());
-    }
+  }
+
+  /**
+   * Creates a new MainSettings instance with default values.
+   * Factory method for easier instantiation.
+   *
+   * @return A new MainSettings instance with default values
+   */
+  public static MainSettings createDefault() {
+    return new MainSettings();
+  }
+
+  /**
+   * Creates a copy of this MainSettings instance.
+   *
+   * @return A new MainSettings instance with the same values
+   */
+  public MainSettings copy() {
+    return new MainSettings(
+        pixelsPerMicrometer,
+        scaleUnit,
+        vesselSettings.copy(),
+        nucleusSettings.copy(),
+        cytoplasmSettings.copy(),
+        cellSettings.copy());
   }
 }
