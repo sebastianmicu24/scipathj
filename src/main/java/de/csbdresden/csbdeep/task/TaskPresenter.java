@@ -6,13 +6,13 @@
  * %%
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
- * 
+ *
  * 1. Redistributions of source code must retain the above copyright notice,
  *    this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -31,31 +31,31 @@ package de.csbdresden.csbdeep.task;
 
 public interface TaskPresenter {
 
-	void initialize();
+  void initialize();
 
-	void addTask(String title);
+  void addTask(String title);
 
-	void setTaskDone(int index);
+  void setTaskDone(int index);
 
-	void setTaskFailed(int index);
+  void setTaskFailed(int index);
 
-	void setTaskStarted(int index);
+  void setTaskStarted(int index);
 
-	void setTaskInProgress(int index);
+  void setTaskInProgress(int index);
 
-	void setTaskNumSteps(final int index, final int numSteps);
+  void setTaskNumSteps(final int index, final int numSteps);
 
-	void setTaskStep(final int index, final int step);
+  void setTaskStep(final int index, final int step);
 
-	void debug(String msg);
+  void debug(String msg);
 
-	void log(String msg);
+  void log(String msg);
 
-	void logError(String msg);
+  void logError(String msg);
 
-	void close();
+  void close();
 
-	void show();
+  void show();
 
-	void logWarning(String msg);
+  void logWarning(String msg);
 }

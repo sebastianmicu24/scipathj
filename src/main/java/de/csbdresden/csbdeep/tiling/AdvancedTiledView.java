@@ -6,13 +6,13 @@
  * %%
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
- * 
+ *
  * 1. Redistributions of source code must retain the above copyright notice,
  *    this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -29,56 +29,58 @@
 
 package de.csbdresden.csbdeep.tiling;
 
+import de.csbdresden.csbdeep.imglib2.TiledView;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import de.csbdresden.csbdeep.imglib2.TiledView;
 import net.imagej.axis.AxisType;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.type.numeric.RealType;
 
 public class AdvancedTiledView<T extends RealType<T>> extends TiledView<T> {
 
-	private final Map<AxisType, Long> originalDims;
-	private final AxisType[] originalAxes;
-	private List<RandomAccessibleInterval<T>> processedTiles;
-	// protected int blockMultiple;
-	// protected long blockWidth;
+  private final Map<AxisType, Long> originalDims;
+  private final AxisType[] originalAxes;
+  private List<RandomAccessibleInterval<T>> processedTiles;
 
-	public AdvancedTiledView(final RandomAccessibleInterval<T> source,
-		final long[] blockSize, final long[] overlap, final AxisType[] axes)
-	{
-		super(source, blockSize, overlap);
-		processedTiles = new ArrayList<>();
-		originalDims = new HashMap<>();
-		this.originalAxes = axes;
-	}
+  // protected int blockMultiple;
+  // protected long blockWidth;
 
-	public long[] getOverlapComplete() {
-		long[] overlap = new long[originalAxes.length];
-		for(int i = 0; i < numDimensions(); i++) {
-			overlap[i] = super.getOverlap()[i];
-		}
-		return overlap;
-	}
+  public AdvancedTiledView(
+      final RandomAccessibleInterval<T> source,
+      final long[] blockSize,
+      final long[] overlap,
+      final AxisType[] axes) {
+    super(source, blockSize, overlap);
+    processedTiles = new ArrayList<>();
+    originalDims = new HashMap<>();
+    this.originalAxes = axes;
+  }
 
-	public Map<AxisType, Long> getOriginalDims() {
-		return originalDims;
-	}
+  public long[] getOverlapComplete() {
+    long[] overlap = new long[originalAxes.length];
+    for (int i = 0; i < numDimensions(); i++) {
+      overlap[i] = super.getOverlap()[i];
+    }
+    return overlap;
+  }
 
-	public List<RandomAccessibleInterval<T>> getProcessedTiles() {
-		return processedTiles;
-	}
+  public Map<AxisType, Long> getOriginalDims() {
+    return originalDims;
+  }
 
-	public AxisType[] getOriginalAxes() {
-		return originalAxes;
-	}
+  public List<RandomAccessibleInterval<T>> getProcessedTiles() {
+    return processedTiles;
+  }
 
-	public void dispose() {
-		// if(originalDims != null) {
-		// originalDims.clear();
-		// }
-	}
+  public AxisType[] getOriginalAxes() {
+    return originalAxes;
+  }
+
+  public void dispose() {
+    // if(originalDims != null) {
+    // originalDims.clear();
+    // }
+  }
 }

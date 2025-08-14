@@ -6,13 +6,13 @@
  * %%
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
- * 
+ *
  * 1. Redistributions of source code must retain the above copyright notice,
  *    this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -43,111 +43,128 @@ import net.imglib2.exception.IncompatibleTypeException;
  */
 public class Java23CompatibleInputValidator extends DefaultTask implements InputValidator {
 
-	@Override
-	public void run(final Dataset input, final Network network) throws IncompatibleTypeException {
-		setStarted();
-		
-		log("Starting Java 23 compatible input validation");
-		
-		// Check if network has valid node shape
-		if (network.getInputNode() == null) {
-			log("Warning: Input node is null, skipping validation");
-			setFinished();
-			return;
-		}
-		
-		Object nodeShapeObj = network.getInputNode().getNodeShape();
-		long[] nodeShape = null;
-		if (nodeShapeObj instanceof long[]) {
-			nodeShape = (long[]) nodeShapeObj;
-		} else if (nodeShapeObj instanceof Long[]) {
-			Long[] longArray = (Long[]) nodeShapeObj;
-			nodeShape = new long[longArray.length];
-			for (int i = 0; i < longArray.length; i++) {
-				nodeShape[i] = longArray[i] != null ? longArray[i] : 0;
-			}
-		}
-		if (nodeShape == null) {
-			log("Warning: Node shape is null, skipping validation");
-			setFinished();
-			return;
-		}
-		
-		log("Input node shape: " + java.util.Arrays.toString(nodeShape));
-		log("Input dataset dimensions: " + input.numDimensions());
-		
-		checkForTooManyDimensions(input, network);
+  @Override
+  public void run(final Dataset input, final Network network) throws IncompatibleTypeException {
+    setStarted();
 
-		// Validate each dimension, handling null axes gracefully
-		for (int i = 0; i < nodeShape.length; i++) {
-			AxisType axis = null;
-			try {
-				axis = network.getInputNode().getNodeAxis(i);
-			} catch (Exception e) {
-				log("Warning: Could not get axis for dimension " + i + ": " + e.getMessage());
-			}
-			
-			long size = nodeShape[i];
-			
-			if (axis != null) {
-				checkIfAxesWithFixedSizeExists(input, axis, size);
-				checkScalarAxes(input, axis, size);
-			} else {
-				log("Warning: Axis " + i + " is null, skipping axis-specific validation for dimension with size " + size);
-			}
-		}
+    log("Starting Java 23 compatible input validation");
 
-		log("Input validation completed successfully");
-		setFinished();
-	}
+    // Check if network has valid node shape
+    if (network.getInputNode() == null) {
+      log("Warning: Input node is null, skipping validation");
+      setFinished();
+      return;
+    }
 
-	private void checkForTooManyDimensions(Dataset input, Network network) {
-		Object nodeShapeObj = network.getInputNode().getNodeShape();
-		long[] nodeShape = null;
-		if (nodeShapeObj instanceof long[]) {
-			nodeShape = (long[]) nodeShapeObj;
-		} else if (nodeShapeObj instanceof Long[]) {
-			Long[] longArray = (Long[]) nodeShapeObj;
-			nodeShape = new long[longArray.length];
-			for (int i = 0; i < longArray.length; i++) {
-				nodeShape[i] = longArray[i] != null ? longArray[i] : 0;
-			}
-		}
-		if (nodeShape != null && nodeShape.length == 4) {
-			// Only check if we can safely access TIME and Z dimensions
-			try {
-				if (input.dimension(Axes.TIME) > 1 && input.dimension(Axes.Z) > 1) {
-					throw new IncompatibleTypeException(input, "Network is meant for 2D images and can handle one additional batch dimension (Z or TIME), " +
-							"but this dataset contains data in both Z and TIME dimension.");
-				}
-			} catch (Exception e) {
-				log("Warning: Could not check TIME/Z dimensions: " + e.getMessage());
-			}
-		}
-	}
+    Object nodeShapeObj = network.getInputNode().getNodeShape();
+    long[] nodeShape = null;
+    if (nodeShapeObj instanceof long[]) {
+      nodeShape = (long[]) nodeShapeObj;
+    } else if (nodeShapeObj instanceof Long[]) {
+      Long[] longArray = (Long[]) nodeShapeObj;
+      nodeShape = new long[longArray.length];
+      for (int i = 0; i < longArray.length; i++) {
+        nodeShape[i] = longArray[i] != null ? longArray[i] : 0;
+      }
+    }
+    if (nodeShape == null) {
+      log("Warning: Node shape is null, skipping validation");
+      setFinished();
+      return;
+    }
 
-	private void checkIfAxesWithFixedSizeExists(Dataset input, AxisType axis, long size) {
-		if (size > 1) {
-			try {
-				if (!input.axis(axis).isPresent()) {
-					throw new IncompatibleTypeException(input, "Input should have axis of type " + axis.getLabel() + " and size " + size);
-				}
-			} catch (Exception e) {
-				log("Warning: Could not check axis presence for " + axis.getLabel() + ": " + e.getMessage());
-			}
-		}
-	}
+    log("Input node shape: " + java.util.Arrays.toString(nodeShape));
+    log("Input dataset dimensions: " + input.numDimensions());
 
-	private void checkScalarAxes(Dataset input, AxisType axis, long size) {
-		if (size == 1) {
-			try {
-				if (input.axis(axis).isPresent() && input.dimension(axis) != size) {
-					throw new IncompatibleTypeException(input, "Input axis of type " + axis.getLabel() +
-							" should have size " + size + " but has size " + input.dimension(axis));
-				}
-			} catch (Exception e) {
-				log("Warning: Could not check scalar axis for " + axis.getLabel() + ": " + e.getMessage());
-			}
-		}
-	}
+    checkForTooManyDimensions(input, network);
+
+    // Validate each dimension, handling null axes gracefully
+    for (int i = 0; i < nodeShape.length; i++) {
+      AxisType axis = null;
+      try {
+        axis = network.getInputNode().getNodeAxis(i);
+      } catch (Exception e) {
+        log("Warning: Could not get axis for dimension " + i + ": " + e.getMessage());
+      }
+
+      long size = nodeShape[i];
+
+      if (axis != null) {
+        checkIfAxesWithFixedSizeExists(input, axis, size);
+        checkScalarAxes(input, axis, size);
+      } else {
+        log(
+            "Warning: Axis "
+                + i
+                + " is null, skipping axis-specific validation for dimension with size "
+                + size);
+      }
+    }
+
+    log("Input validation completed successfully");
+    setFinished();
+  }
+
+  private void checkForTooManyDimensions(Dataset input, Network network) {
+    Object nodeShapeObj = network.getInputNode().getNodeShape();
+    long[] nodeShape = null;
+    if (nodeShapeObj instanceof long[]) {
+      nodeShape = (long[]) nodeShapeObj;
+    } else if (nodeShapeObj instanceof Long[]) {
+      Long[] longArray = (Long[]) nodeShapeObj;
+      nodeShape = new long[longArray.length];
+      for (int i = 0; i < longArray.length; i++) {
+        nodeShape[i] = longArray[i] != null ? longArray[i] : 0;
+      }
+    }
+    if (nodeShape != null && nodeShape.length == 4) {
+      // Only check if we can safely access TIME and Z dimensions
+      try {
+        if (input.dimension(Axes.TIME) > 1 && input.dimension(Axes.Z) > 1) {
+          throw new IncompatibleTypeException(
+              input,
+              "Network is meant for 2D images and can handle one additional batch dimension (Z or"
+                  + " TIME), but this dataset contains data in both Z and TIME dimension.");
+        }
+      } catch (Exception e) {
+        log("Warning: Could not check TIME/Z dimensions: " + e.getMessage());
+      }
+    }
+  }
+
+  private void checkIfAxesWithFixedSizeExists(Dataset input, AxisType axis, long size) {
+    if (size > 1) {
+      try {
+        if (!input.axis(axis).isPresent()) {
+          throw new IncompatibleTypeException(
+              input, "Input should have axis of type " + axis.getLabel() + " and size " + size);
+        }
+      } catch (Exception e) {
+        log(
+            "Warning: Could not check axis presence for "
+                + axis.getLabel()
+                + ": "
+                + e.getMessage());
+      }
+    }
+  }
+
+  private void checkScalarAxes(Dataset input, AxisType axis, long size) {
+    if (size == 1) {
+      try {
+        if (input.axis(axis).isPresent() && input.dimension(axis) != size) {
+          throw new IncompatibleTypeException(
+              input,
+              "Input axis of type "
+                  + axis.getLabel()
+                  + " should have size "
+                  + size
+                  + " but has size "
+                  + input.dimension(axis));
+        }
+      } catch (Exception e) {
+        log("Warning: Could not check scalar axis for " + axis.getLabel() + ": " + e.getMessage());
+      }
+    }
+  }
 }

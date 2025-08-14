@@ -21,6 +21,92 @@ Le proposte di miglioramento possono essere raggruppate nelle seguenti categorie
 
 ---
 
+## Modifiche Recenti - Refactoring Dependency Injection (Agosto 2025)
+
+### Riepilogo delle Modifiche Implementate
+
+Durante il refactoring per implementare i principi SOLID, in particolare il Dependency Inversion Principle (DIP), sono state apportate le seguenti modifiche significative per eliminare l'uso del pattern Singleton e implementare la dependency injection:
+
+#### File Modificati per Dependency Injection
+
+**1. [`AnalysisPipeline.java`](src/main/java/com/scipath/scipathj/core/analysis/AnalysisPipeline.java)**
+- **Modifiche Apportate:**
+  - Aggiunto `ConfigurationManager` come campo privato finale
+  - Aggiornati tutti e tre i costruttori per accettare `ConfigurationManager` come primo parametro
+  - Rimosso l'uso di `ConfigurationManager.getInstance()` in tutto il file
+  - Aggiornate le chiamate ai costruttori delle classi di segmentazione per passare `ConfigurationManager` come primo parametro:
+    - `VesselSegmentation(configurationManager, imagePlus, fileName, vesselSettings)`
+    - `SimpleHENuclearSegmentation(configurationManager, imagePlus, fileName, nuclearSettings)`
+    - `CytoplasmSegmentation(configurationManager, imagePlus, fileName, vesselROIsForExclusion, nucleusROIs, cytoplasmSettings)`
+
+**2. [`CytoplasmSegmentation.java`](src/main/java/com/scipath/scipathj/core/analysis/CytoplasmSegmentation.java)**
+- **Modifiche Apportate:**
+  - Aggiunto `ConfigurationManager` come campo privato finale
+  - Aggiornati entrambi i costruttori per accettare `ConfigurationManager` come primo parametro
+  - Rimosso l'uso di `ConfigurationManager.getInstance()` in tutto il file
+
+**3. [`SimpleHENuclearSegmentation.java`](src/main/java/com/scipath/scipathj/core/analysis/SimpleHENuclearSegmentation.java)**
+- **Modifiche Apportate:**
+  - Aggiunto `ConfigurationManager` come campo privato finale
+  - Aggiornati entrambi i costruttori per accettare `ConfigurationManager` come primo parametro
+  - Rimosso l'uso di `ConfigurationManager.getInstance()` in tutto il file
+
+**4. [`VesselSegmentation.java`](src/main/java/com/scipath/scipathj/core/analysis/VesselSegmentation.java)**
+- **Modifiche Apportate:**
+  - Aggiunto `ConfigurationManager` come campo privato finale
+  - Aggiornati entrambi i costruttori per accettare `ConfigurationManager` come primo parametro
+  - Rimosso l'uso di `ConfigurationManager.getInstance()` in tutto il file
+  - Risolto errore di sintassi (parentesi graffa extra) che impediva la compilazione
+
+**5. [`MainWindow.java`](src/main/java/com/scipath/scipathj/ui/main/MainWindow.java)**
+- **Modifiche Apportate:**
+  - Aggiornata la chiamata al costruttore `MainSettingsDialog` per passare `configurationManager`
+  - Aggiornata la chiamata al costruttore `PipelineRecapPanel` per passare `configurationManager`
+  - Aggiornata la chiamata al costruttore `MenuBarManager` per passare `configurationManager`
+
+**6. [`MainSettingsDialog.java`](src/main/java/com/scipath/scipathj/ui/dialogs/settings/MainSettingsDialog.java)**
+- **Modifiche Apportate:**
+  - Aggiunto `ConfigurationManager` come parametro del costruttore
+  - Rimosso l'uso di `ConfigurationManager.getInstance()` in tutto il file
+
+**7. [`NuclearSegmentationSettingsDialog.java`](src/main/java/com/scipath/scipathj/ui/dialogs/settings/NuclearSegmentationSettingsDialog.java)**
+- **Modifiche Apportate:**
+  - Aggiunto `ConfigurationManager` come parametro del costruttore
+  - Rimosso l'uso di `ConfigurationManager.getInstance()` in tutto il file
+
+**8. [`VesselSegmentationSettingsDialog.java`](src/main/java/com/scipath/scipathj/ui/dialogs/settings/VesselSegmentationSettingsDialog.java)**
+- **Modifiche Apportate:**
+  - Aggiunto `ConfigurationManager` come parametro del costruttore
+  - Rimosso l'uso di `ConfigurationManager.getInstance()` in tutto il file
+
+**9. [`PipelineRecapPanel.java`](src/main/java/com/scipath/scipathj/ui/components/PipelineRecapPanel.java)**
+- **Modifiche Apportate:**
+  - Aggiunto `ConfigurationManager` come campo privato finale
+  - Aggiornato il costruttore per accettare `ConfigurationManager` come parametro
+  - Aggiornate le chiamate ai costruttori dei dialog di impostazioni per passare `configurationManager`:
+    - `VesselSegmentationSettingsDialog(parentFrame, configurationManager)`
+    - `NuclearSegmentationSettingsDialog(parentFrame, configurationManager)`
+
+**10. [`MenuBarManager.java`](src/main/java/com/scipath/scipathj/ui/components/MenuBarManager.java)**
+- **Modifiche Apportate:**
+  - Aggiunto `ConfigurationManager` come campo privato finale
+  - Aggiornato il costruttore per accettare `ConfigurationManager` come parametro
+  - Aggiornata la chiamata al costruttore `VesselSegmentationSettingsDialog` per passare `configurationManager`
+
+**11. [`AnalysisController.java`](src/main/java/com/scipath/scipathj/ui/controllers/AnalysisController.java)**
+- **Modifiche Apportate:**
+  - Aggiornata la chiamata al costruttore `AnalysisPipeline` per passare `configurationManager` come primo parametro
+
+### Benefici del Refactoring
+
+1. **Eliminazione del Pattern Singleton**: Rimosso l'uso di `ConfigurationManager.getInstance()` da tutti i file, migliorando la testabilità e riducendo l'accoppiamento
+2. **Implementazione Dependency Injection**: Tutte le dipendenze vengono ora iniettate attraverso i costruttori, seguendo il Dependency Inversion Principle
+3. **Miglioramento della Testabilità**: Le classi possono ora essere testate in isolamento con mock objects
+4. **Riduzione dell'Accoppiamento**: Le classi non dipendono più direttamente dall'implementazione singleton di ConfigurationManager
+5. **Maggiore Flessibilità**: Il sistema è ora più flessibile e può supportare diverse configurazioni o implementazioni di ConfigurationManager
+
+---
+
 ## File di configurazione
 
 - [`.gitignore`](.gitignore)
@@ -30,7 +116,7 @@ Le proposte di miglioramento possono essere raggruppate nelle seguenti categorie
         *   Tradurre i commenti interni in inglese per coerenza con l'obiettivo open source.
 - [`pom.xml`](pom.xml)
     *   **Azioni di Miglioramento Proposte:**
-        *   **Aggiornamento Dipendenze:** Verificare e aggiornare tutte le dipendenze alle ultime versioni stabili. In particolare, valutare l'aggiornamento a TensorFlow 2.x e alle relative librerie ImageJ, poiché TensorFlow 1.x è obsoleto.
+        *   **Aggiornamento Dipendenze:** Verificare e aggiornare tutte le dipendenze alle ultime versioni stabili.
         *   **Configurazione Compiler:** Correggere la configurazione del `maven-compiler-plugin` per usare `maven.compiler.target` o definire `maven.compiler.release` a `23`.
         *   **Plugin di Qualità del Codice:** Aggiungere plugin Maven per la formattazione del codice (es. Spotless o Checkstyle), l'analisi statica (es. SpotBugs, PMD) e la generazione di Javadoc.
         *   **Informazioni Progetto:** Aggiungere sezioni `<licenses>`, `<developers>` e `<scm>` per fornire dettagli sulla licenza, i contributori e il repository Git, essenziali per un progetto open source.
@@ -48,7 +134,7 @@ Le proposte di miglioramento possono essere raggruppate nelle seguenti categorie
 - [`SciPathJApplication.java`](src/main/java/com/scipath/scipathj/SciPathJApplication.java)
     *   **Azioni di Miglioramento Proposte:**
         *   **Rimozione Codice di Debug/Logging:** Rimuovere o ridurre significativamente le istruzioni di logging a livello `INFO` e `DEBUG` relative al ClassLoader e al precaricamento di TensorFlow, in quanto sembrano essere per il debug di avvio.
-        *   **Gestione ClassLoader:** Valutare la rimozione o la semplificazione delle classi `ClassLoaderDebugger` e `Java21ClassLoaderFix` e del loro utilizzo, se i problemi di compatibilità con Java 21/23 sono stati risolti o se l'aggiornamento di TensorFlow li rende superflui.
+        *   **Gestione ClassLoader:** Valutare la rimozione o la semplificazione delle classi `ClassLoaderDebugger` e `Java21ClassLoaderFix` e del loro utilizzo, se i problemi di compatibilità con Java 21/23 sono stati risolti.
         *   **Gestione Eccezioni:** Sostituire i `catch (Exception e)` generici con tipi di eccezioni più specifici per una gestione degli errori più granulare.
         *   **Pulizia Proprietà di Sistema:** Rivedere e rimuovere le proprietà di sistema impostate in `setupSystemProperties()` che potrebbero non essere più necessarie con Java 23 o un TensorFlow aggiornato.
         *   **Javadoc:** Assicurarsi che il Javadoc sia completo e aggiornato per tutti i metodi e le classi.
@@ -87,7 +173,7 @@ Le proposte di miglioramento possono essere raggruppate nelle seguenti categorie
     *   **Azioni di Miglioramento Proposte:**
         *   **Rinominazione:** Rinominare la classe in `NuclearSegmentation` e aggiornare tutti i riferimenti (nome file, dichiarazione classe, importazioni, istanziazioni).
         *   **Rimozione Codice di Debug/Logging:** Rimuovere la maggior parte delle istruzioni `LOGGER.info` e `DirectFileLogger.logStarDist` relative al debug di ClassLoader, TensorFlow e JPackage. Ridurre il logging essenziale a livelli `DEBUG`/`TRACE`.
-        *   **Semplificazione ClassLoader/TensorFlow:** Rimuovere o semplificare drasticamente le classi `ClassLoaderDebugger` e `Java21ClassLoaderFix` e la logica complessa di `setupJPackageTensorFlowEnvironment`, `detectGuiExecutionContext`, `initializeTensorFlowForGui`, `logRuntimeEnvironment`, se i problemi di compatibilità sono risolti con Java 23 e un TensorFlow aggiornato.
+        *   **Semplificazione ClassLoader/TensorFlow:** Rimuovere o semplificare drasticamente le classi `ClassLoaderDebugger` e `Java21ClassLoaderFix` e la logica complessa di `setupJPackageTensorFlowEnvironment`, `detectGuiExecutionContext`, `initializeTensorFlowForGui`, `logRuntimeEnvironment`, se i problemi di compatibilità sono risolti con Java 23.
         *   **Rimozione Fallback:** Valutare la rimozione del metodo `createFallbackNucleiDetection` e dei suoi ausiliari (`convertDatasetToImagePlus`, `performSimpleNucleiDetection`) if StarDist is considered stable and reliable.
         *   **Gestione Eccezioni:** Sostituire i `catch (Exception e)` generici con tipi di eccezioni più specifici.
         *   **Principi SOLID (SRP/DIP):** Rifattorizzare la logica di inizializzazione del contesto SciJava e la gestione della cache/compatibilità di TensorFlow in classi separate per migliorare il SRP e facilitare la Dependency Injection.
@@ -153,7 +239,7 @@ Le proposte di miglioramento possono essere raggruppate nelle seguenti categorie
         *   **Pulizia:** Se mantenuta, ridurre tutti i log a livelli `DEBUG`/`TRACE` e attivarli solo quando necessario.
 - [`Java21ClassLoaderFix.java`](src/main/java/com/scipath/scipathj/core/engine/Java21ClassLoaderFix.java)
     *   **Azioni di Miglioramento Proposte:**
-        *   **Rimozione Completa:** Questa classe è un workaround per problemi di `ClassLoader` specifici di Java 9+ e TensorFlow/CSBDeep. Dato che l'obiettivo è rendere il codice più pulito, moderno e pronto per la produzione, e considerando che TensorFlow 1.x è obsoleto e verrà aggiornato a 2.x (che potrebbe risolvere questi problemi di `ClassLoader` o avere meccanismi diversi), si consiglia di rimuoverla completamente, insieme a tutti i suoi riferimenti.
+        *   **Rimozione Completa:** Questa classe è un workaround per problemi di `ClassLoader` specifici di Java 9+ e TensorFlow/CSBDeep. Si consiglia di rimuoverla completamente, insieme a tutti i suoi riferimenti, se i problemi di compatibilità sono stati risolti o non sono più rilevanti.
 - [`ResourceManager.java`](src/main/java/com/scipath/scipathj/core/engine/ResourceManager.java)
     *   **Azioni di Miglioramento Proposte:**
         *   **Rimozione Codice di Debug/Logging:** Ridurre il logging a livelli `DEBUG`/`TRACE` per le informazioni non essenziali in produzione.
@@ -172,13 +258,13 @@ Le proposte di miglioramento possono essere raggruppate nelle seguenti categorie
         *   **Pulizia Generale:** Rivedere il metodo `executeWithErrorHandling` per una gestione più granulare degli errori, magari con eccezioni custom.
 - [`TensorFlowLibraryLoader.java`](src/main/java/com/scipath/scipathj/core/engine/TensorFlowLibraryLoader.java)
     *   **Azioni di Miglioramento Proposte:**
-        *   **Rimozione/Semplificazione:** Questa classe è un workaround per problemi di `ClassLoader` e caricamento di librerie native di TensorFlow 1.x. Se si aggiorna a TensorFlow 2.x (che ha un supporto migliore per Java e potrebbe non richiedere questi workaround) e si rimuovono `ClassLoaderDebugger` e `Java21ClassLoaderFix`, questa classe potrebbe diventare superflua o essere drasticamente semplificata. L'obiettivo è rimuoverla se possibile.
+        *   **Rimozione/Semplificazione:** Questa classe è un workaround per problemi di `ClassLoader` e caricamento di librerie native di TensorFlow 1.x. Se si rimuovono `ClassLoaderDebugger` e `Java21ClassLoaderFix`, questa classe potrebbe diventare superflua o essere drasticamente semplificata. L'obiettivo è rimuoverla se possibile.
         *   **Rimozione Codice di Debug/Logging:** Contiene molto logging dettagliato per il debug del caricamento. Questo dovrebbe essere rimosso o ridotto a livelli `DEBUG`/`TRACE` per la produzione.
         *   **Gestione Eccezioni:** Sostituire i `catch (Exception e)` generici con tipi di eccezioni più specifici.
         *   **Pulizia Generale:** Rimuovere la strategia 4 (`tryExtractAndLoad()`) se non implementata o non necessaria. Rivedere l'use of `AccessController.doPrivileged` se non strettamente necessario con le versioni più recenti di Java e TensorFlow.
 - [`TensorFlowNetworkWrapper.java`](src/main/java/com/scipath/scipathj/core/engine/TensorFlowNetworkWrapper.java)
     *   **Azioni di Miglioramento Proposte:**
-        *   **Rimozione/Semplificazione:** Questa classe è strettamente legata ai workaround di `ClassLoader` e al caricamento di TensorFlow 1.x. Se si aggiorna a TensorFlow 2.x e si rimuovono `ClassLoaderDebugger` e `Java21ClassLoaderFix`, questa classe dovrebbe essere rimossa o drasticamente semplificata, idealmente riducendosi a un semplice wrapper che delega al `TensorFlowNetwork` originale.
+        *   **Rimozione/Semplificazione:** Questa classe è strettamente legata ai workaround di `ClassLoader` e al caricamento di TensorFlow 1.x. Se si rimuovono `ClassLoaderDebugger` e `Java21ClassLoaderFix`, questa classe dovrebbe essere rimossa o drasticamente semplificata, idealmente riducendosi a un semplice wrapper che delega al `TensorFlowNetwork` originale.
         *   **Rimozione Codice di Debug/Logging:** Contiene un'enorme quantità di logging (`DirectFileLogger.logTensorFlow`, `LOGGER.debug`, `LOGGER.info`) che è chiaramente per il debug. Questo deve essere rimosso o ridotto a livelli `DEBUG`/`TRACE` per la produzione.
         *   **Gestione Eccezioni:** Sostituire i `catch (Exception e)` generici con tipi di eccezioni più specifici.
         *   **Principi SOLID (SRP):** La classe ha troppe responsabilità: caricamento della libreria, gestione dei fix di `ClassLoader`, gestione degli errori, interazione con `TensorFlowService`, logging. Queste responsabilità dovrebbero essere separate.

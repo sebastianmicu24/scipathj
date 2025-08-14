@@ -6,13 +6,13 @@
  * %%
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
- * 
+ *
  * 1. Redistributions of source code must retain the above copyright notice,
  *    this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -29,65 +29,60 @@
 
 package de.csbdresden.csbdeep.network.model;
 
+import de.csbdresden.csbdeep.imglib2.TiledView;
+import de.csbdresden.csbdeep.task.Task;
 import java.io.FileNotFoundException;
 import java.util.List;
 import java.util.concurrent.Callable;
-
-import org.scijava.Cancelable;
-import org.scijava.Disposable;
-
-import de.csbdresden.csbdeep.imglib2.TiledView;
-import de.csbdresden.csbdeep.task.Task;
 import net.imagej.Dataset;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.type.numeric.RealType;
+import org.scijava.Cancelable;
+import org.scijava.Disposable;
 
-public interface Network<T extends RealType<T>> extends
-	Callable<List<RandomAccessibleInterval<T>>>, Disposable, Cancelable
-{
+public interface Network<T extends RealType<T>>
+    extends Callable<List<RandomAccessibleInterval<T>>>, Disposable, Cancelable {
 
-	boolean loadModel(String pathOrURL, String modelName)
-		throws FileNotFoundException;
+  boolean loadModel(String pathOrURL, String modelName) throws FileNotFoundException;
 
-	void preprocess();
+  void preprocess();
 
-	RandomAccessibleInterval<T> execute(RandomAccessibleInterval<T> tile)
-		throws Exception;
+  RandomAccessibleInterval<T> execute(RandomAccessibleInterval<T> tile) throws Exception;
 
-	Task getStatus();
+  Task getStatus();
 
-	ImageTensor getInputNode();
+  ImageTensor getInputNode();
 
-	ImageTensor getOutputNode();
+  ImageTensor getOutputNode();
 
-	void loadInputNode(Dataset dataset);
+  void loadInputNode(Dataset dataset);
 
-	void loadOutputNode(Dataset dataset);
+  void loadOutputNode(Dataset dataset);
 
-	void initMapping();
+  void initMapping();
 
-	boolean isInitialized();
+  boolean isInitialized();
 
-	void resetTileCount();
+  void resetTileCount();
 
-	void setTiledView(TiledView<T> tiledView);
+  void setTiledView(TiledView<T> tiledView);
 
-	default void loadLibrary(){}
+  default void loadLibrary() {}
 
-	/**
-	 * Set if singleton dimensions of the output image should be dropped. If the
-	 * tile size in one dimension is only one this could remove an important
-	 * dimension. Default value is true.
-	 */
-	void setDropSingletonDims(final boolean dropSingletonDims);
+  /**
+   * Set if singleton dimensions of the output image should be dropped. If the
+   * tile size in one dimension is only one this could remove an important
+   * dimension. Default value is true.
+   */
+  void setDropSingletonDims(final boolean dropSingletonDims);
 
-	void calculateMapping();
+  void calculateMapping();
 
-	void doDimensionReduction();
+  void doDimensionReduction();
 
-	boolean libraryLoaded();
+  boolean libraryLoaded();
 
-	void clear();
+  void clear();
 
-	List<Integer> dropSingletonDims();
+  List<Integer> dropSingletonDims();
 }

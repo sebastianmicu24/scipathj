@@ -6,13 +6,13 @@
  * %%
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
- * 
+ *
  * 1. Redistributions of source code must retain the above copyright notice,
  *    this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -36,17 +36,20 @@ import net.imglib2.type.numeric.RealType;
 
 public interface Tiling<T extends RealType<T>> {
 
-	enum TilingAction {
-			NO_TILING, // e.g. Channel
-			TILE_WITH_PADDING, // e.g. X,Y,Z
-			TILE_WITHOUT_PADDING // e.g. TIME
-	}
+  enum TilingAction {
+    NO_TILING, // e.g. Channel
+    TILE_WITH_PADDING, // e.g. X,Y,Z
+    TILE_WITHOUT_PADDING // e.g. TIME
+  }
 
-	AdvancedTiledView<T> preprocess(RandomAccessibleInterval<T> input, AxisType[] axes, TilingAction[] tilingActions, Task parent);
+  AdvancedTiledView<T> preprocess(
+      RandomAccessibleInterval<T> input,
+      AxisType[] axes,
+      TilingAction[] tilingActions,
+      Task parent);
 
-	RandomAccessibleInterval<T> postprocess(Task parent,
-	                                        final AdvancedTiledView<T> results, AxisType[] axisTypes);
+  RandomAccessibleInterval<T> postprocess(
+      Task parent, final AdvancedTiledView<T> results, AxisType[] axisTypes);
 
-	int getTilesNum();
-
+  int getTilesNum();
 }

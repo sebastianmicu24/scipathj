@@ -6,13 +6,13 @@
  * %%
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
- * 
+ *
  * 1. Redistributions of source code must retain the above copyright notice,
  *    this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -36,32 +36,26 @@ import net.imagej.ops.OpService;
 import net.imglib2.type.NativeType;
 import net.imglib2.type.numeric.RealType;
 
-public class DefaultInputNormalizer<T extends RealType<T> & NativeType<T>>
-	extends DefaultTask implements InputNormalizer<T>
-{
+public class DefaultInputNormalizer<T extends RealType<T> & NativeType<T>> extends DefaultTask
+    implements InputNormalizer<T> {
 
-	private Normalizer normalizer = new PercentileNormalizer<>();
+  private Normalizer normalizer = new PercentileNormalizer<>();
 
-	@Override
-	public Dataset run(Dataset input, OpService opService,
-		DatasetService datasetService)
-	{
+  @Override
+  public Dataset run(Dataset input, OpService opService, DatasetService datasetService) {
 
-		setStarted();
+    setStarted();
 
-		log("Normalize .. ");
+    log("Normalize .. ");
 
-		final Dataset output = normalizer.normalize(input, opService,
-			datasetService);
+    final Dataset output = normalizer.normalize(input, opService, datasetService);
 
-		setFinished();
+    setFinished();
 
-		return output;
+    return output;
+  }
 
-	}
-
-	public Normalizer getNormalizer() {
-		return normalizer;
-	}
-
+  public Normalizer getNormalizer() {
+    return normalizer;
+  }
 }

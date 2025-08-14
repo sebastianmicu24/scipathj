@@ -6,13 +6,13 @@
  * %%
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
- * 
+ *
  * 1. Redistributions of source code must retain the above copyright notice,
  *    this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -34,69 +34,65 @@ import java.util.List;
 
 public class TaskForceManager extends DefaultTaskManager {
 
-	private final List<TaskForce> taskForces;
+  private final List<TaskForce> taskForces;
 
-	public TaskForceManager(boolean headless) {
-		super(headless);
-		taskForces = new ArrayList<>();
-	}
+  public TaskForceManager(boolean headless) {
+    super(headless);
+    taskForces = new ArrayList<>();
+  }
 
-	@Override
-	public void add(final Task task) {}
+  @Override
+  public void add(final Task task) {}
 
-	@Override
-	public void cancel(String reason) {
-		for (final Task task : taskForces) {
-			task.cancel(reason);
-		}
-	}
+  @Override
+  public void cancel(String reason) {
+    for (final Task task : taskForces) {
+      task.cancel(reason);
+    }
+  }
 
-	@Override
-	public void update(final Task task) {
+  @Override
+  public void update(final Task task) {
 
-		int index = taskForces.indexOf(task);
-		if (index == -1) {
-			TaskForce taskForce = null;
-			for (int i = 0; i < taskForces.size() && index < 0; i++) {
-				for (final Task subtask : taskForces.get(i).getTasks()) {
-					if (task.equals(subtask)) {
-						index = i;
-						taskForce = taskForces.get(i);
-						break;
-					}
-				}
-			}
-			if (index < 0 || taskForce == null) return;
-			taskForce.update(index);
-		}
-		else {
-			final TaskForce taskForce = taskForces.get(index);
-			if (taskForce.isStarted()) {
-				taskPresenter.setTaskStarted(index);
-				if (task.numSteps() > 1) {
-					taskPresenter.setTaskNumSteps(index, task.numSteps());
-					taskPresenter.setTaskStep(index, task.getCurrentStep());
-				}
-			}
-			if (taskForce.isFailed()) {
-				taskPresenter.setTaskFailed(index);
-			}
-			if (taskForce.isFinished()) {
-				taskPresenter.setTaskDone(index);
-			}
-		}
-	}
+    int index = taskForces.indexOf(task);
+    if (index == -1) {
+      TaskForce taskForce = null;
+      for (int i = 0; i < taskForces.size() && index < 0; i++) {
+        for (final Task subtask : taskForces.get(i).getTasks()) {
+          if (task.equals(subtask)) {
+            index = i;
+            taskForce = taskForces.get(i);
+            break;
+          }
+        }
+      }
+      if (index < 0 || taskForce == null) return;
+      taskForce.update(index);
+    } else {
+      final TaskForce taskForce = taskForces.get(index);
+      if (taskForce.isStarted()) {
+        taskPresenter.setTaskStarted(index);
+        if (task.numSteps() > 1) {
+          taskPresenter.setTaskNumSteps(index, task.numSteps());
+          taskPresenter.setTaskStep(index, task.getCurrentStep());
+        }
+      }
+      if (taskForce.isFailed()) {
+        taskPresenter.setTaskFailed(index);
+      }
+      if (taskForce.isFinished()) {
+        taskPresenter.setTaskDone(index);
+      }
+    }
+  }
 
-	public <T extends Task> void createTaskForce(final String codeName,
-		final T... tasks)
-	{
-		final TaskForce taskForce = new TaskForce(codeName, tasks, taskPresenter);
-		taskForces.add(taskForce);
-		taskForce.setManager(this);
-		taskPresenter.addTask(taskForce.getTitle());
-		for (final Task task : tasks) {
-			task.setManager(this);
-		}
-	}
-
+  public <T extends Task> void createTaskForce(final String codeName, final T... tasks) {
+    final TaskForce taskForce = new TaskForce(codeName, tasks, taskPresenter);
+    taskForces.add(taskForce);
+    taskForce.setManager(this);
+    taskPresenter.addTask(taskForce.getTitle());
+    for (final Task task : tasks) {
+      task.setManager(this);
+    }
+  }
 }

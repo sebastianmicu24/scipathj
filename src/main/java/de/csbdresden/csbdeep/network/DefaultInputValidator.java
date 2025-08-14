@@ -6,13 +6,13 @@
  * %%
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
- * 
+ *
  * 1. Redistributions of source code must retain the above copyright notice,
  *    this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -38,44 +38,51 @@ import net.imglib2.exception.IncompatibleTypeException;
 
 public class DefaultInputValidator extends DefaultTask implements InputValidator {
 
-	@Override
-	public void run(final Dataset input, final Network network) throws IncompatibleTypeException {
+  @Override
+  public void run(final Dataset input, final Network network) throws IncompatibleTypeException {
 
-		setStarted();
+    setStarted();
 
-		checkForTooManyDimensions(input, network);
+    checkForTooManyDimensions(input, network);
 
-		for (int i = 0; i < network.getInputNode().getNodeShape().length; i++) {
-			AxisType axis = network.getInputNode().getNodeAxis(i);
-			long size = network.getInputNode().getNodeShape()[i];
-			checkIfAxesWithFixedSizeExists(input, axis, size);
-			checkScalarAxes(input, axis, size);
-		}
+    for (int i = 0; i < network.getInputNode().getNodeShape().length; i++) {
+      AxisType axis = network.getInputNode().getNodeAxis(i);
+      long size = network.getInputNode().getNodeShape()[i];
+      checkIfAxesWithFixedSizeExists(input, axis, size);
+      checkScalarAxes(input, axis, size);
+    }
 
-		setFinished();
+    setFinished();
+  }
 
-	}
+  private void checkForTooManyDimensions(Dataset input, Network network) {
+    if (network.getInputNode().getNodeShape().length == 4) {
+      if (input.dimension(Axes.TIME) > 1 && input.dimension(Axes.Z) > 1) {
+        throw new IncompatibleTypeException(
+            input,
+            "Network is meant for 2D images and can handle one additional batch dimension (Z or"
+                + " TIME), but this dataset contains data in both Z and TIME dimension.");
+      }
+    }
+  }
 
-	private void checkForTooManyDimensions(Dataset input, Network network) {
-		if(network.getInputNode().getNodeShape().length == 4) {
-			if(input.dimension(Axes.TIME) > 1 && input.dimension(Axes.Z) > 1) {
-				throw new IncompatibleTypeException(input, "Network is meant for 2D images and can handle one additional batch dimension (Z or TIME), " +
-						"but this dataset contains data in both Z and TIME dimension.");
-			}
-		}
-	}
+  private void checkIfAxesWithFixedSizeExists(Dataset input, AxisType axis, long size) {
+    if (size > 1 && !input.axis(axis).isPresent()) {
+      throw new IncompatibleTypeException(
+          input, "Input should have axis of type " + axis.getLabel() + " and size " + size);
+    }
+  }
 
-	private void checkIfAxesWithFixedSizeExists(Dataset input, AxisType axis, long size) {
-		if(size > 1 && !input.axis(axis).isPresent()) {
-			throw new IncompatibleTypeException(input, "Input should have axis of type " + axis.getLabel() + " and size " + size);
-		}
-	}
-
-	private void checkScalarAxes(Dataset input, AxisType axis, long size) {
-		if(size == 1 && input.axis(axis).isPresent()  && input.dimension(axis) != size) {
-			throw new IncompatibleTypeException(input, "Input axis of type " + axis.getLabel() +
-					" should have size " + size + " but has size " + input.dimension(axis));
-		}
-	}
-
+  private void checkScalarAxes(Dataset input, AxisType axis, long size) {
+    if (size == 1 && input.axis(axis).isPresent() && input.dimension(axis) != size) {
+      throw new IncompatibleTypeException(
+          input,
+          "Input axis of type "
+              + axis.getLabel()
+              + " should have size "
+              + size
+              + " but has size "
+              + input.dimension(axis));
+    }
+  }
 }

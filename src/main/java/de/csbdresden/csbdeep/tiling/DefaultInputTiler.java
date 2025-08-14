@@ -6,13 +6,13 @@
  * %%
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
- * 
+ *
  * 1. Redistributions of source code must retain the above copyright notice,
  *    this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -29,33 +29,31 @@
 
 package de.csbdresden.csbdeep.tiling;
 
+import de.csbdresden.csbdeep.task.DefaultTask;
 import java.util.List;
 import java.util.stream.Collectors;
-
-import de.csbdresden.csbdeep.task.DefaultTask;
 import net.imagej.axis.AxisType;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.type.numeric.RealType;
 
-public class DefaultInputTiler<T extends RealType<T>> extends DefaultTask
-	implements InputTiler<T>
-{
+public class DefaultInputTiler<T extends RealType<T>> extends DefaultTask implements InputTiler<T> {
 
-	@Override
-	public List<AdvancedTiledView<T>> run(
-		final List<RandomAccessibleInterval<T>> input, final AxisType[] axes,
-		final Tiling tiling, final Tiling.TilingAction[] tilingActions)
-	{
+  @Override
+  public List<AdvancedTiledView<T>> run(
+      final List<RandomAccessibleInterval<T>> input,
+      final AxisType[] axes,
+      final Tiling tiling,
+      final Tiling.TilingAction[] tilingActions) {
 
-		setStarted();
+    setStarted();
 
-		final List output = input.stream().map(image -> tiling.preprocess(image,
-			axes, tilingActions, this)).collect(Collectors.toList());
+    final List output =
+        input.stream()
+            .map(image -> tiling.preprocess(image, axes, tilingActions, this))
+            .collect(Collectors.toList());
 
-		setFinished();
+    setFinished();
 
-		return output;
-
-	}
-
+    return output;
+  }
 }

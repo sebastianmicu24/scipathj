@@ -6,13 +6,13 @@
  * %%
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
- * 
+ *
  * 1. Redistributions of source code must retain the above copyright notice,
  *    this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -33,61 +33,61 @@ import org.scijava.Cancelable;
 
 public interface Task extends Cancelable {
 
-	void setManager(TaskManager manager);
+  void setManager(TaskManager manager);
 
-	boolean isStarted();
+  boolean isStarted();
 
-	boolean isFinished();
+  boolean isFinished();
 
-	boolean isFailed();
+  boolean isFailed();
 
-	void setStarted();
+  void setStarted();
 
-	void setIdle();
+  void setIdle();
 
-	void setFailed();
+  void setFailed();
 
-	void setFinished();
+  void setFinished();
 
-	void setFinished(boolean finished);
+  void setFinished(boolean finished);
 
-	boolean hasMultipleSteps();
+  boolean hasMultipleSteps();
 
-	int numSteps();
+  int numSteps();
 
-	void setNumSteps(int steps);
+  void setNumSteps(int steps);
 
-	void nextStep();
+  void nextStep();
 
-	boolean hasIterations();
+  boolean hasIterations();
 
-	int numIterations();
+  int numIterations();
 
-	void addIteration();
+  void addIteration();
 
-	void startNewIteration();
+  void startNewIteration();
 
-	void setIterations(int iterations);
+  void setIterations(int iterations);
 
-	void nextIteration();
+  void nextIteration();
 
-	void debug(String msg);
+  void debug(String msg);
 
-	void log(String msg);
+  void log(String msg);
 
-	void logError(String msg);
+  void logError(String msg);
 
-	int getCurrentIteration();
+  int getCurrentIteration();
 
-	void setCurrentIteration(int currentIteration);
+  void setCurrentIteration(int currentIteration);
 
-	int getCurrentStep();
+  int getCurrentStep();
 
-	void setCurrentStep(int currentStep);
+  void setCurrentStep(int currentStep);
 
-	String getTitle();
+  String getTitle();
 
-	void setTitle(String title);
+  void setTitle(String title);
 
-	void logWarning(String s);
+  void logWarning(String s);
 }

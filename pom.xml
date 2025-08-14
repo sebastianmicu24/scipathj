@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" 
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.scipath</groupId>
@@ -11,30 +9,81 @@
 
     <name>SciPathJ</name>
     <description>Segmentation and Classification of Images, Pipelines for the Analysis of Tissue Histopathology</description>
+    <url>https://github.com/scipath/scipathj</url>
+    <inceptionYear>2024</inceptionYear>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+            <comments>A business-friendly OSS license</comments>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>scipath-team</id>
+            <name>SciPath Development Team</name>
+            <email>dev@scipath.com</email>
+            <organization>SciPath</organization>
+            <organizationUrl>https://scipath.com</organizationUrl>
+            <roles>
+                <role>architect</role>
+                <role>developer</role>
+            </roles>
+            <timezone>Europe/Berlin</timezone>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:git://github.com/scipath/scipathj.git</connection>
+        <developerConnection>scm:git:ssh://github.com:scipath/scipathj.git</developerConnection>
+        <tag>HEAD</tag>
+        <url>https://github.com/scipath/scipathj/tree/main</url>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub</system>
+        <url>https://github.com/scipath/scipathj/issues</url>
+    </issueManagement>
 
     <properties>
         <maven.compiler.source>23</maven.compiler.source>
         <maven.compiler.target>23</maven.compiler.target>
+        <maven.compiler.release>23</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
         <!-- Core versions -->
-        <imagej.version>2.9.0</imagej.version>
+        <imagej.version>2.14.0</imagej.version>
         <tensorflow.version>1.15.0</tensorflow.version>
         <imagej-tensorflow.version>1.1.5</imagej-tensorflow.version>
-        
-        <!-- UI versions -->
-        <flatlaf.version>3.4.1</flatlaf.version>
-        
-        <!-- Logging -->
-        <logback.version>1.4.8</logback.version>
-    </properties>
 
-    <repositories>
-        <repository>
-            <id>imagej.public</id>
-            <url>https://maven.imagej.net/content/groups/public</url>
-        </repository>
-    </repositories>
+        <!-- UI versions -->
+        <flatlaf.version>3.5.4</flatlaf.version>
+        <ikonli.version>12.3.1</ikonli.version>
+
+        <!-- Logging -->
+        <logback.version>1.5.12</logback.version>
+
+        <!-- Utilities -->
+        <jackson.version>2.18.2</jackson.version>
+        <commons-lang3.version>3.17.0</commons-lang3.version>
+        <commons-io.version>2.18.0</commons-io.version>
+        <commons-codec.version>1.17.1</commons-codec.version>
+        <gson.version>2.11.0</gson.version>
+
+        <!-- Plugin versions -->
+        <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
+        <maven-dependency-plugin.version>3.8.1</maven-dependency-plugin.version>
+        <maven-antrun-plugin.version>3.1.0</maven-antrun-plugin.version>
+        <exec-maven-plugin.version>3.5.0</exec-maven-plugin.version>
+        <jpackage-maven-plugin.version>1.6.5</jpackage-maven-plugin.version>
+        <spotless-maven-plugin.version>2.43.0</spotless-maven-plugin.version>
+        <spotbugs-maven-plugin.version>4.8.6.4</spotbugs-maven-plugin.version>
+        <maven-checkstyle-plugin.version>3.5.0</maven-checkstyle-plugin.version>
+    </properties>
 
     <dependencies>
         <!-- ImageJ Core -->
@@ -43,21 +92,21 @@
             <artifactId>imagej</artifactId>
             <version>${imagej.version}</version>
         </dependency>
-        
+
         <!-- ImageJ1 Core -->
         <dependency>
             <groupId>net.imagej</groupId>
             <artifactId>ij</artifactId>
-            <version>1.54f</version>
+            <version>1.54k</version>
         </dependency>
-        
+
         <!-- ImageJ-ImgLib2 Bridge -->
         <dependency>
             <groupId>net.imglib2</groupId>
             <artifactId>imglib2-ij</artifactId>
             <version>2.0.1</version>
         </dependency>
-        
+
         <!-- TensorFlow -->
         <dependency>
             <groupId>net.imagej</groupId>
@@ -79,14 +128,14 @@
             <artifactId>proto</artifactId>
             <version>1.15.0</version>
         </dependency>
-        
+
         <!-- Clipper for StarDist -->
         <dependency>
             <groupId>de.lighti</groupId>
             <artifactId>Clipper</artifactId>
             <version>6.4.2</version>
         </dependency>
-        
+
         <!-- UI -->
         <dependency>
             <groupId>com.formdev</groupId>
@@ -96,55 +145,62 @@
         <dependency>
             <groupId>org.kordamp.ikonli</groupId>
             <artifactId>ikonli-swing</artifactId>
-            <version>12.3.1</version>
+            <version>${ikonli.version}</version>
         </dependency>
         <dependency>
             <groupId>org.kordamp.ikonli</groupId>
             <artifactId>ikonli-fontawesome5-pack</artifactId>
-            <version>12.3.1</version>
+            <version>${ikonli.version}</version>
         </dependency>
-        
+
         <!-- Jackson for JSON -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>2.15.2</version>
+            <version>${jackson.version}</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
-            <version>2.15.2</version>
+            <version>${jackson.version}</version>
         </dependency>
-        
+
         <!-- Logging -->
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <version>${logback.version}</version>
         </dependency>
-        
+
         <!-- Utilities -->
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>3.12.0</version>
+            <version>${commons-lang3.version}</version>
         </dependency>
         <dependency>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
-            <version>2.11.0</version>
+            <version>${commons-io.version}</version>
         </dependency>
         <dependency>
             <groupId>commons-codec</groupId>
             <artifactId>commons-codec</artifactId>
-            <version>1.15</version>
+            <version>${commons-codec.version}</version>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
-            <version>2.10.1</version>
+            <version>${gson.version}</version>
         </dependency>
     </dependencies>
+
+    <repositories>
+        <repository>
+            <id>imagej.public</id>
+            <url>https://maven.imagej.net/content/groups/public</url>
+        </repository>
+    </repositories>
 
     <build>
         <plugins>
@@ -152,17 +208,123 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
+                <version>${maven-compiler-plugin.version}</version>
                 <configuration>
                     <release>${maven.compiler.release}</release>
+                    <compilerArgs>
+                        <arg>-Xlint:all</arg>
+                        <arg>-Xlint:-processing</arg>
+                        <arg>-Xlint:-preview</arg>
+                    </compilerArgs>
+                    <showWarnings>true</showWarnings>
+                    <showDeprecation>true</showDeprecation>
                 </configuration>
+            </plugin>
+
+            <!-- Code formatting with Spotless -->
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>${spotless-maven-plugin.version}</version>
+                <configuration>
+                    <java>
+                        <includes>
+                            <include>src/main/java/**/*.java</include>
+                            <include>src/test/java/**/*.java</include>
+                        </includes>
+                        <googleJavaFormat>
+                            <version>1.23.0</version>
+                            <style>GOOGLE</style>
+                            <reflowLongStrings>true</reflowLongStrings>
+                            <formatJavadoc>false</formatJavadoc>
+                        </googleJavaFormat>
+                        <removeUnusedImports></removeUnusedImports>
+                        <trimTrailingWhitespace></trimTrailingWhitespace>
+                        <endWithNewline></endWithNewline>
+                    </java>
+                    <pom>
+                        <includes>
+                            <include>pom.xml</include>
+                        </includes>
+                        <sortPom>
+                            <encoding>UTF-8</encoding>
+                            <lineSeparator>${line.separator}</lineSeparator>
+                            <expandEmptyElements>true</expandEmptyElements>
+                            <spaceBeforeCloseEmptyElement>false</spaceBeforeCloseEmptyElement>
+                            <keepBlankLines>true</keepBlankLines>
+                            <nrOfIndentSpace>4</nrOfIndentSpace>
+                        </sortPom>
+                    </pom>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <phase>compile</phase>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Static analysis with SpotBugs -->
+            <plugin>
+                <groupId>com.github.spotbugs</groupId>
+                <artifactId>spotbugs-maven-plugin</artifactId>
+                <version>${spotbugs-maven-plugin.version}</version>
+                <configuration>
+                    <effort>Max</effort>
+                    <threshold>Low</threshold>
+                    <xmlOutput>true</xmlOutput>
+                    <spotbugsXmlOutputDirectory>${project.build.directory}/spotbugs</spotbugsXmlOutputDirectory>
+                    <excludeFilterFile>spotbugs-exclude.xml</excludeFilterFile>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <phase>verify</phase>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Code style analysis with Checkstyle -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+                <version>${maven-checkstyle-plugin.version}</version>
+                <configuration>
+                    <configLocation>checkstyle.xml</configLocation>
+                    <sourceEncoding>UTF-8</sourceEncoding>
+                    <consoleOutput>true</consoleOutput>
+                    <failsOnError>true</failsOnError>
+                    <linkXRef>false</linkXRef>
+                    <includeTestSourceDirectory>true</includeTestSourceDirectory>
+                    <excludes>**/de/csbdresden/**/*,**/mpicbg/**/*,**/net/imagej/**/*</excludes>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>com.puppycrawl.tools</groupId>
+                        <artifactId>checkstyle</artifactId>
+                        <version>10.20.1</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <id>validate</id>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <phase>verify</phase>
+                    </execution>
+                </executions>
             </plugin>
 
             <!-- Development execution -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
-                <version>3.1.0</version>
+                <version>${exec-maven-plugin.version}</version>
                 <configuration>
                     <mainClass>com.scipath.scipathj.SciPathJApplication</mainClass>
                     <options>
@@ -186,14 +348,14 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-dependency-plugin</artifactId>
-                        <version>3.6.1</version>
+                        <version>${maven-dependency-plugin.version}</version>
                         <executions>
                             <execution>
                                 <id>copy-dependencies</id>
-                                <phase>prepare-package</phase>
                                 <goals>
                                     <goal>copy-dependencies</goal>
                                 </goals>
+                                <phase>prepare-package</phase>
                                 <configuration>
                                     <outputDirectory>${project.build.directory}/libs</outputDirectory>
                                     <includeScope>runtime</includeScope>
@@ -206,29 +368,29 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-antrun-plugin</artifactId>
-                        <version>3.1.0</version>
+                        <version>${maven-antrun-plugin.version}</version>
                         <executions>
                             <execution>
                                 <id>extract-natives</id>
-                                <phase>prepare-package</phase>
                                 <goals>
                                     <goal>run</goal>
                                 </goals>
+                                <phase>prepare-package</phase>
                                 <configuration>
                                     <target>
-                                        <mkdir dir="${project.build.directory}/lib"/>
+                                        <mkdir dir="${project.build.directory}/lib"></mkdir>
                                         <unzip dest="${project.build.directory}/natives-temp">
                                             <fileset dir="${settings.localRepository}/org/tensorflow/libtensorflow_jni/1.15.0">
-                                                <include name="libtensorflow_jni-1.15.0.jar"/>
+                                                <include name="libtensorflow_jni-1.15.0.jar"></include>
                                             </fileset>
                                         </unzip>
-                                        <copy todir="${project.build.directory}/lib" flatten="true" failonerror="false">
+                                        <copy failonerror="false" flatten="true" todir="${project.build.directory}/lib">
                                             <fileset dir="${project.build.directory}/natives-temp">
-                                                <include name="**/*.dll"/>
-                                                <include name="**/*.so"/>
+                                                <include name="**/*.dll"></include>
+                                                <include name="**/*.so"></include>
                                             </fileset>
                                         </copy>
-                                        <delete dir="${project.build.directory}/natives-temp"/>
+                                        <delete dir="${project.build.directory}/natives-temp"></delete>
                                     </target>
                                 </configuration>
                             </execution>
@@ -239,31 +401,23 @@
                     <plugin>
                         <groupId>org.panteleyev</groupId>
                         <artifactId>jpackage-maven-plugin</artifactId>
-                        <version>1.6.5</version>
-                        <executions>
-                            <execution>
-                                <phase>package</phase>
-                                <goals>
-                                    <goal>jpackage</goal>
-                                </goals>
-                            </execution>
-                        </executions>
+                        <version>${jpackage-maven-plugin.version}</version>
                         <configuration>
                             <name>SciPathJ</name>
                             <appVersion>${project.version}</appVersion>
                             <vendor>SciPath</vendor>
                             <description>Segmentation and Classification of Images, Pipelines for the Analysis of Tissue Histopathology</description>
-                            
+
                             <destination>${project.build.directory}/dist</destination>
                             <input>${project.build.directory}</input>
                             <mainJar>${project.build.finalName}.jar</mainJar>
                             <mainClass>com.scipath.scipathj.SciPathJApplication</mainClass>
-                            
+
                             <type>EXE</type>
                             <winMenu>true</winMenu>
                             <winShortcut>true</winShortcut>
                             <icon>src/main/resources/icons/scipathj.ico</icon>
-                            
+
                             <!-- Include dependencies and natives -->
                             <appContent>
                                 <additionalContent>
@@ -275,8 +429,8 @@
                                     <source>${project.build.directory}/lib</source>
                                 </additionalContent>
                             </appContent>
-                            
-                            <!-- JVM options for TensorFlow and Java 21 compatibility -->
+
+                            <!-- JVM options for TensorFlow and Java 23 compatibility -->
                             <javaOptions>
                                 <javaOption>-Xmx4G</javaOption>
                                 <javaOption>-Xms1G</javaOption>
@@ -300,9 +454,38 @@
                                 <javaOption>-Dswing.aatext=true</javaOption>
                                 <javaOption>-Dawt.useSystemAAFontSettings=on</javaOption>
                             </javaOptions>
-                            
+
                             <verbose>true</verbose>
                         </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>jpackage</goal>
+                                </goals>
+                                <phase>package</phase>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- Quality profile for comprehensive code analysis -->
+        <profile>
+            <id>quality</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.diffplug.spotless</groupId>
+                        <artifactId>spotless-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>apply</goal>
+                                </goals>
+                                <phase>process-sources</phase>
+                            </execution>
+                        </executions>
                     </plugin>
                 </plugins>
             </build>
