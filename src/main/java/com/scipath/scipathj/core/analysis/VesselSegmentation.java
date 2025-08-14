@@ -22,7 +22,7 @@ import org.slf4j.LoggerFactory;
  * Step 1 of the analysis pipeline: Vessel Segmentation.
  *
  * Performs thresholding-based vessel detection and creates ROIs from the segmented vessels.
- * This class handles the first step of the 6-step analysis workflow.
+ * This class handles the first step of the 3-step analysis workflow following SOLID principles.
  *
  * @author Sebastian Micu
  * @version 1.0.0
@@ -39,6 +39,7 @@ public class VesselSegmentation {
 
   /**
    * Constructor for VesselSegmentation with default settings.
+   * This constructor follows Dependency Injection principles.
    *
    * @param configurationManager The configuration manager instance
    * @param originalImage The original image to segment
@@ -46,16 +47,16 @@ public class VesselSegmentation {
    */
   public VesselSegmentation(
       ConfigurationManager configurationManager, ImagePlus originalImage, String imageFileName) {
-    this.originalImage = originalImage;
-    this.imageFileName = imageFileName;
-    this.roiManager = ROIManager.getInstance();
-    this.settings = configurationManager.initializeVesselSegmentationSettings();
-
-    LOGGER.debug("VesselSegmentation initialized for image: {}", imageFileName);
+    this(
+        configurationManager,
+        originalImage,
+        imageFileName,
+        configurationManager.initializeVesselSegmentationSettings(),
+        ROIManager.getInstance());
   }
 
   /**
-   * Constructor for VesselSegmentation with custom settings.
+   * Constructor for VesselSegmentation with custom settings following Dependency Injection principles.
    *
    * @param configurationManager The configuration manager instance
    * @param originalImage The original image to segment
@@ -67,14 +68,31 @@ public class VesselSegmentation {
       ImagePlus originalImage,
       String imageFileName,
       VesselSegmentationSettings settings) {
+    this(configurationManager, originalImage, imageFileName, settings, ROIManager.getInstance());
+  }
+
+  /**
+   * Full constructor with all dependencies injected.
+   *
+   * @param configurationManager The configuration manager instance
+   * @param originalImage The original image to segment
+   * @param imageFileName The filename of the image for ROI association
+   * @param settings Custom vessel segmentation settings
+   * @param roiManager The ROI manager instance
+   */
+  public VesselSegmentation(
+      ConfigurationManager configurationManager,
+      ImagePlus originalImage,
+      String imageFileName,
+      VesselSegmentationSettings settings,
+      ROIManager roiManager) {
     this.originalImage = originalImage;
     this.imageFileName = imageFileName;
-    this.roiManager = ROIManager.getInstance();
+    this.roiManager = roiManager;
     this.settings =
         settings != null ? settings : configurationManager.initializeVesselSegmentationSettings();
 
-    LOGGER.debug(
-        "VesselSegmentation initialized for image: {} with custom settings", imageFileName);
+    LOGGER.info("VesselSegmentation initialized for image: {}", imageFileName);
   }
 
   /**
@@ -87,8 +105,9 @@ public class VesselSegmentation {
    * 5. Creates UserROI objects from the detected vessel shapes
    *
    * @return List of vessel ROIs created from the segmentation
+   * @throws VesselSegmentationException if segmentation fails
    */
-  public List<UserROI> segmentVessels() {
+  public List<UserROI> segmentVessels() throws VesselSegmentationException {
     return segmentVessels(settings.getThreshold());
   }
 
@@ -97,12 +116,20 @@ public class VesselSegmentation {
    *
    * @param threshold The threshold value (0-255) for pixel selection
    * @return List of UserROI objects representing detected vessels
+   * @throws VesselSegmentationException if segmentation fails
    */
-  public List<UserROI> segmentVessels(int threshold) {
+  public List<UserROI> segmentVessels(int threshold) throws VesselSegmentationException {
     LOGGER.info(
         "Starting vessel segmentation for image '{}' with threshold {}", imageFileName, threshold);
 
-    List<UserROI> vesselROIs = new ArrayList<>();
+    if (originalImage == null) {
+      throw new VesselSegmentationException("Original image is null for file: " + imageFileName);
+    }
+
+    if (threshold < 0 || threshold > 255) {
+      throw new VesselSegmentationException(
+          "Invalid threshold value: " + threshold + ". Must be between 0-255");
+    }
 
     try {
       // Step 1: Create a duplicate for processing (don't modify original)
@@ -110,22 +137,13 @@ public class VesselSegmentation {
       workingImage.setTitle("Vessel_Segmentation_" + System.currentTimeMillis());
 
       // Step 2: Convert to 8-bit grayscale if needed
-      if (workingImage.getType() != ImagePlus.GRAY8) {
-        LOGGER.debug("Converting image to 8-bit grayscale");
-        IJ.run(workingImage, "8-bit", "");
-      }
+      convertToGrayscale(workingImage);
 
       // Step 3: Apply Gaussian blur to reduce noise
-      GaussianBlur gaussianBlur = new GaussianBlur();
-      gaussianBlur.blurGaussian(workingImage.getProcessor(), settings.getGaussianBlurSigma());
-      LOGGER.debug("Applied Gaussian blur with sigma: {}", settings.getGaussianBlurSigma());
+      applyGaussianBlur(workingImage);
 
       // Step 4: Apply thresholding to select pixels > threshold
-      ImageProcessor processor = workingImage.getProcessor();
-      LOGGER.debug("Applying threshold: pixels > {}", threshold);
-
-      // Create binary mask: pixels > threshold become 255 (white), others become 0 (black)
-      processor.threshold(threshold);
+      applyThreshold(workingImage, threshold);
 
       // Step 5: Process the binary mask (fill holes)
       if (settings.isApplyMorphologicalClosing()) {
@@ -133,12 +151,10 @@ public class VesselSegmentation {
       }
 
       // Step 6: Find vessels using particle analysis with actual shapes
-      vesselROIs = findVesselsFromBinaryImage(workingImage);
+      List<UserROI> vesselROIs = findVesselsFromBinaryImage(workingImage);
 
       // Step 7: Add ROIs to the ROI manager
-      for (UserROI roi : vesselROIs) {
-        roiManager.addROI(roi);
-      }
+      vesselROIs.forEach(roiManager::addROI);
 
       LOGGER.info("Vessel segmentation completed. Found {} vessels", vesselROIs.size());
 
@@ -146,12 +162,40 @@ public class VesselSegmentation {
       workingImage.changes = false;
       workingImage.close();
 
+      return vesselROIs;
+
+    } catch (VesselSegmentationException e) {
+      throw e;
     } catch (Exception e) {
       LOGGER.error("Error during vessel segmentation for image '{}'", imageFileName, e);
-      throw new RuntimeException("Vessel segmentation failed: " + e.getMessage(), e);
+      throw new VesselSegmentationException("Vessel segmentation failed for " + imageFileName, e);
     }
+  }
 
-    return vesselROIs;
+  /**
+   * Convert image to 8-bit grayscale if needed.
+   */
+  private void convertToGrayscale(ImagePlus workingImage) {
+    if (workingImage.getType() != ImagePlus.GRAY8) {
+      IJ.run(workingImage, "8-bit", "");
+    }
+  }
+
+  /**
+   * Apply Gaussian blur to reduce noise.
+   */
+  private void applyGaussianBlur(ImagePlus workingImage) {
+    GaussianBlur gaussianBlur = new GaussianBlur();
+    gaussianBlur.blurGaussian(workingImage.getProcessor(), settings.getGaussianBlurSigma());
+  }
+
+  /**
+   * Apply threshold to create binary mask.
+   */
+  private void applyThreshold(ImagePlus workingImage, int threshold) {
+    ImageProcessor processor = workingImage.getProcessor();
+    // Create binary mask: pixels > threshold become 255 (white), others become 0 (black)
+    processor.threshold(threshold);
   }
 
   /**
@@ -159,15 +203,12 @@ public class VesselSegmentation {
    * This includes filling holes and other morphological operations.
    */
   private void processBinaryMask(ImagePlus binaryImage) {
-    LOGGER.debug("Processing vessel binary mask...");
     ImageProcessor processor = binaryImage.getProcessor();
 
     // Fill holes in the binary mask
     Binary binary = new Binary();
     binary.setup("fill", binaryImage);
     binary.run(processor);
-
-    LOGGER.debug("Vessel binary mask processed: filled holes");
   }
 
   /**
@@ -176,13 +217,13 @@ public class VesselSegmentation {
    *
    * @param binaryImage The binary image with vessels as white regions
    * @return List of UserROI objects representing the detected vessels with their actual shapes
+   * @throws VesselSegmentationException if vessel detection fails
    */
-  private List<UserROI> findVesselsFromBinaryImage(ImagePlus binaryImage) {
+  private List<UserROI> findVesselsFromBinaryImage(ImagePlus binaryImage)
+      throws VesselSegmentationException {
     List<UserROI> vesselROIs = new ArrayList<>();
 
     try {
-      LOGGER.debug("Finding vessels using wand tool approach...");
-
       // Show the image temporarily (required for some ImageJ operations)
       binaryImage.show();
 
@@ -221,43 +262,19 @@ public class VesselSegmentation {
                   new ij.gui.PolygonRoi(xPoints, yPoints, wand.npoints, Roi.POLYGON);
 
               // Check if the ROI meets size requirements
-              Rectangle bounds = polygonRoi.getBounds();
               double area = polygonRoi.getStatistics().area;
 
-              LOGGER.debug(
-                  "Found potential vessel with area: {:.1f} (min: {:.1f}, max: {:.1f})",
-                  area,
-                  settings.getMinRoiSize(),
-                  settings.getMaxRoiSize());
-
-              if (area >= settings.getMinRoiSize() && area <= settings.getMaxRoiSize()) {
+              if (isValidVesselSize(area)) {
                 vesselCount++;
                 String vesselName = "Vessel_" + vesselCount;
 
                 // Create UserROI from the polygon ROI (preserves the actual shape)
-                UserROI vesselROI = new UserROI(polygonRoi, imageFileName, vesselName);
-                vesselROI.setDisplayColor(UIConstants.VESSEL_ROI_COLOR);
-                vesselROI.setNotes(
-                    "Vessel detected by automated segmentation. Area: "
-                        + String.format("%.1f", area)
-                        + " pixels");
-
+                UserROI vesselROI = createVesselROI(polygonRoi, vesselName, area);
                 vesselROIs.add(vesselROI);
-
-                LOGGER.debug(
-                    "Created vessel ROI: {} [{}] area={:.1f} at ({}, {}) size {}x{}",
-                    vesselROI.getName(),
-                    vesselROI.getType(),
-                    vesselROI.getArea(),
-                    vesselROI.getX(),
-                    vesselROI.getY(),
-                    vesselROI.getWidth(),
-                    vesselROI.getHeight());
 
                 // Mark all pixels in this ROI as processed
                 markROIAsProcessed(polygonRoi, processed);
               } else {
-                LOGGER.debug("Vessel rejected due to size constraints: area={:.1f}", area);
                 // Still mark pixels as processed to avoid reprocessing
                 markROIAsProcessed(polygonRoi, processed);
               }
@@ -266,11 +283,11 @@ public class VesselSegmentation {
         }
       }
 
-      LOGGER.debug("Found {} vessels in the binary image", vesselCount);
+      return vesselROIs;
 
     } catch (Exception e) {
       LOGGER.error("Error in vessel detection using wand tool", e);
-      throw new RuntimeException("Vessel detection failed: " + e.getMessage(), e);
+      throw new VesselSegmentationException("Vessel detection failed: " + e.getMessage(), e);
     } finally {
       // Ensure the binary image window is closed
       if (binaryImage != null && binaryImage.getWindow() != null) {
@@ -278,12 +295,28 @@ public class VesselSegmentation {
         binaryImage.close();
       }
     }
-
-    return vesselROIs;
   }
 
   /**
-   * Mark all pixels within a ROI as processed to avoid duplicate detection
+   * Check if vessel area meets size requirements.
+   */
+  private boolean isValidVesselSize(double area) {
+    return area >= settings.getMinRoiSize() && area <= settings.getMaxRoiSize();
+  }
+
+  /**
+   * Create a UserROI from polygon ROI with proper metadata.
+   */
+  private UserROI createVesselROI(ij.gui.PolygonRoi polygonRoi, String vesselName, double area) {
+    UserROI vesselROI = new UserROI(polygonRoi, imageFileName, vesselName);
+    vesselROI.setDisplayColor(UIConstants.VESSEL_ROI_COLOR);
+    vesselROI.setNotes(
+        String.format("Vessel detected by automated segmentation. Area: %.1f pixels", area));
+    return vesselROI;
+  }
+
+  /**
+   * Mark all pixels within a ROI as processed to avoid duplicate detection.
    */
   private void markROIAsProcessed(Roi roi, boolean[][] processed) {
     Rectangle bounds = roi.getBounds();
@@ -346,15 +379,25 @@ public class VesselSegmentation {
     }
 
     double totalArea = vesselROIs.stream().mapToDouble(UserROI::getArea).sum();
-
     double avgArea = totalArea / vesselROIs.size();
-
     double minArea = vesselROIs.stream().mapToDouble(UserROI::getArea).min().orElse(0.0);
-
     double maxArea = vesselROIs.stream().mapToDouble(UserROI::getArea).max().orElse(0.0);
 
     return String.format(
         "Vessels: %d, Total area: %.1f px, Avg area: %.1f px (range: %.1f-%.1f)",
         vesselROIs.size(), totalArea, avgArea, minArea, maxArea);
+  }
+
+  /**
+   * Custom exception for vessel segmentation errors.
+   */
+  public static class VesselSegmentationException extends RuntimeException {
+    public VesselSegmentationException(String message) {
+      super(message);
+    }
+
+    public VesselSegmentationException(String message, Throwable cause) {
+      super(message, cause);
+    }
   }
 }

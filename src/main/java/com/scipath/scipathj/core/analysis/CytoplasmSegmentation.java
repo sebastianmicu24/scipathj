@@ -51,50 +51,15 @@ public class CytoplasmSegmentation {
 
   /**
    * Constructor for CytoplasmSegmentation with default settings.
+   * This constructor follows Dependency Injection principles.
    *
    * @param configurationManager The configuration manager instance
    * @param originalImage The original image to segment
    * @param imageFileName The filename of the image for ROI association
    * @param vesselROIs Previously detected vessel ROIs
    * @param nucleusROIs Previously detected nucleus ROIs
-   */
-  public CytoplasmSegmentation(
-      ConfigurationManager configurationManager,
-      ImagePlus originalImage,
-      String imageFileName,
-      List<UserROI> vesselROIs,
-      List<NucleusROI> nucleusROIs) {
-    this.originalImage = originalImage;
-    this.imageFileName = imageFileName;
-    this.vesselROIs = vesselROIs != null ? vesselROIs : new ArrayList<>();
-    this.nucleusROIs = nucleusROIs != null ? nucleusROIs : new ArrayList<>();
-    this.settings = configurationManager.initializeCytoplasmSegmentationSettings();
-    this.mainSettings = MainSettings.getInstance();
-    this.roiManager = ROIManager.getInstance();
-    this.cellROIs = new ArrayList<>();
-    this.cytoplasmROIs = new ArrayList<>();
-
-    // Create background mask from vessels if vessel exclusion is enabled
-    if (settings.isUseVesselExclusion() && !this.vesselROIs.isEmpty()) {
-      this.backgroundMask = createBackgroundMaskFromVessels();
-    }
-
-    LOGGER.debug(
-        "CytoplasmSegmentation initialized for image: {} with {} nuclei and {} vessels",
-        imageFileName,
-        this.nucleusROIs.size(),
-        this.vesselROIs.size());
-  }
-
-  /**
-   * Constructor with custom settings.
-   *
-   * @param configurationManager The configuration manager instance
-   * @param originalImage The original image to segment
-   * @param imageFileName The filename of the image for ROI association
-   * @param vesselROIs Previously detected vessel ROIs
-   * @param nucleusROIs Previously detected nucleus ROIs
-   * @param settings Custom cytoplasm segmentation settings
+   * @param mainSettings The main settings instance
+   * @param roiManager The ROI manager instance
    */
   public CytoplasmSegmentation(
       ConfigurationManager configurationManager,
@@ -102,17 +67,47 @@ public class CytoplasmSegmentation {
       String imageFileName,
       List<UserROI> vesselROIs,
       List<NucleusROI> nucleusROIs,
-      CytoplasmSegmentationSettings settings) {
+      MainSettings mainSettings,
+      ROIManager roiManager) {
+    this(
+        configurationManager,
+        originalImage,
+        imageFileName,
+        vesselROIs,
+        nucleusROIs,
+        configurationManager.initializeCytoplasmSegmentationSettings(),
+        mainSettings,
+        roiManager);
+  }
+
+  /**
+   * Constructor with custom settings following Dependency Injection principles.
+   *
+   * @param configurationManager The configuration manager instance
+   * @param originalImage The original image to segment
+   * @param imageFileName The filename of the image for ROI association
+   * @param vesselROIs Previously detected vessel ROIs
+   * @param nucleusROIs Previously detected nucleus ROIs
+   * @param settings Custom cytoplasm segmentation settings
+   * @param mainSettings The main settings instance
+   * @param roiManager The ROI manager instance
+   */
+  public CytoplasmSegmentation(
+      ConfigurationManager configurationManager,
+      ImagePlus originalImage,
+      String imageFileName,
+      List<UserROI> vesselROIs,
+      List<NucleusROI> nucleusROIs,
+      CytoplasmSegmentationSettings settings,
+      MainSettings mainSettings,
+      ROIManager roiManager) {
     this.originalImage = originalImage;
     this.imageFileName = imageFileName;
-    this.vesselROIs = vesselROIs != null ? vesselROIs : new ArrayList<>();
-    this.nucleusROIs = nucleusROIs != null ? nucleusROIs : new ArrayList<>();
-    this.settings =
-        settings != null
-            ? settings
-            : configurationManager.initializeCytoplasmSegmentationSettings();
-    this.mainSettings = MainSettings.getInstance();
-    this.roiManager = ROIManager.getInstance();
+    this.vesselROIs = vesselROIs != null ? vesselROIs : List.of();
+    this.nucleusROIs = nucleusROIs != null ? nucleusROIs : List.of();
+    this.settings = settings;
+    this.mainSettings = mainSettings;
+    this.roiManager = roiManager;
     this.cellROIs = new ArrayList<>();
     this.cytoplasmROIs = new ArrayList<>();
 
@@ -120,9 +115,6 @@ public class CytoplasmSegmentation {
     if (this.settings.isUseVesselExclusion() && !this.vesselROIs.isEmpty()) {
       this.backgroundMask = createBackgroundMaskFromVessels();
     }
-
-    LOGGER.debug(
-        "CytoplasmSegmentation initialized for image: {} with custom settings", imageFileName);
   }
 
   /**
@@ -137,14 +129,15 @@ public class CytoplasmSegmentation {
    * 6. Links nuclei to their corresponding cytoplasm regions
    *
    * @return List of cytoplasm ROIs
+   * @throws CytoplasmSegmentationException if segmentation fails
    */
-  public List<CytoplasmROI> segmentCytoplasm() {
+  public List<CytoplasmROI> segmentCytoplasm() throws CytoplasmSegmentationException {
     LOGGER.info(
         "Starting cytoplasm segmentation using Voronoi tessellation for image: {}", imageFileName);
 
-    if (nucleusROIs == null || nucleusROIs.isEmpty()) {
+    if (nucleusROIs.isEmpty()) {
       LOGGER.warn("No nucleus ROIs found. Cannot create cytoplasm ROIs.");
-      return new ArrayList<>();
+      return List.of();
     }
 
     // Clear any existing ROIs
@@ -156,12 +149,9 @@ public class CytoplasmSegmentation {
       int imageWidth = originalImage.getWidth();
       int imageHeight = originalImage.getHeight();
 
-      LOGGER.debug("Processing image dimensions: {}x{}", imageWidth, imageHeight);
-
       // Step 1: Create a binary mask of nuclei
       ImagePlus nucleiMask = createNucleiMask();
-      nucleiMask.show();
-      moveWindowOffScreen(nucleiMask);
+      hideImageWindow(nucleiMask);
 
       // Step 2: Create Voronoi tessellation
       ImagePlus voronoiImage = createVoronoiTessellation(nucleiMask);
@@ -185,10 +175,11 @@ public class CytoplasmSegmentation {
 
     } catch (Exception e) {
       LOGGER.error("Error during cytoplasm segmentation for image: {}", imageFileName, e);
-      throw new RuntimeException("Cytoplasm segmentation failed: " + e.getMessage(), e);
+      throw new CytoplasmSegmentationException(
+          "Cytoplasm segmentation failed: " + e.getMessage(), e);
     }
 
-    return cytoplasmROIs;
+    return List.copyOf(cytoplasmROIs);
   }
 
   /**
@@ -204,12 +195,13 @@ public class CytoplasmSegmentation {
 
     // Draw nuclei as white
     bp.setValue(255);
-    for (NucleusROI nucleusROI : nucleusROIs) {
-      Roi roi = nucleusROI.getImageJRoi();
-      if (roi != null) {
-        bp.fill(roi);
-      }
-    }
+    nucleusROIs.forEach(
+        nucleusROI -> {
+          Roi roi = nucleusROI.getImageJRoi();
+          if (roi != null) {
+            bp.fill(roi);
+          }
+        });
 
     return new ImagePlus("Nuclei_Mask", bp);
   }
@@ -222,7 +214,7 @@ public class CytoplasmSegmentation {
     ImagePlus voronoiImage = nucleiMask.duplicate();
     voronoiImage.setTitle("Voronoi_" + System.currentTimeMillis());
     voronoiImage.show();
-    moveWindowOffScreen(voronoiImage);
+    hideImageWindow(voronoiImage);
 
     // Ensure binary format
     IJ.setThreshold(voronoiImage, 1, 255);
@@ -284,7 +276,7 @@ public class CytoplasmSegmentation {
       ImagePlus result = ic.run("Max create", voronoiImage, backgroundMask);
       result.setTitle("Cytoplasm_" + System.currentTimeMillis());
       result.show();
-      moveWindowOffScreen(result);
+      hideImageWindow(result);
       return result;
     }
     return voronoiImage;
@@ -294,8 +286,7 @@ public class CytoplasmSegmentation {
    * Creates a background mask from vessel ROIs.
    */
   private ImagePlus createBackgroundMaskFromVessels() {
-    if (vesselROIs == null || vesselROIs.isEmpty()) {
-      LOGGER.debug("No vessel ROIs provided for background mask creation");
+    if (vesselROIs.isEmpty()) {
       return null;
     }
 
@@ -308,14 +299,14 @@ public class CytoplasmSegmentation {
 
     // Draw vessels as white
     bp.setValue(255);
-    for (UserROI vesselROI : vesselROIs) {
-      Roi roi = vesselROI.getImageJRoi();
-      if (roi != null) {
-        bp.fill(roi);
-      }
-    }
+    vesselROIs.forEach(
+        vesselROI -> {
+          Roi roi = vesselROI.getImageJRoi();
+          if (roi != null) {
+            bp.fill(roi);
+          }
+        });
 
-    LOGGER.debug("Created background mask from {} vessel ROIs", vesselROIs.size());
     return new ImagePlus("Vessel_Mask", bp);
   }
 
@@ -333,12 +324,8 @@ public class CytoplasmSegmentation {
 
       // Get nucleus center
       int[] center = nucleusROI.getNucleusCenter();
-      int x = center[0];
-      int y = center[1];
-
-      // Adjust center if too close to borders
-      x = Math.max(2, Math.min(imageWidth - 3, x));
-      y = Math.max(2, Math.min(imageHeight - 3, y));
+      int x = Math.max(2, Math.min(imageWidth - 3, center[0]));
+      int y = Math.max(2, Math.min(imageHeight - 3, center[1]));
 
       // Use doWand to select the cell region
       cytoplasmImage.setActivated();
@@ -361,8 +348,6 @@ public class CytoplasmSegmentation {
           cytoplasm.setAssociatedNucleus(nucleusROI);
           cytoplasm.setParentCell(cell);
         }
-      } else {
-        LOGGER.debug("Could not create valid cell ROI for nucleus {}", nucleusNumber);
       }
     }
   }
@@ -448,30 +433,27 @@ public class CytoplasmSegmentation {
    */
   private void linkNucleiToCytoplasm() {
     if (settings.isLinkNucleusToCytoplasm()) {
-      for (CytoplasmROI cytoplasm : cytoplasmROIs) {
-        NucleusROI nucleus = cytoplasm.getAssociatedNucleus();
-        if (nucleus != null) {
-          nucleus.setAssociatedCytoplasm(cytoplasm);
-        }
-      }
+      cytoplasmROIs.forEach(
+          cytoplasm -> {
+            NucleusROI nucleus = cytoplasm.getAssociatedNucleus();
+            if (nucleus != null) {
+              nucleus.setAssociatedCytoplasm(cytoplasm);
+            }
+          });
     }
 
     // Add ROIs to manager
     if (settings.isCreateCellROIs()) {
-      for (CellROI cell : cellROIs) {
-        roiManager.addROI(cell);
-      }
+      cellROIs.forEach(roiManager::addROI);
     }
 
-    for (CytoplasmROI cytoplasm : cytoplasmROIs) {
-      roiManager.addROI(cytoplasm);
-    }
+    cytoplasmROIs.forEach(roiManager::addROI);
   }
 
   /**
-   * Moves a window off-screen to hide it.
+   * Hides a window by moving it off-screen.
    */
-  private void moveWindowOffScreen(ImagePlus image) {
+  private void hideImageWindow(ImagePlus image) {
     if (image.getWindow() != null) {
       image.getWindow().setLocation(-2000, -2000);
     }
@@ -492,19 +474,19 @@ public class CytoplasmSegmentation {
   /**
    * Gets the created cell ROIs.
    *
-   * @return list of cell ROIs
+   * @return immutable list of cell ROIs
    */
   public List<CellROI> getCellROIs() {
-    return new ArrayList<>(cellROIs);
+    return List.copyOf(cellROIs);
   }
 
   /**
    * Gets the created cytoplasm ROIs.
    *
-   * @return list of cytoplasm ROIs
+   * @return immutable list of cytoplasm ROIs
    */
   public List<CytoplasmROI> getCytoplasmROIs() {
-    return new ArrayList<>(cytoplasmROIs);
+    return List.copyOf(cytoplasmROIs);
   }
 
   /**
@@ -519,15 +501,11 @@ public class CytoplasmSegmentation {
     }
 
     double totalArea = cytoplasmROIs.stream().mapToDouble(CytoplasmROI::getCytoplasmArea).sum();
-
     double avgArea = totalArea / cytoplasmROIs.size();
-
     double minArea =
         cytoplasmROIs.stream().mapToDouble(CytoplasmROI::getCytoplasmArea).min().orElse(0.0);
-
     double maxArea =
         cytoplasmROIs.stream().mapToDouble(CytoplasmROI::getCytoplasmArea).max().orElse(0.0);
-
     long linkedCount =
         cytoplasmROIs.stream().mapToLong(c -> c.hasAssociatedNucleus() ? 1 : 0).sum();
 
@@ -544,5 +522,18 @@ public class CytoplasmSegmentation {
    */
   public CytoplasmSegmentationSettings getSettings() {
     return settings;
+  }
+
+  /**
+   * Custom exception for cytoplasm segmentation errors.
+   */
+  public static class CytoplasmSegmentationException extends Exception {
+    public CytoplasmSegmentationException(String message) {
+      super(message);
+    }
+
+    public CytoplasmSegmentationException(String message, Throwable cause) {
+      super(message, cause);
+    }
   }
 }

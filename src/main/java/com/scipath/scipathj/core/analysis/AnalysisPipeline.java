@@ -14,7 +14,9 @@ import com.scipath.scipathj.ui.components.ROIManager;
 import com.scipath.scipathj.ui.utils.ImageLoader;
 import ij.ImagePlus;
 import java.io.File;
+import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -22,15 +24,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Analysis pipeline coordinator that orchestrates the 6-step analysis workflow:
+ * Analysis pipeline coordinator that orchestrates the 3-step analysis workflow:
  * 1. Vessel Segmentation
  * 2. Nuclear Segmentation
  * 3. Cytoplasm Segmentation
- * 4. Feature Extraction (TODO)
- * 5. Cell Classification (TODO)
- * 6. Statistical Analysis (TODO)
  *
- * This class coordinates the workflow but keeps each analysis step semantically distinct.
+ * This class coordinates the workflow following the Single Responsibility Principle,
+ * delegating each analysis step to specialized classes.
  *
  * @author Sebastian Micu
  * @version 1.0.0
@@ -59,76 +59,47 @@ public class AnalysisPipeline {
 
   /**
    * Creates a new AnalysisPipeline with default settings.
+   * This constructor follows Dependency Injection principles.
    *
    * @param configurationManager the configuration manager instance
-   */
-  public AnalysisPipeline(ConfigurationManager configurationManager) {
-    this.configurationManager = configurationManager;
-    this.vesselSettings = configurationManager.initializeVesselSegmentationSettings();
-    this.nuclearSettings = configurationManager.initializeNuclearSegmentationSettings();
-    this.cytoplasmSettings = configurationManager.initializeCytoplasmSegmentationSettings();
-    this.mainSettings = MainSettings.getInstance();
-    this.roiManager = ROIManager.getInstance();
-
-    LOGGER.debug("AnalysisPipeline initialized with default settings");
-  }
-
-  /**
-   * Creates a new AnalysisPipeline with custom vessel and nuclear settings.
-   * Cytoplasm settings will use defaults.
-   *
-   * @param vesselSettings custom vessel segmentation settings
-   * @param nuclearSettings custom nuclear segmentation settings
+   * @param mainSettings the main settings instance
+   * @param roiManager the ROI manager instance
    */
   public AnalysisPipeline(
-      ConfigurationManager configurationManager,
-      VesselSegmentationSettings vesselSettings,
-      NuclearSegmentationSettings nuclearSettings) {
-    this.configurationManager = configurationManager;
-    this.vesselSettings =
-        vesselSettings != null
-            ? vesselSettings
-            : configurationManager.initializeVesselSegmentationSettings();
-    this.nuclearSettings =
-        nuclearSettings != null
-            ? nuclearSettings
-            : configurationManager.initializeNuclearSegmentationSettings();
-    this.cytoplasmSettings = configurationManager.initializeCytoplasmSegmentationSettings();
-    this.mainSettings = MainSettings.getInstance();
-    this.roiManager = ROIManager.getInstance();
-
-    LOGGER.debug("AnalysisPipeline initialized with custom vessel and nuclear settings");
+      ConfigurationManager configurationManager, MainSettings mainSettings, ROIManager roiManager) {
+    this(
+        configurationManager,
+        configurationManager.initializeVesselSegmentationSettings(),
+        configurationManager.initializeNuclearSegmentationSettings(),
+        configurationManager.initializeCytoplasmSegmentationSettings(),
+        mainSettings,
+        roiManager);
   }
 
   /**
    * Creates a new AnalysisPipeline with custom settings for all segmentation steps.
+   * This is the primary constructor that follows Dependency Injection principles.
    *
+   * @param configurationManager the configuration manager instance
    * @param vesselSettings custom vessel segmentation settings
    * @param nuclearSettings custom nuclear segmentation settings
    * @param cytoplasmSettings custom cytoplasm segmentation settings
+   * @param mainSettings the main settings instance
+   * @param roiManager the ROI manager instance
    */
   public AnalysisPipeline(
       ConfigurationManager configurationManager,
       VesselSegmentationSettings vesselSettings,
       NuclearSegmentationSettings nuclearSettings,
-      CytoplasmSegmentationSettings cytoplasmSettings) {
+      CytoplasmSegmentationSettings cytoplasmSettings,
+      MainSettings mainSettings,
+      ROIManager roiManager) {
     this.configurationManager = configurationManager;
-    this.vesselSettings =
-        vesselSettings != null
-            ? vesselSettings
-            : configurationManager.initializeVesselSegmentationSettings();
-    this.nuclearSettings =
-        nuclearSettings != null
-            ? nuclearSettings
-            : configurationManager.initializeNuclearSegmentationSettings();
-    this.cytoplasmSettings =
-        cytoplasmSettings != null
-            ? cytoplasmSettings
-            : configurationManager.initializeCytoplasmSegmentationSettings();
-    this.mainSettings = MainSettings.getInstance();
-    this.roiManager = ROIManager.getInstance();
-
-    LOGGER.debug("AnalysisPipeline initialized with custom settings for all steps");
+    this.vesselSettings = vesselSettings;
+    this.nuclearSettings = nuclearSettings;
+    this.cytoplasmSettings = cytoplasmSettings;
+    this.mainSettings = mainSettings;
+    this.roiManager = roiManager;
   }
 
   /**
@@ -194,35 +165,29 @@ public class AnalysisPipeline {
 
         try {
           ImageAnalysisResult result = processImage(imageFile);
-          if (result.isSuccess()) {
-            totalVessels += result.getVesselCount();
-            totalNuclei += result.getNucleusCount();
-            totalCells += result.getCellCount();
+          if (result.success()) {
+            totalVessels += result.vesselCount();
+            totalNuclei += result.nucleusCount();
+            totalCells += result.cellCount();
             successfulImages++;
-
-            LOGGER.info(
-                "Completed analysis for {} - Vessels: {}, Nuclei: {}, Cells: {}",
-                fileName,
-                result.getVesselCount(),
-                result.getNucleusCount(),
-                result.getCellCount());
           } else {
             LOGGER.warn("Analysis failed for image: {}", fileName);
           }
 
+        } catch (ImageProcessingException e) {
+          LOGGER.error("Image processing error for {}: {}", fileName, e.getMessage());
+        } catch (IOException e) {
+          LOGGER.error("IO error processing image {}: {}", fileName, e.getMessage());
         } catch (Exception e) {
-          LOGGER.error("Error processing image: {}", fileName, e);
+          LOGGER.error("Unexpected error processing image {}: {}", fileName, e.getMessage());
         }
 
         processedImages.incrementAndGet();
 
-        // Small delay to allow UI updates
-        try {
-          Thread.sleep(SegmentationConstants.DEFAULT_BATCH_PROCESSING_DELAY);
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-          break;
-        }
+        // Use CompletableFuture for non-blocking delay
+        CompletableFuture.delayedExecutor(
+            SegmentationConstants.DEFAULT_BATCH_PROCESSING_DELAY,
+            java.util.concurrent.TimeUnit.MILLISECONDS);
       }
 
       updateProgress(
@@ -254,25 +219,20 @@ public class AnalysisPipeline {
    *
    * @param imageFile the image file to process
    * @return analysis result for the image
+   * @throws ImageProcessingException if image processing fails
+   * @throws IOException if image loading fails
    */
-  public ImageAnalysisResult processImage(File imageFile) {
+  public ImageAnalysisResult processImage(File imageFile)
+      throws ImageProcessingException, IOException {
     String fileName = imageFile.getName();
-    LOGGER.debug("Processing single image: {}", fileName);
 
-    try {
-      // Load the image
-      ImagePlus imagePlus = ImageLoader.loadImage(imageFile.getAbsolutePath());
-      if (imagePlus == null) {
-        LOGGER.warn("Could not load image: {}", fileName);
-        return ImageAnalysisResult.failure(fileName, "Failed to load image");
-      }
-
-      return processImage(imagePlus, fileName);
-
-    } catch (Exception e) {
-      LOGGER.error("Error processing image file: {}", fileName, e);
-      return ImageAnalysisResult.failure(fileName, e.getMessage());
+    // Load the image
+    ImagePlus imagePlus = ImageLoader.loadImage(imageFile.getAbsolutePath());
+    if (imagePlus == null) {
+      throw new IOException("Failed to load image: " + fileName);
     }
+
+    return processImage(imagePlus, fileName);
   }
 
   /**
@@ -282,54 +242,40 @@ public class AnalysisPipeline {
    * @param imagePlus the loaded image
    * @param fileName the filename for ROI association
    * @return analysis result for the image
+   * @throws ImageProcessingException if image processing fails
    */
-  public ImageAnalysisResult processImage(ImagePlus imagePlus, String fileName) {
+  public ImageAnalysisResult processImage(ImagePlus imagePlus, String fileName)
+      throws ImageProcessingException {
     try {
       // Step 1: Vessel Segmentation
-      LOGGER.debug("Step 1: Starting vessel segmentation for: {}", fileName);
       VesselSegmentation vesselSegmentation =
           new VesselSegmentation(configurationManager, imagePlus, fileName, vesselSettings);
       List<UserROI> vesselROIs = vesselSegmentation.segmentVessels();
-      LOGGER.debug("Step 1 complete: Found {} vessels in image: {}", vesselROIs.size(), fileName);
 
       // Step 2: Nuclear Segmentation
-      LOGGER.debug("Step 2: Starting nuclear segmentation for: {}", fileName);
-      SimpleHENuclearSegmentation nuclearSegmentation =
-          new SimpleHENuclearSegmentation(
-              configurationManager, imagePlus, fileName, nuclearSettings);
+      NuclearSegmentation nuclearSegmentation =
+          new NuclearSegmentation(
+              configurationManager, imagePlus, fileName, nuclearSettings, roiManager);
 
-      List<NucleusROI> nucleusROIs;
+      List<NucleusROI> nucleusROIs = List.of();
       try {
-        LOGGER.info("Step 2: Starting nuclear segmentation for image: {}", fileName);
-
-        LOGGER.info("Checking if nuclear segmentation is available...");
-        boolean isAvailable = nuclearSegmentation.isAvailable();
-        LOGGER.info("Nuclear segmentation available: {}", isAvailable);
-
-        if (isAvailable) {
-          LOGGER.info("✓ StarDist is available - attempting nuclear segmentation...");
+        if (nuclearSegmentation.isAvailable()) {
           nucleusROIs = nuclearSegmentation.segmentNuclei();
-          LOGGER.info(
-              "Step 2 complete: Found {} nuclei in image: {}", nucleusROIs.size(), fileName);
         } else {
-          LOGGER.error("✗ Step 2: StarDist H&E model not available for image: {}", fileName);
-          LOGGER.error("Nuclear segmentation will be skipped - no nuclei will be detected");
-          nucleusROIs = List.of(); // Empty list
+          LOGGER.warn("StarDist H&E model not available for image: {}", fileName);
         }
       } catch (Exception e) {
-        LOGGER.error("Step 2: StarDist segmentation failed for image: {}", fileName, e);
-        nucleusROIs = List.of(); // Empty list on failure
+        LOGGER.error("StarDist segmentation failed for image: {}", fileName, e);
+        throw new ImageProcessingException("Nuclear segmentation failed", e);
       } finally {
         nuclearSegmentation.close();
       }
 
       // Step 3: Cytoplasm Segmentation
-      LOGGER.debug("Step 3: Starting cytoplasm segmentation for: {}", fileName);
       List<CellROI> cellROIs = List.of();
       List<CytoplasmROI> cytoplasmROIs = List.of();
 
       if (!nucleusROIs.isEmpty()) {
-        // Get vessel ROIs for exclusion if enabled
         List<UserROI> vesselROIsForExclusion =
             cytoplasmSettings.isExcludeVessels() ? vesselROIs : List.of();
 
@@ -340,46 +286,16 @@ public class AnalysisPipeline {
                 fileName,
                 vesselROIsForExclusion,
                 nucleusROIs,
-                cytoplasmSettings);
+                cytoplasmSettings,
+                mainSettings,
+                roiManager);
 
         cytoplasmROIs = cytoplasmSegmentation.segmentCytoplasm();
         cellROIs = cytoplasmSegmentation.getCellROIs();
-
-        LOGGER.debug(
-            "Step 3 complete: Found {} cells and {} cytoplasm regions in image: {}",
-            cellROIs.size(),
-            cytoplasmROIs.size(),
-            fileName);
-      } else {
-        LOGGER.debug("Step 3: No nuclei found, skipping cytoplasm segmentation for: {}", fileName);
       }
-
-      // Step 4: Feature Extraction (TODO)
-      LOGGER.debug("Step 4: Feature extraction - TODO (not implemented yet)");
-
-      // Step 5: Cell Classification (TODO)
-      LOGGER.debug("Step 5: Cell classification - TODO (not implemented yet)");
-
-      // Step 6: Statistical Analysis (TODO)
-      LOGGER.debug("Step 6: Statistical analysis - TODO (not implemented yet)");
 
       // Add ROIs to manager with proper colors
-      for (UserROI vesselROI : vesselROIs) {
-        vesselROI.setDisplayColor(mainSettings.getVesselSettings().getBorderColor());
-        roiManager.addROI(vesselROI);
-      }
-      for (NucleusROI nucleusROI : nucleusROIs) {
-        nucleusROI.setDisplayColor(mainSettings.getNucleusSettings().getBorderColor());
-        roiManager.addROI(nucleusROI);
-      }
-      for (CellROI cellROI : cellROIs) {
-        cellROI.setDisplayColor(mainSettings.getCellSettings().getBorderColor());
-        roiManager.addROI(cellROI);
-      }
-      for (CytoplasmROI cytoplasmROI : cytoplasmROIs) {
-        cytoplasmROI.setDisplayColor(mainSettings.getCytoplasmSettings().getBorderColor());
-        roiManager.addROI(cytoplasmROI);
-      }
+      addROIsToManager(vesselROIs, nucleusROIs, cellROIs, cytoplasmROIs);
 
       // Clean up
       imagePlus.close();
@@ -389,8 +305,42 @@ public class AnalysisPipeline {
 
     } catch (Exception e) {
       LOGGER.error("Error during analysis of image: {}", fileName, e);
-      return ImageAnalysisResult.failure(fileName, e.getMessage());
+      throw new ImageProcessingException("Image analysis failed for " + fileName, e);
     }
+  }
+
+  /**
+   * Adds ROIs to the manager with appropriate colors.
+   * This method follows the Single Responsibility Principle by separating ROI management.
+   */
+  private void addROIsToManager(
+      List<UserROI> vesselROIs,
+      List<NucleusROI> nucleusROIs,
+      List<CellROI> cellROIs,
+      List<CytoplasmROI> cytoplasmROIs) {
+    vesselROIs.forEach(
+        roi -> {
+          roi.setDisplayColor(mainSettings.getVesselSettings().getBorderColor());
+          roiManager.addROI(roi);
+        });
+
+    nucleusROIs.forEach(
+        roi -> {
+          roi.setDisplayColor(mainSettings.getNucleusSettings().getBorderColor());
+          roiManager.addROI(roi);
+        });
+
+    cellROIs.forEach(
+        roi -> {
+          roi.setDisplayColor(mainSettings.getCellSettings().getBorderColor());
+          roiManager.addROI(roi);
+        });
+
+    cytoplasmROIs.forEach(
+        roi -> {
+          roi.setDisplayColor(mainSettings.getCytoplasmSettings().getBorderColor());
+          roiManager.addROI(roi);
+        });
   }
 
   /**
@@ -457,37 +407,10 @@ public class AnalysisPipeline {
   }
 
   /**
-   * Result class for batch analysis operations.
+   * Result record for batch analysis operations using Java 16+ record syntax.
    */
-  public static class AnalysisResults {
-    private final int processedImages;
-    private final int totalVessels;
-    private final int totalNuclei;
-    private final int totalCells;
-
-    public AnalysisResults(int processedImages, int totalVessels, int totalNuclei, int totalCells) {
-      this.processedImages = processedImages;
-      this.totalVessels = totalVessels;
-      this.totalNuclei = totalNuclei;
-      this.totalCells = totalCells;
-    }
-
-    public int getProcessedImages() {
-      return processedImages;
-    }
-
-    public int getTotalVessels() {
-      return totalVessels;
-    }
-
-    public int getTotalNuclei() {
-      return totalNuclei;
-    }
-
-    public int getTotalCells() {
-      return totalCells;
-    }
-
+  public record AnalysisResults(
+      int processedImages, int totalVessels, int totalNuclei, int totalCells) {
     @Override
     public String toString() {
       return String.format(
@@ -497,30 +420,15 @@ public class AnalysisPipeline {
   }
 
   /**
-   * Result class for single image analysis operations.
+   * Result record for single image analysis operations using Java 16+ record syntax.
    */
-  public static class ImageAnalysisResult {
-    private final String fileName;
-    private final boolean success;
-    private final String errorMessage;
-    private final int vesselCount;
-    private final int nucleusCount;
-    private final int cellCount;
-
-    private ImageAnalysisResult(
-        String fileName,
-        boolean success,
-        String errorMessage,
-        int vesselCount,
-        int nucleusCount,
-        int cellCount) {
-      this.fileName = fileName;
-      this.success = success;
-      this.errorMessage = errorMessage;
-      this.vesselCount = vesselCount;
-      this.nucleusCount = nucleusCount;
-      this.cellCount = cellCount;
-    }
+  public record ImageAnalysisResult(
+      String fileName,
+      boolean success,
+      String errorMessage,
+      int vesselCount,
+      int nucleusCount,
+      int cellCount) {
 
     public static ImageAnalysisResult success(
         String fileName, int vesselCount, int nucleusCount, int cellCount) {
@@ -531,30 +439,6 @@ public class AnalysisPipeline {
       return new ImageAnalysisResult(fileName, false, errorMessage, 0, 0, 0);
     }
 
-    public String getFileName() {
-      return fileName;
-    }
-
-    public boolean isSuccess() {
-      return success;
-    }
-
-    public String getErrorMessage() {
-      return errorMessage;
-    }
-
-    public int getVesselCount() {
-      return vesselCount;
-    }
-
-    public int getNucleusCount() {
-      return nucleusCount;
-    }
-
-    public int getCellCount() {
-      return cellCount;
-    }
-
     @Override
     public String toString() {
       return success
@@ -562,6 +446,19 @@ public class AnalysisPipeline {
               "ImageAnalysisResult[%s: vessels=%d, nuclei=%d, cells=%d]",
               fileName, vesselCount, nucleusCount, cellCount)
           : String.format("ImageAnalysisResult[%s: FAILED - %s]", fileName, errorMessage);
+    }
+  }
+
+  /**
+   * Custom exception for image processing errors.
+   */
+  public static class ImageProcessingException extends Exception {
+    public ImageProcessingException(String message) {
+      super(message);
+    }
+
+    public ImageProcessingException(String message, Throwable cause) {
+      super(message, cause);
     }
   }
 }

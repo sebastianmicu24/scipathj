@@ -21,9 +21,13 @@ Le proposte di miglioramento possono essere raggruppate nelle seguenti categorie
 
 ---
 
-## Modifiche Recenti - Refactoring Dependency Injection (Agosto 2025)
+## Modifiche Recenti - Refactoring Completo Sottopacchetto Analysis (Agosto 2025)
 
 ### Riepilogo delle Modifiche Implementate
+
+Durante il refactoring completo del sottopacchetto `analysis/` per implementare i principi SOLID, modernizzare il codice Java e migliorare la gestione degli errori, sono state apportate le seguenti modifiche significative:
+
+#### 1. Refactoring Dependency Injection (Prima Fase)
 
 Durante il refactoring per implementare i principi SOLID, in particolare il Dependency Inversion Principle (DIP), sono state apportate le seguenti modifiche significative per eliminare l'uso del pattern Singleton e implementare la dependency injection:
 
@@ -104,6 +108,84 @@ Durante il refactoring per implementare i principi SOLID, in particolare il Depe
 3. **Miglioramento della Testabilità**: Le classi possono ora essere testate in isolamento con mock objects
 4. **Riduzione dell'Accoppiamento**: Le classi non dipendono più direttamente dall'implementazione singleton di ConfigurationManager
 5. **Maggiore Flessibilità**: Il sistema è ora più flessibile e può supportare diverse configurazioni o implementazioni di ConfigurationManager
+
+#### 2. Miglioramento Completo File Analysis (Seconda Fase - Agosto 2025)
+
+**Obiettivo:** Applicare i principi SOLID, rimuovere debug logging eccessivo, implementare gestione eccezioni specifica e utilizzare sintassi Java moderna.
+
+**File Migliorati:**
+
+**1. [`AnalysisPipeline.java`](src/main/java/com/scipath/scipathj/core/analysis/AnalysisPipeline.java)**
+- **Modifiche Implementate:**
+  - **Sintassi Java Moderna:** Convertiti i data carrier `AnalysisResults` e `ImageAnalysisResult` in Java 16+ `record` per maggiore concisione e immutabilità
+  - **Gestione Eccezioni Specifica:** Aggiunta eccezione custom `ImageProcessingException` per sostituire i generici `catch (Exception e)`
+  - **Rimozione Debug Logging:** Eliminato logging eccessivo mantenendo solo informazioni essenziali
+  - **Miglioramento Asincrono:** Sostituito `Thread.sleep()` con `CompletableFuture.delayedExecutor()` per gestione non-bloccante
+  - **Single Responsibility Principle:** Estratta logica di gestione ROI in metodo separato `addROIsToManager()`
+  - **Dependency Injection:** Mantenuta implementazione DI già esistente
+
+**2. [`CytoplasmSegmentation.java`](src/main/java/com/scipath/scipathj/core/analysis/CytoplasmSegmentation.java)**
+- **Modifiche Implementate:**
+  - **Dependency Injection:** Implementato pattern DI per tutte le dipendenze (`ConfigurationManager`, `MainSettings`, `ROIManager`)
+  - **Gestione Eccezioni Specifica:** Aggiunta eccezione custom `CytoplasmSegmentationException`
+  - **Rimozione Debug Logging:** Eliminato logging di debug eccessivo mantenendo solo informazioni essenziali
+  - **Sintassi Java Moderna:** Utilizzato `List.copyOf()` per tipi di ritorno immutabili e method references
+  - **Validazione Input:** Aggiunta validazione robusta dei parametri di input
+  - **Pulizia Codice:** Rimossi metodi di debug per visualizzazione immagini temporanee
+
+**3. [`SimpleHENuclearSegmentation.java` → `NuclearSegmentation.java`](src/main/java/com/scipath/scipathj/core/analysis/NuclearSegmentation.java)**
+- **Modifiche Implementate:**
+  - **Rinominazione Completa:** Rinominata classe da `SimpleHENuclearSegmentation` a `NuclearSegmentation` e aggiornati tutti i riferimenti
+  - **Rimozione Workaround:** Eliminato completamente il codice di debug e workaround per ClassLoader/TensorFlow
+  - **Dependency Injection:** Implementato pattern DI per `ConfigurationManager` e `ROIManager`
+  - **Gestione Eccezioni Specifica:** Aggiunta eccezione custom `NuclearSegmentationException`
+  - **Pulizia Massiva:** Rimosso tutto il logging di debug relativo a TensorFlow, ClassLoader e JPackage
+  - **Semplificazione Architettura:** Eliminata logica complessa di inizializzazione e gestione compatibilità
+  - **Sintassi Java Moderna:** Utilizzato Java 16+ features e API moderne
+
+**4. [`VesselSegmentation.java`](src/main/java/com/scipath/scipathj/core/analysis/VesselSegmentation.java)**
+- **Modifiche Implementate:**
+  - **Dependency Injection:** Implementato pattern DI completo con costruttore che accetta tutte le dipendenze
+  - **Gestione Eccezioni Specifica:** Aggiunta eccezione custom `VesselSegmentationException` con validazione input
+  - **Rimozione Debug Logging:** Eliminato logging di debug per immagini temporanee e operazioni interne
+  - **Refactoring Metodi:** Estratti metodi privati per singole responsabilità (`convertToGrayscale`, `applyGaussianBlur`, `applyThreshold`)
+  - **Single Responsibility Principle:** Separata logica di validazione, creazione ROI e gestione pixel processati
+  - **Sintassi Java Moderna:** Utilizzato method references e stream API per codice più conciso
+
+**5. Gestione Classi Placeholder**
+- **Analisi Completata:** Identificate le classi placeholder (`CellClassification.java`, `FeatureExtraction.java`, `StatisticalAnalysis.java`) che contengono solo codice TODO e non implementazioni reali
+- **Raccomandazione:** Queste classi dovrebbero essere rimosse o minimizzate per mantenere il codebase pulito
+
+### Benefici del Refactoring Completo
+
+1. **Principi SOLID Applicati:**
+   - **Single Responsibility Principle:** Ogni classe ha una responsabilità ben definita
+   - **Dependency Inversion Principle:** Eliminato uso di Singleton, implementata Dependency Injection
+
+2. **Modernizzazione Java:**
+   - Utilizzo di Java 16+ `record` per data carriers
+   - API moderne come `List.copyOf()` e `CompletableFuture`
+   - Method references e stream API
+
+3. **Gestione Errori Robusta:**
+   - Eccezioni specifiche per ogni tipo di segmentazione
+   - Validazione input appropriata
+   - Eliminazione di `catch (Exception e)` generici
+
+4. **Pulizia Codice:**
+   - Rimosso logging di debug eccessivo
+   - Eliminati workaround per problemi di compatibilità risolti
+   - Codice più conciso e leggibile
+
+5. **Miglioramento Testabilità:**
+   - Dependency Injection facilita unit testing
+   - Separazione delle responsabilità migliora isolamento dei test
+   - Eccezioni specifiche permettono testing più granulare
+
+6. **Manutenibilità:**
+   - Codice più pulito e organizzato
+   - Responsabilità ben separate
+   - Documentazione Javadoc migliorata
 
 ---
 

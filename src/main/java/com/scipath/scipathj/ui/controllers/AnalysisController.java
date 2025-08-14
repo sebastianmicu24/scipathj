@@ -169,8 +169,15 @@ public class AnalysisController {
                   configurationManager.initializeVesselSegmentationSettings();
               NuclearSegmentationSettings nuclearSettings =
                   configurationManager.initializeNuclearSegmentationSettings();
+
+              // Create required dependencies for AnalysisPipeline
+              com.scipath.scipathj.core.config.MainSettings mainSettings =
+                  configurationManager.initializeMainSettings();
+              com.scipath.scipathj.ui.components.ROIManager roiManager =
+                  com.scipath.scipathj.ui.components.ROIManager.getInstance();
+
               AnalysisPipeline pipeline =
-                  new AnalysisPipeline(configurationManager, vesselSettings, nuclearSettings);
+                  new AnalysisPipeline(configurationManager, mainSettings, roiManager);
 
               // Set up progress callbacks
               pipeline.setProgressMessageCallback(message -> publish(message));
@@ -184,9 +191,7 @@ public class AnalysisController {
               publish(
                   String.format(
                       "Analysis completed! Found %d vessels and %d nuclei across %d images.",
-                      results.getTotalVessels(),
-                      results.getTotalNuclei(),
-                      results.getProcessedImages()));
+                      results.totalVessels(), results.totalNuclei(), results.processedImages()));
 
             } catch (Exception e) {
               LOGGER.error("Error during analysis pipeline execution", e);
