@@ -21,7 +21,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Component for displaying the main selected image in large format with ROI overlay support.
+ * High-efficiency image viewer with optimized zoom and scroll handling.
+ * Designed for maximum performance with large images and multiple ROIs.
  */
 public class MainImageViewer extends JPanel
     implements ROIOverlay.ROIOverlayListener, ROIManager.ROIChangeListener {
@@ -35,6 +36,7 @@ public class MainImageViewer extends JPanel
   private static final double ZOOM_STEP = 0.1;
   private double currentZoom = 1.0;
 
+  // Core components
   private JLabel imageLabel;
   private JLabel imageInfoLabel;
   private JScrollPane scrollPane;
@@ -60,21 +62,16 @@ public class MainImageViewer extends JPanel
   private JButton zoom100Button;
   private JLabel zoomLabel;
 
+  // Performance optimization: batch update flags
+  private boolean updatePending = false;
+  private long lastUpdateTime = 0;
+  private static final long UPDATE_THROTTLE_MS = 16; // ~60fps
+
   public MainImageViewer() {
     this.roiManager = ROIManager.getInstance();
     initializeComponents();
     setupROISystem();
     showEmptyState();
-  }
-
-  /**
-   * Initialize the overlay with loaded settings after construction
-   */
-  public void initializeWithSettings(MainSettings mainSettings) {
-    if (roiOverlay != null && mainSettings != null) {
-      roiOverlay.updateSettings(mainSettings);
-      LOGGER.debug("Initialized ROI overlay with loaded settings");
-    }
   }
 
   private void initializeComponents() {
@@ -97,13 +94,23 @@ public class MainImageViewer extends JPanel
     add(topPanel, BorderLayout.NORTH);
     add(scrollPane, BorderLayout.CENTER);
     add(imageInfoLabel, BorderLayout.SOUTH);
+
+    // Add component resize listener to handle any size changes
+    addComponentListener(new java.awt.event.ComponentAdapter() {
+      @Override
+      public void componentResized(java.awt.event.ComponentEvent e) {
+        LOGGER.debug("MainImageViewer resized: {}x{} - checking if layout update needed",
+            getWidth(), getHeight());
+        if (imageLabel.getIcon() != null) {
+          // Force layout update when component is resized
+          updateLayeredPaneLayout((ImageIcon) imageLabel.getIcon());
+        }
+      }
+    });
   }
 
   private void setupROISystem() {
-    // Register as ROI overlay listener
     roiOverlay.addROIOverlayListener(this);
-
-    // Register as ROI manager listener
     roiManager.addROIChangeListener(this);
   }
 
@@ -139,7 +146,6 @@ public class MainImageViewer extends JPanel
     pane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
     pane.getVerticalScrollBar().setUnitIncrement(16);
     pane.getHorizontalScrollBar().setUnitIncrement(16);
-    pane.setBorder(BorderFactory.createLoweredBevelBorder());
 
     // Add mouse wheel zoom functionality
     pane.addMouseWheelListener(
@@ -147,7 +153,6 @@ public class MainImageViewer extends JPanel
           @Override
           public void mouseWheelMoved(MouseWheelEvent e) {
             if (e.isControlDown() && currentImagePlus != null) {
-              // Zoom with Ctrl + mouse wheel
               Point mousePoint = e.getPoint();
               if (e.getWheelRotation() < 0) {
                 zoomIn(mousePoint);
@@ -159,13 +164,14 @@ public class MainImageViewer extends JPanel
           }
         });
 
-    // Add scroll listeners to synchronize ROI overlay
+    // Add scroll listeners with throttling
     pane.getVerticalScrollBar()
         .addAdjustmentListener(
             new AdjustmentListener() {
               @Override
               public void adjustmentValueChanged(AdjustmentEvent e) {
-                updateROIOverlayTransform();
+                LOGGER.debug("Vertical scroll event: value={}, type={}", e.getValue(), e.getAdjustmentType());
+                throttledROIUpdate();
               }
             });
 
@@ -174,9 +180,22 @@ public class MainImageViewer extends JPanel
             new AdjustmentListener() {
               @Override
               public void adjustmentValueChanged(AdjustmentEvent e) {
-                updateROIOverlayTransform();
+                LOGGER.debug("Horizontal scroll event: value={}, type={}", e.getValue(), e.getAdjustmentType());
+                throttledROIUpdate();
               }
             });
+
+    // Add viewport resize listener to handle window resizing
+    pane.getViewport().addComponentListener(new java.awt.event.ComponentAdapter() {
+      @Override
+      public void componentResized(java.awt.event.ComponentEvent e) {
+        LOGGER.debug("Viewport resized: {}x{} - updating transforms",
+            pane.getViewport().getWidth(), pane.getViewport().getHeight());
+        if (imageLabel.getIcon() != null) {
+          updateLayeredPaneLayout((ImageIcon) imageLabel.getIcon());
+        }
+      }
+    });
 
     return pane;
   }
@@ -185,28 +204,23 @@ public class MainImageViewer extends JPanel
     JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
     panel.setOpaque(false);
 
-    // Zoom out button
     zoomOutButton = UIUtils.createButton("", FontAwesomeSolid.SEARCH_MINUS, e -> zoomOut(null));
     zoomOutButton.setPreferredSize(new Dimension(30, 30));
     zoomOutButton.setToolTipText("Zoom Out");
 
-    // Zoom label
     zoomLabel = new JLabel("100%");
     zoomLabel.setFont(zoomLabel.getFont().deriveFont(Font.PLAIN, UIConstants.SMALL_FONT_SIZE));
     zoomLabel.setPreferredSize(new Dimension(50, 30));
     zoomLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
-    // Zoom in button
     zoomInButton = UIUtils.createButton("", FontAwesomeSolid.SEARCH_PLUS, e -> zoomIn(null));
     zoomInButton.setPreferredSize(new Dimension(30, 30));
     zoomInButton.setToolTipText("Zoom In");
 
-    // Fit to window button
     zoomFitButton = UIUtils.createButton("", FontAwesomeSolid.EXPAND_ARROWS_ALT, e -> zoomToFit());
     zoomFitButton.setPreferredSize(new Dimension(30, 30));
     zoomFitButton.setToolTipText("Fit to Window");
 
-    // 100% zoom button
     zoom100Button = UIUtils.createButton("", FontAwesomeSolid.SEARCH, e -> zoomTo100());
     zoom100Button.setPreferredSize(new Dimension(30, 30));
     zoom100Button.setToolTipText("100%");
@@ -218,9 +232,7 @@ public class MainImageViewer extends JPanel
     panel.add(zoomFitButton);
     panel.add(zoom100Button);
 
-    // Initially disabled
     setZoomControlsEnabled(false);
-
     return panel;
   }
 
@@ -230,6 +242,359 @@ public class MainImageViewer extends JPanel
     label.setBorder(UIUtils.createPadding(UIConstants.MEDIUM_SPACING, 0, 0, 0));
     return label;
   }
+
+  // ===== PERFORMANCE OPTIMIZATION: THROTTLED UPDATES =====
+
+  private void throttledROIUpdate() {
+    if (!updatePending) {
+      updatePending = true;
+      long currentTime = System.currentTimeMillis();
+      long timeSinceLastUpdate = currentTime - lastUpdateTime;
+
+      LOGGER.debug("=== SCROLL EVENT TRIGGERED ===");
+      LOGGER.debug("Update pending: {}, Time since last update: {}ms", updatePending, timeSinceLastUpdate);
+
+      if (timeSinceLastUpdate >= UPDATE_THROTTLE_MS) {
+        // Immediate update if enough time has passed
+        LOGGER.debug("Performing immediate ROI update");
+        performROIUpdate();
+      } else {
+        // Schedule throttled update
+        long delay = UPDATE_THROTTLE_MS - timeSinceLastUpdate;
+        LOGGER.debug("Scheduling throttled ROI update in {}ms", delay);
+        Timer timer = new Timer((int) delay, e -> performROIUpdate());
+        timer.setRepeats(false);
+        timer.start();
+      }
+    } else {
+      LOGGER.debug("Update already pending, skipping throttled update");
+    }
+  }
+
+  private void performROIUpdate() {
+    updatePending = false;
+    lastUpdateTime = System.currentTimeMillis();
+
+    LOGGER.debug("=== PERFORMING ROI UPDATE ===");
+    LOGGER.debug("Current scroll position: ({}, {})",
+        scrollPane.getViewport().getViewPosition().x,
+        scrollPane.getViewport().getViewPosition().y);
+
+    updateROIOverlayTransform();
+    LOGGER.debug("=== ROI UPDATE COMPLETED ===");
+  }
+
+  // ===== IMAGE LOADING AND DISPLAY =====
+
+  public void displayImage(File imageFile) {
+    if (imageFile == null) {
+      showEmptyState();
+      return;
+    }
+
+    if (imageFile.equals(currentImageFile)) {
+      LOGGER.debug("Image already displayed: {}", imageFile.getName());
+      return;
+    }
+
+    this.currentImageFile = imageFile;
+    LOGGER.info("Loading image for main viewer: {}", imageFile.getAbsolutePath());
+    showLoadingState();
+
+    CompletableFuture.supplyAsync(() -> loadImageSafely(imageFile))
+        .thenAccept(this::handleImageLoaded)
+        .exceptionally(this::handleImageError);
+  }
+
+  private ImagePlus loadImageSafely(File imageFile) {
+    try {
+      return ImageLoader.loadImage(imageFile.getAbsolutePath());
+    } catch (Exception e) {
+      LOGGER.error("Error loading image: {}", imageFile.getAbsolutePath(), e);
+      return null;
+    }
+  }
+
+  private void handleImageLoaded(ImagePlus imagePlus) {
+    SwingUtilities.invokeLater(
+        () -> {
+          if (imagePlus != null) {
+            displayLoadedImage(imagePlus);
+          } else {
+            showErrorState("Unsupported format or corrupted file");
+          }
+        });
+  }
+
+  private Void handleImageError(Throwable throwable) {
+    LOGGER.error("Error in image loading task: {}", currentImageFile.getAbsolutePath(), throwable);
+    SwingUtilities.invokeLater(() -> showErrorState(throwable.getMessage()));
+    return null;
+  }
+
+  private void displayLoadedImage(ImagePlus imagePlus) {
+    this.currentImagePlus = imagePlus;
+    this.isLoading = false;
+
+    try {
+      Image image = imagePlus.getImage();
+      if (image != null) {
+        this.originalImage = image;
+        this.originalImageWidth = imagePlus.getWidth();
+        this.originalImageHeight = imagePlus.getHeight();
+
+        // Start with 100% zoom (native image resolution)
+        currentZoom = 1.0;
+
+        // Create scaled image
+        Image scaledImage = createScaledImage();
+        ImageIcon imageIcon = new ImageIcon(scaledImage);
+        imageLabel.setIcon(imageIcon);
+        imageLabel.setText("");
+
+        // Update layout
+        updateLayeredPaneLayout(imageIcon);
+
+        // Update ROI overlay
+        updateROIOverlay();
+
+        // Set original image dimensions for buffer allocation (working in native resolution)
+        roiOverlay.setImageDimensions(originalImageWidth, originalImageHeight);
+
+        // Enable zoom controls
+        setZoomControlsEnabled(true);
+        updateZoomLabel();
+
+        updateImageInfo();
+        LOGGER.info("Successfully displayed image: {}", currentImageFile.getName());
+      } else {
+        showErrorState("Could not extract image data");
+      }
+    } catch (Exception e) {
+      LOGGER.error("Error displaying image: {}", currentImageFile.getName(), e);
+      showErrorState("Error processing image: " + e.getMessage());
+    }
+  }
+
+  // ===== LAYOUT AND TRANSFORM CALCULATIONS =====
+
+  private void updateLayeredPaneLayout(ImageIcon imageIcon) {
+    layeredPane.removeAll();
+
+    int imageWidth = imageIcon.getIconWidth();
+    int imageHeight = imageIcon.getIconHeight();
+
+    // Calculate layered pane size - CRITICAL for synchronization
+    // The layered pane must be large enough to contain the image AND provide
+    // scrollable space when needed. The key is to use the maximum of:
+    // 1. Image size (for when image is larger than viewport)
+    // 2. Viewport size (for when viewport is larger than image)
+    // 3. A minimum size to prevent edge cases
+    Dimension viewportSize = scrollPane.getViewport().getSize();
+    int minSize = 100; // Minimum size to prevent edge cases
+
+    int layeredPaneWidth = Math.max(minSize, Math.max(imageWidth, viewportSize.width));
+    int layeredPaneHeight = Math.max(minSize, Math.max(imageHeight, viewportSize.height));
+
+    layeredPane.setPreferredSize(new Dimension(layeredPaneWidth, layeredPaneHeight));
+    layeredPane.setSize(layeredPaneWidth, layeredPaneHeight);
+
+    // Center the image within the layered pane
+    // This calculation must be consistent with the transform calculation
+    int imageX = Math.max(0, (layeredPaneWidth - imageWidth) / 2);
+    int imageY = Math.max(0, (layeredPaneHeight - imageHeight) / 2);
+
+    imageLabel.setBounds(imageX, imageY, imageWidth, imageHeight);
+    layeredPane.add(imageLabel, JLayeredPane.DEFAULT_LAYER);
+
+    // Set ROI overlay bounds to exactly match the layered pane
+    roiOverlay.setBounds(0, 0, layeredPaneWidth, layeredPaneHeight);
+    layeredPane.add(roiOverlay, JLayeredPane.PALETTE_LAYER);
+
+    updateROIOverlayTransform();
+    layeredPane.revalidate();
+    layeredPane.repaint();
+
+    LOGGER.debug("Layout update - Image: {}x{}, Viewport: {}x{}, LayeredPane: {}x{}, ImagePos: ({},{})",
+        imageWidth, imageHeight, viewportSize.width, viewportSize.height,
+        layeredPaneWidth, layeredPaneHeight, imageX, imageY);
+  }
+
+  public void updateROIOverlayTransform() {
+    if (roiOverlay == null || currentImagePlus == null || imageLabel.getIcon() == null) return;
+
+    // Get the exact same values used for image positioning
+    ImageIcon imageIcon = (ImageIcon) imageLabel.getIcon();
+    int imageWidth = imageIcon.getIconWidth();
+    int imageHeight = imageIcon.getIconHeight();
+
+    // Get current scroll position
+    JViewport viewport = scrollPane.getViewport();
+    Point viewPosition = viewport.getViewPosition();
+
+    // Calculate scale factors (actual displayed size vs original size)
+    double scaleX = (double) imageWidth / originalImageWidth;
+    double scaleY = (double) imageHeight / originalImageHeight;
+
+    // Calculate the image's actual position in the layered pane
+    int layeredPaneWidth = layeredPane.getWidth();
+    int layeredPaneHeight = layeredPane.getHeight();
+
+    // Center the image in the layered pane (same as image positioning)
+    int imageX = Math.max(0, (layeredPaneWidth - imageWidth) / 2);
+    int imageY = Math.max(0, (layeredPaneHeight - imageHeight) / 2);
+
+    // FIXED: Make overlay positioning match image positioning exactly
+    // The image is positioned at (imageX, imageY) in the layered pane
+    // The overlay should render its content at the same position to match
+
+    // ENHANCED DEBUG LOGGING: Include scaling analysis
+    LOGGER.debug("=== COORDINATE SYNC DEBUG ===");
+    LOGGER.debug("Component dimensions: MainImageViewer={}x{}, Viewport={}x{}",
+        getWidth(), getHeight(), viewport.getWidth(), viewport.getHeight());
+    LOGGER.debug("Image: {}x{} -> {}x{} (scale: {}x{})",
+        originalImageWidth, originalImageHeight, imageWidth, imageHeight, scaleX, scaleY);
+    LOGGER.debug("LayeredPane: {}x{}, Image position: ({}, {})",
+        layeredPaneWidth, layeredPaneHeight, imageX, imageY);
+    LOGGER.debug("Scroll position: ({}, {})",
+        viewPosition.x, viewPosition.y);
+    LOGGER.debug("Scroll range: H[0-{}], V[0-{}]",
+        layeredPaneWidth - viewport.getWidth(), layeredPaneHeight - viewport.getHeight());
+    LOGGER.debug("=== END COORDINATE SYNC DEBUG ===");
+
+    // Set the transform to match image positioning exactly
+    // The overlay content should appear at the same position as the image
+    roiOverlay.setImageTransform(scaleX, scaleY, imageX, imageY);
+  }
+
+  // ===== ZOOM FUNCTIONALITY =====
+
+  private double calculateFitZoom() {
+    if (originalImage == null || scrollPane == null) {
+      return 1.0;
+    }
+
+    Dimension viewportSize = scrollPane.getViewport().getSize();
+    double scaleX = (double) viewportSize.width / originalImageWidth;
+    double scaleY = (double) viewportSize.height / originalImageHeight;
+
+    return Math.min(Math.min(scaleX, scaleY), 1.0);
+  }
+
+  private Image createScaledImage() {
+    if (originalImage == null) return null;
+
+    int scaledWidth = Math.max(1, (int) Math.round(originalImageWidth * currentZoom));
+    int scaledHeight = Math.max(1, (int) Math.round(originalImageHeight * currentZoom));
+
+    LOGGER.debug("Creating scaled image: {}x{} -> {}x{} (zoom={})",
+        originalImageWidth, originalImageHeight, scaledWidth, scaledHeight, currentZoom);
+
+    return originalImage.getScaledInstance(scaledWidth, scaledHeight, Image.SCALE_SMOOTH);
+  }
+
+  private void updateZoomLabel() {
+    if (zoomLabel != null) {
+      int percentage = (int) Math.round(currentZoom * 100);
+      zoomLabel.setText(percentage + "%");
+    }
+  }
+
+  private void setZoomControlsEnabled(boolean enabled) {
+    if (zoomInButton != null) zoomInButton.setEnabled(enabled);
+    if (zoomOutButton != null) zoomOutButton.setEnabled(enabled);
+    if (zoomFitButton != null) zoomFitButton.setEnabled(enabled);
+    if (zoom100Button != null) zoom100Button.setEnabled(enabled);
+  }
+
+  private void zoomIn(Point centerPoint) {
+    if (currentImagePlus == null) return;
+
+    double newZoom = Math.min(currentZoom + ZOOM_STEP, MAX_ZOOM);
+    if (newZoom != currentZoom) {
+      setZoom(newZoom, centerPoint);
+    }
+  }
+
+  private void zoomOut(Point centerPoint) {
+    if (currentImagePlus == null) return;
+
+    double newZoom = Math.max(currentZoom - ZOOM_STEP, MIN_ZOOM);
+    if (newZoom != currentZoom) {
+      setZoom(newZoom, centerPoint);
+    }
+  }
+
+  private void zoomToFit() {
+    if (currentImagePlus == null) return;
+
+    double fitZoom = calculateFitZoom();
+    setZoom(fitZoom, null);
+  }
+
+  private void zoomTo100() {
+    if (currentImagePlus == null) return;
+
+    setZoom(1.0, null);
+  }
+
+  private void setZoom(double newZoom, Point centerPoint) {
+    if (currentImagePlus == null || originalImage == null) return;
+
+    // Store the current scroll position if we have a center point
+    Point scrollPosition = null;
+    if (centerPoint != null) {
+      JViewport viewport = scrollPane.getViewport();
+      Point viewPosition = viewport.getViewPosition();
+
+      // Calculate the relative position in the image
+      double relativeX = (centerPoint.x + viewPosition.x) / (originalImageWidth * currentZoom);
+      double relativeY = (centerPoint.y + viewPosition.y) / (originalImageHeight * currentZoom);
+
+      // Calculate new scroll position
+      int newScrollX = (int) (relativeX * originalImageWidth * newZoom - centerPoint.x);
+      int newScrollY = (int) (relativeY * originalImageHeight * newZoom - centerPoint.y);
+
+      scrollPosition = new Point(newScrollX, newScrollY);
+    }
+
+    // Update zoom level
+    currentZoom = newZoom;
+
+    // Create new scaled image
+    Image scaledImage = createScaledImage();
+    ImageIcon imageIcon = new ImageIcon(scaledImage);
+    imageLabel.setIcon(imageIcon);
+
+    // Update layout
+    updateLayeredPaneLayout(imageIcon);
+
+    // Update zoom label
+    updateZoomLabel();
+
+    // Restore scroll position if specified
+    if (scrollPosition != null) {
+      final Point finalScrollPosition = scrollPosition;
+      SwingUtilities.invokeLater(
+          () -> {
+            JViewport viewport = scrollPane.getViewport();
+            int x =
+                Math.max(
+                    0,
+                    Math.min(finalScrollPosition.x, layeredPane.getWidth() - viewport.getWidth()));
+            int y =
+                Math.max(
+                    0,
+                    Math.min(
+                        finalScrollPosition.y, layeredPane.getHeight() - viewport.getHeight()));
+            viewport.setViewPosition(new Point(x, y));
+          });
+    }
+
+    LOGGER.debug("Zoom changed to {}%", Math.round(currentZoom * 100));
+  }
+
+  // ===== STATE MANAGEMENT =====
 
   private void showEmptyState() {
     showStatePanel(
@@ -309,140 +674,11 @@ public class MainImageViewer extends JPanel
     layeredPane.repaint();
   }
 
-  public void displayImage(File imageFile) {
-    if (imageFile == null) {
-      showEmptyState();
-      return;
-    }
-
-    if (imageFile.equals(currentImageFile)) {
-      LOGGER.debug("Image already displayed: {}", imageFile.getName());
-      return;
-    }
-
-    this.currentImageFile = imageFile;
-    LOGGER.info("Loading image for main viewer: {}", imageFile.getAbsolutePath());
-    showLoadingState();
-
-    CompletableFuture.supplyAsync(() -> loadImageSafely(imageFile))
-        .thenAccept(this::handleImageLoaded)
-        .exceptionally(this::handleImageError);
-  }
-
-  private ImagePlus loadImageSafely(File imageFile) {
-    try {
-      return ImageLoader.loadImage(imageFile.getAbsolutePath());
-    } catch (Exception e) {
-      LOGGER.error("Error loading image: {}", imageFile.getAbsolutePath(), e);
-      return null;
-    }
-  }
-
-  private void handleImageLoaded(ImagePlus imagePlus) {
-    SwingUtilities.invokeLater(
-        () -> {
-          if (imagePlus != null) {
-            displayLoadedImage(imagePlus);
-          } else {
-            showErrorState("Unsupported format or corrupted file");
-          }
-        });
-  }
-
-  private Void handleImageError(Throwable throwable) {
-    LOGGER.error("Error in image loading task: {}", currentImageFile.getAbsolutePath(), throwable);
-    SwingUtilities.invokeLater(() -> showErrorState(throwable.getMessage()));
-    return null;
-  }
-
-  private void displayLoadedImage(ImagePlus imagePlus) {
-    this.currentImagePlus = imagePlus;
-    this.isLoading = false;
-
-    try {
-      Image image = imagePlus.getImage();
-      if (image != null) {
-        // Store original image properties
-        this.originalImage = image;
-        this.originalImageWidth = imagePlus.getWidth();
-        this.originalImageHeight = imagePlus.getHeight();
-
-        // Reset zoom to fit
-        currentZoom = calculateFitZoom();
-
-        // Create scaled image
-        Image scaledImage = createScaledImage();
-        ImageIcon imageIcon = new ImageIcon(scaledImage);
-        imageLabel.setIcon(imageIcon);
-        imageLabel.setText("");
-
-        // Update layered pane layout
-        updateLayeredPaneLayout(imageIcon);
-
-        // Update ROI overlay with current image's ROIs
-        updateROIOverlay();
-
-        // Enable zoom controls
-        setZoomControlsEnabled(true);
-        updateZoomLabel();
-
-        updateImageInfo();
-        LOGGER.info("Successfully displayed image: {}", currentImageFile.getName());
-      } else {
-        showErrorState("Could not extract image data");
-      }
-    } catch (Exception e) {
-      LOGGER.error("Error displaying image: {}", currentImageFile.getName(), e);
-      showErrorState("Error processing image: " + e.getMessage());
-    }
-  }
-
-  private void updateLayeredPaneLayout(ImageIcon imageIcon) {
-    // Clear and rebuild layered pane
-    layeredPane.removeAll();
-
-    // Calculate image position and size
-    int imageWidth = imageIcon.getIconWidth();
-    int imageHeight = imageIcon.getIconHeight();
-
-    // Update layered pane size to accommodate the full image
-    // Ensure the layered pane is at least as large as the viewport
-    Dimension viewportSize = scrollPane.getViewport().getSize();
-    int layeredPaneWidth = Math.max(imageWidth, viewportSize.width);
-    int layeredPaneHeight = Math.max(imageHeight, viewportSize.height);
-
-    layeredPane.setPreferredSize(new Dimension(layeredPaneWidth, layeredPaneHeight));
-    layeredPane.setSize(layeredPaneWidth, layeredPaneHeight);
-
-    // Center the image within the layered pane
-    int imageX = Math.max(0, (layeredPaneWidth - imageWidth) / 2);
-    int imageY = Math.max(0, (layeredPaneHeight - imageHeight) / 2);
-
-    // Set image label bounds
-    imageLabel.setBounds(imageX, imageY, imageWidth, imageHeight);
-    layeredPane.add(imageLabel, JLayeredPane.DEFAULT_LAYER);
-
-    // Set ROI overlay bounds to cover the entire layered pane
-    // This ensures ROIs are visible even when scrolling
-    roiOverlay.setBounds(0, 0, layeredPaneWidth, layeredPaneHeight);
-    layeredPane.add(roiOverlay, JLayeredPane.PALETTE_LAYER);
-
-    // Update ROI overlay transform with proper offset
-    updateROIOverlayTransform();
-
-    // Force scroll pane to recognize the new size
-    layeredPane.revalidate();
-    layeredPane.repaint();
-    scrollPane.revalidate();
-    scrollPane.repaint();
-  }
-
   private void updateROIOverlay() {
     if (currentImageFile != null) {
       String fileName = currentImageFile.getName();
       List<UserROI> rois = roiManager.getROIsForImage(fileName);
       roiOverlay.setDisplayedROIs(rois, fileName);
-      // LOGGER.debug("Updated ROI overlay with {} ROIs for image '{}'", rois.size(), fileName);
     }
   }
 
@@ -461,6 +697,8 @@ public class MainImageViewer extends JPanel
         String.format("%s | %s | %s pixels | %s", fileName, fileSize, dimensions, extension));
   }
 
+  // ===== GETTERS AND SETTERS =====
+
   public File getCurrentImageFile() {
     return currentImageFile;
   }
@@ -478,9 +716,6 @@ public class MainImageViewer extends JPanel
     showEmptyState();
   }
 
-  /**
-   * Enable ROI creation mode
-   */
   public void setROICreationMode(UserROI.ROIType type) {
     if (type != null) {
       roiOverlay.setROICreationMode(type);
@@ -491,24 +726,22 @@ public class MainImageViewer extends JPanel
     }
   }
 
-  /**
-   * Disable ROI creation mode
-   */
   public void disableROICreationMode() {
     roiOverlay.disableROICreationMode();
   }
 
-  /**
-   * Get the current ROI overlay component
-   */
   public ROIOverlay getROIOverlay() {
     return roiOverlay;
   }
 
-  // ROIOverlay.ROIOverlayListener implementation
+  public double getCurrentZoom() {
+    return currentZoom;
+  }
+
+  // ===== ROI LISTENER IMPLEMENTATIONS =====
+
   @Override
   public void onROICreated(UserROI roi) {
-    // Add the ROI to the manager
     roiManager.addROI(roi);
     LOGGER.info("ROI created and added to manager: {}", roi);
   }
@@ -516,19 +749,15 @@ public class MainImageViewer extends JPanel
   @Override
   public void onROISelected(UserROI roi) {
     LOGGER.debug("ROI selected: {}", roi.getName());
-    // Future: Could trigger ROI properties panel update
   }
 
   @Override
   public void onROIDeselected() {
     LOGGER.debug("ROI selection cleared");
-    // Future: Could trigger ROI properties panel clear
   }
 
-  // ROIManager.ROIChangeListener implementation
   @Override
   public void onROIAdded(UserROI roi) {
-    // Update overlay if this ROI belongs to current image
     if (currentImageFile != null && roi.getImageFileName().equals(currentImageFile.getName())) {
       updateROIOverlay();
     }
@@ -536,7 +765,6 @@ public class MainImageViewer extends JPanel
 
   @Override
   public void onROIRemoved(UserROI roi) {
-    // Update overlay if this ROI belonged to current image
     if (currentImageFile != null && roi.getImageFileName().equals(currentImageFile.getName())) {
       updateROIOverlay();
     }
@@ -544,7 +772,6 @@ public class MainImageViewer extends JPanel
 
   @Override
   public void onROIUpdated(UserROI roi) {
-    // Update overlay if this ROI belongs to current image
     if (currentImageFile != null && roi.getImageFileName().equals(currentImageFile.getName())) {
       updateROIOverlay();
     }
@@ -552,225 +779,17 @@ public class MainImageViewer extends JPanel
 
   @Override
   public void onROIsCleared(String imageFileName) {
-    // Update overlay if ROIs were cleared for current image
     if (currentImageFile != null && imageFileName.equals(currentImageFile.getName())) {
       updateROIOverlay();
     }
   }
 
-  // ========== ZOOM FUNCTIONALITY ==========
+  // ===== SETTINGS INTEGRATION =====
 
-  /**
-   * Calculate the zoom level that fits the image to the viewport
-   */
-  private double calculateFitZoom() {
-    if (originalImage == null || scrollPane == null) {
-      return 1.0;
+  public void initializeWithSettings(MainSettings mainSettings) {
+    if (roiOverlay != null && mainSettings != null) {
+      roiOverlay.updateSettings(mainSettings);
+      LOGGER.debug("Initialized ROI overlay with loaded settings");
     }
-
-    Dimension viewportSize = scrollPane.getViewport().getSize();
-    double scaleX = (double) viewportSize.width / originalImageWidth;
-    double scaleY = (double) viewportSize.height / originalImageHeight;
-
-    return Math.min(Math.min(scaleX, scaleY), 1.0); // Don't zoom in beyond 100%
-  }
-
-  /**
-   * Create a scaled version of the original image based on current zoom
-   */
-  private Image createScaledImage() {
-    if (originalImage == null) {
-      return null;
-    }
-
-    // Use the same rounding method as ROI overlay to ensure perfect alignment
-    int scaledWidth = Math.max(1, (int) Math.round(originalImageWidth * currentZoom));
-    int scaledHeight = Math.max(1, (int) Math.round(originalImageHeight * currentZoom));
-
-    LOGGER.debug(
-        "Creating scaled image: {}x{} -> {}x{} (zoom={})",
-        originalImageWidth,
-        originalImageHeight,
-        scaledWidth,
-        scaledHeight,
-        currentZoom);
-
-    return originalImage.getScaledInstance(scaledWidth, scaledHeight, Image.SCALE_SMOOTH);
-  }
-
-  /**
-   * Update the zoom label to show current zoom percentage
-   */
-  private void updateZoomLabel() {
-    if (zoomLabel != null) {
-      int percentage = (int) Math.round(currentZoom * 100);
-      zoomLabel.setText(percentage + "%");
-    }
-  }
-
-  /**
-   * Enable or disable zoom controls
-   */
-  private void setZoomControlsEnabled(boolean enabled) {
-    if (zoomInButton != null) zoomInButton.setEnabled(enabled);
-    if (zoomOutButton != null) zoomOutButton.setEnabled(enabled);
-    if (zoomFitButton != null) zoomFitButton.setEnabled(enabled);
-    if (zoom100Button != null) zoom100Button.setEnabled(enabled);
-  }
-
-  /**
-   * Zoom in by one step
-   */
-  private void zoomIn(Point centerPoint) {
-    if (currentImagePlus == null) return;
-
-    double newZoom = Math.min(currentZoom + ZOOM_STEP, MAX_ZOOM);
-    if (newZoom != currentZoom) {
-      setZoom(newZoom, centerPoint);
-    }
-  }
-
-  /**
-   * Zoom out by one step
-   */
-  private void zoomOut(Point centerPoint) {
-    if (currentImagePlus == null) return;
-
-    double newZoom = Math.max(currentZoom - ZOOM_STEP, MIN_ZOOM);
-    if (newZoom != currentZoom) {
-      setZoom(newZoom, centerPoint);
-    }
-  }
-
-  /**
-   * Zoom to fit the image in the viewport
-   */
-  private void zoomToFit() {
-    if (currentImagePlus == null) return;
-
-    double fitZoom = calculateFitZoom();
-    setZoom(fitZoom, null);
-  }
-
-  /**
-   * Zoom to 100% (actual size)
-   */
-  private void zoomTo100() {
-    if (currentImagePlus == null) return;
-
-    setZoom(1.0, null);
-  }
-
-  /**
-   * Set the zoom level and update the display
-   */
-  private void setZoom(double newZoom, Point centerPoint) {
-    if (currentImagePlus == null || originalImage == null) return;
-
-    // Store the current scroll position if we have a center point
-    Point scrollPosition = null;
-    if (centerPoint != null) {
-      JViewport viewport = scrollPane.getViewport();
-      Point viewPosition = viewport.getViewPosition();
-
-      // Calculate the relative position in the image
-      double relativeX = (centerPoint.x + viewPosition.x) / (originalImageWidth * currentZoom);
-      double relativeY = (centerPoint.y + viewPosition.y) / (originalImageHeight * currentZoom);
-
-      // Calculate new scroll position
-      int newScrollX = (int) (relativeX * originalImageWidth * newZoom - centerPoint.x);
-      int newScrollY = (int) (relativeY * originalImageHeight * newZoom - centerPoint.y);
-
-      scrollPosition = new Point(newScrollX, newScrollY);
-    }
-
-    // Update zoom level
-    currentZoom = newZoom;
-
-    // Create new scaled image
-    Image scaledImage = createScaledImage();
-    ImageIcon imageIcon = new ImageIcon(scaledImage);
-    imageLabel.setIcon(imageIcon);
-
-    // Update layout
-    updateLayeredPaneLayout(imageIcon);
-
-    // Update zoom label
-    updateZoomLabel();
-
-    // Restore scroll position if specified
-    if (scrollPosition != null) {
-      final Point finalScrollPosition = scrollPosition;
-      SwingUtilities.invokeLater(
-          () -> {
-            JViewport viewport = scrollPane.getViewport();
-            int x =
-                Math.max(
-                    0,
-                    Math.min(finalScrollPosition.x, layeredPane.getWidth() - viewport.getWidth()));
-            int y =
-                Math.max(
-                    0,
-                    Math.min(
-                        finalScrollPosition.y, layeredPane.getHeight() - viewport.getHeight()));
-            viewport.setViewPosition(new Point(x, y));
-          });
-    }
-
-    LOGGER.debug("Zoom changed to {}%", Math.round(currentZoom * 100));
-  }
-
-  /**
-   * Update ROI overlay transform to account for current zoom and scroll position
-   */
-  public void updateROIOverlayTransform() {
-    if (roiOverlay == null || currentImagePlus == null || imageLabel.getIcon() == null) return;
-
-    // Get current scroll position
-    JViewport viewport = scrollPane.getViewport();
-    Point viewPosition = viewport.getViewPosition();
-
-    // Use the actual displayed image dimensions to ensure perfect alignment
-    ImageIcon imageIcon = (ImageIcon) imageLabel.getIcon();
-    double imageWidth = imageIcon.getIconWidth();
-    double imageHeight = imageIcon.getIconHeight();
-
-    // Calculate the actual scale based on displayed image size
-    double actualScaleX = imageWidth / originalImageWidth;
-    double actualScaleY = imageHeight / originalImageHeight;
-
-    double layeredPaneWidth = Math.max(imageWidth, viewport.getWidth());
-    double layeredPaneHeight = Math.max(imageHeight, viewport.getHeight());
-
-    // Calculate image offset using actual displayed dimensions
-    double imageX = Math.max(0, (layeredPaneWidth - imageWidth) / 2.0);
-    double imageY = Math.max(0, (layeredPaneHeight - imageHeight) / 2.0);
-
-    // Update ROI overlay transform with actual scale and scroll offset
-    double offsetX = -viewPosition.x + imageX;
-    double offsetY = -viewPosition.y + imageY;
-
-    LOGGER.debug(
-        "Updating ROI transform: actualScale=({:.6f},{:.6f}), viewPos=({},{}), imageSize=({}x{}),"
-            + " imagePos=({:.3f},{:.3f}), finalOffset=({:.3f},{:.3f})",
-        actualScaleX,
-        actualScaleY,
-        viewPosition.x,
-        viewPosition.y,
-        (int) imageWidth,
-        (int) imageHeight,
-        imageX,
-        imageY,
-        offsetX,
-        offsetY);
-
-    roiOverlay.setImageTransform(actualScaleX, actualScaleY, offsetX, offsetY);
-  }
-
-  /**
-   * Get current zoom level
-   */
-  public double getCurrentZoom() {
-    return currentZoom;
   }
 }

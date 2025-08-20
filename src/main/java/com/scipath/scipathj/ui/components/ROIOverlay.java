@@ -4,610 +4,570 @@ import com.scipath.scipathj.core.config.MainSettings;
 import com.scipath.scipathj.data.model.UserROI;
 import com.scipath.scipathj.ui.utils.UIConstants;
 import ij.gui.Roi;
+import ij.gui.ShapeRoi;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.AffineTransform;
+import java.awt.image.BufferedImage;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import javax.swing.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Transparent overlay component that displays ROIs on top of images.
- * Handles ROI rendering and mouse interactions for ROI selection and creation.
- * Updated to work with immutable MainSettings using dependency injection pattern.
+ * Ultra-efficient ROI overlay with single-calculation and buffered rendering.
  *
- * @author Sebastian Micu
- * @version 2.0.0
- * @since 1.0.0
+ * Key optimizations:
+ * - ShapeRoi shapes calculated once at creation time
+ * - Large buffer covering entire image at native resolution
+ * - Fast copy operations for scroll/zoom (no re-rendering)
+ * - Native image resolution as baseline
  */
 public class ROIOverlay extends JComponent {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(ROIOverlay.class);
 
-  // ROI display constants
+  // Performance constants
   private static final int SELECTION_STROKE_WIDTH = UIConstants.SELECTION_STROKE_WIDTH;
   private static final float[] DASH_PATTERN = UIConstants.DASH_PATTERN;
   private static final Color SELECTION_COLOR = UIConstants.ROI_SELECTION_COLOR;
+  private static final int BUFFER_MARGIN = 100; // Extra space around image for scrolling
 
-  // Main settings for configurable appearance (now mutable to support updates)
+  // Core settings
   private MainSettings mainSettings;
 
-  // Current ROIs to display
-  private final List<UserROI> displayedROIs;
+  // ROI data
+  private final List<UserROI> displayedROIs = new CopyOnWriteArrayList<>();
+  private String currentImageFileName;
 
-  // ROI creation state
+  // Single-calculation shape cache - calculated once, never recalculated
+  private final Map<Integer, java.awt.Shape> originalShapes = new ConcurrentHashMap<>();
+
+  // Large buffer covering entire image at native resolution
+  private BufferedImage masterBuffer;
+  private int bufferWidth;
+  private int bufferHeight;
+  private boolean bufferValid = false;
+
+  // Transform state for fast copy operations
+  private double scaleX = 1.0;
+  private double scaleY = 1.0;
+  private double offsetX = 0.0;
+  private double offsetY = 0.0;
+  private int imageWidth = 0;
+  private int imageHeight = 0;
+
+  // Mouse interaction state
+  private UserROI selectedROI;
   private boolean isCreatingROI = false;
   private Point roiStartPoint;
   private Point roiCurrentPoint;
   private UserROI.ROIType creationMode = UserROI.ROIType.SQUARE;
 
-  // Selection state
-  private UserROI selectedROI;
-  private String currentImageFileName;
-
-  // Scale factor for coordinate transformation - use double for better precision
-  private double scaleX = 1.0;
-  private double scaleY = 1.0;
-  private double imageOffsetX = 0.0;
-  private double imageOffsetY = 0.0;
-
   // Listeners
-  private final List<ROIOverlayListener> listeners;
+  private final List<ROIOverlayListener> listeners = new CopyOnWriteArrayList<>();
 
   public interface ROIOverlayListener {
     void onROICreated(UserROI roi);
-
     void onROISelected(UserROI roi);
-
     void onROIDeselected();
   }
 
-  /**
-   * Create a new ROI overlay with dependency injection.
-   *
-   * @param mainSettings Initial settings for ROI appearance
-   */
-  public ROIOverlay(MainSettings mainSettings) {
-    this.displayedROIs = new CopyOnWriteArrayList<>();
-    this.listeners = new CopyOnWriteArrayList<>();
-    this.mainSettings = Objects.requireNonNull(mainSettings, "mainSettings");
-
-    setOpaque(false);
-    setBackground(new Color(0, 0, 0, 0)); // Fully transparent
-
-    setupMouseHandlers();
-  }
-
-  /**
-   * @deprecated Use ROIOverlay(MainSettings) constructor instead
-   */
-  @Deprecated
   public ROIOverlay() {
     this(MainSettings.createDefault());
   }
 
-  /**
-   * Update the settings used for ROI rendering.
-   * This should be called when MainSettings change to refresh the display.
-   *
-   * @param newSettings The updated MainSettings instance
-   */
-  public void updateSettings(MainSettings newSettings) {
-    this.mainSettings = Objects.requireNonNull(newSettings, "newSettings");
-    SwingUtilities.invokeLater(this::repaint);
-    LOGGER.debug("ROI overlay settings updated and display refreshed");
+  public ROIOverlay(MainSettings mainSettings) {
+    this.mainSettings = Objects.requireNonNull(mainSettings, "mainSettings");
+    setOpaque(false);
+
+    setupMouseHandlers();
+    LOGGER.info("Created ultra-efficient ROI overlay");
   }
 
   private void setupMouseHandlers() {
-    MouseAdapter mouseHandler =
-        new MouseAdapter() {
-          @Override
-          public void mousePressed(MouseEvent e) {
-            handleMousePressed(e);
-          }
+    MouseAdapter mouseHandler = new MouseAdapter() {
+      @Override
+      public void mousePressed(MouseEvent e) {
+        handleMousePressed(e);
+      }
 
-          @Override
-          public void mouseDragged(MouseEvent e) {
-            handleMouseDragged(e);
-          }
+      @Override
+      public void mouseDragged(MouseEvent e) {
+        handleMouseDragged(e);
+      }
 
-          @Override
-          public void mouseReleased(MouseEvent e) {
-            handleMouseReleased(e);
-          }
+      @Override
+      public void mouseReleased(MouseEvent e) {
+        handleMouseReleased(e);
+      }
 
-          @Override
-          public void mouseClicked(MouseEvent e) {
-            handleMouseClicked(e);
-          }
-        };
+      @Override
+      public void mouseClicked(MouseEvent e) {
+        handleMouseClicked(e);
+      }
+    };
 
     addMouseListener(mouseHandler);
     addMouseMotionListener(mouseHandler);
   }
 
-  /**
-   * Add a listener for ROI overlay events
-   */
-  public void addROIOverlayListener(ROIOverlayListener listener) {
-    listeners.add(listener);
-  }
+  // ===== SINGLE-CALCULATION SHAPE SYSTEM =====
 
   /**
-   * Remove a listener for ROI overlay events
+   * Calculate and cache the original shape for an ROI - done once per ROI lifetime
    */
-  public void removeROIOverlayListener(ROIOverlayListener listener) {
-    listeners.remove(listener);
-  }
+  private java.awt.Shape getOrCalculateOriginalShape(UserROI roi) {
+    Integer roiKey = roi.hashCode();
 
-  /**
-   * Set the ROIs to display for the current image
-   */
-  public void setDisplayedROIs(List<UserROI> rois, String imageFileName) {
-    this.displayedROIs.clear();
-    if (rois != null) {
-      this.displayedROIs.addAll(rois);
+    java.awt.Shape cachedShape = originalShapes.get(roiKey);
+    if (cachedShape != null) {
+      return cachedShape;
     }
-    this.currentImageFileName = imageFileName;
-    this.selectedROI = null;
-    repaint();
-    // LOGGER.debug("Updated displayed ROIs: {} ROIs for image '{}'", this.displayedROIs.size(), imageFileName);
+
+    // Calculate shape once and cache forever
+    java.awt.Shape calculatedShape = calculateOriginalShape(roi);
+    if (calculatedShape != null) {
+      originalShapes.put(roiKey, calculatedShape);
+      LOGGER.debug("Calculated and cached original shape for ROI: {}", roi.getName());
+    }
+
+    return calculatedShape;
   }
 
   /**
-   * Set the scale factors for coordinate transformation
+   * Calculate the original shape for an ROI at native image resolution
    */
-  public void setImageTransform(double scaleX, double scaleY, double offsetX, double offsetY) {
-    this.scaleX = scaleX;
-    this.scaleY = scaleY;
-    this.imageOffsetX = offsetX;
-    this.imageOffsetY = offsetY;
+  private java.awt.Shape calculateOriginalShape(UserROI roi) {
+    Roi imageJRoi = roi.getImageJRoi();
+    if (imageJRoi == null) {
+      // Fallback to simple rectangle
+      Rectangle bounds = roi.getBounds();
+      return new Rectangle(bounds.x, bounds.y, bounds.width, bounds.height);
+    }
 
-    LOGGER.debug(
-        "ROI transform updated: scale=({}, {}), offset=({}, {})", scaleX, scaleY, offsetX, offsetY);
-    repaint();
+    // Handle ShapeRoi (donut shapes) - calculate once at creation
+    if (imageJRoi instanceof ShapeRoi) {
+      ShapeRoi shapeRoi = (ShapeRoi) imageJRoi;
+      java.awt.Shape shape = shapeRoi.getShape();
+      if (shape != null) {
+        LOGGER.debug("Extracted Shape from ShapeRoi for '{}': {}", roi.getName(), shape.getClass().getSimpleName());
+        return shape;
+      }
+    }
+
+    // Fallback to polygon for other complex shapes
+    Polygon polygon = imageJRoi.getPolygon();
+    if (polygon != null) {
+      return polygon;
+    }
+
+    // Final fallback to bounding rectangle
+    Rectangle bounds = imageJRoi.getBounds();
+    return new Rectangle(bounds.x, bounds.y, bounds.width, bounds.height);
+  }
+
+  // ===== MASTER BUFFER SYSTEM =====
+
+  /**
+   * Initialize or resize the master buffer for native image resolution
+   */
+  private void ensureBufferSize(int width, int height) {
+    // For native resolution rendering, we need space for the entire image
+    // plus margins for positioning ROIs that might extend beyond image bounds
+    int requiredWidth = width + 2 * BUFFER_MARGIN;
+    int requiredHeight = height + 2 * BUFFER_MARGIN;
+
+    if (masterBuffer == null || bufferWidth < requiredWidth || bufferHeight < requiredHeight) {
+      bufferWidth = Math.max(requiredWidth, bufferWidth);
+      bufferHeight = Math.max(requiredHeight, bufferHeight);
+
+      masterBuffer = new BufferedImage(bufferWidth, bufferHeight, BufferedImage.TYPE_INT_ARGB);
+      bufferValid = false;
+
+      LOGGER.debug("Created master buffer: {}x{} for native image {}x{}",
+          bufferWidth, bufferHeight, width, height);
+    }
   }
 
   /**
-   * Enable ROI creation mode
+   * Render all ROIs to the master buffer at native image resolution
    */
-  public void setROICreationMode(UserROI.ROIType type) {
-    this.creationMode = type;
-    this.isCreatingROI = false;
-    setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
-    LOGGER.debug("Enabled ROI creation mode: {}", type);
-  }
+  private void renderToMasterBuffer() {
+    if (masterBuffer == null || displayedROIs.isEmpty()) {
+      bufferValid = false;
+      return;
+    }
 
-  /**
-   * Disable ROI creation mode
-   */
-  public void disableROICreationMode() {
-    this.isCreatingROI = false;
-    this.roiStartPoint = null;
-    this.roiCurrentPoint = null;
-    setCursor(Cursor.getDefaultCursor());
-    repaint();
-    LOGGER.debug("Disabled ROI creation mode");
-  }
+    LOGGER.debug("BUFFER RENDERING: {} ROIs to buffer {}x{} with margin={}",
+        displayedROIs.size(), bufferWidth, bufferHeight, BUFFER_MARGIN);
 
-  /**
-   * Select a specific ROI
-   */
-  public void selectROI(UserROI roi) {
-    this.selectedROI = roi;
-    repaint();
-
-    // Notify listeners
-    listeners.forEach(
-        listener -> {
-          try {
-            listener.onROISelected(roi);
-          } catch (Exception e) {
-            LOGGER.error("Error notifying ROI overlay listener", e);
-          }
-        });
-  }
-
-  /**
-   * Clear ROI selection
-   */
-  public void clearSelection() {
-    this.selectedROI = null;
-    repaint();
-
-    // Notify listeners
-    listeners.forEach(
-        listener -> {
-          try {
-            listener.onROIDeselected();
-          } catch (Exception e) {
-            LOGGER.error("Error notifying ROI overlay listener", e);
-          }
-        });
-  }
-
-  @Override
-  protected void paintComponent(Graphics g) {
-    super.paintComponent(g);
-
-    Graphics2D g2d = (Graphics2D) g.create();
-    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+    Graphics2D g2d = masterBuffer.createGraphics();
 
     try {
-      // Draw existing ROIs
-      drawExistingROIs(g2d);
+      // Clear buffer with transparent background
+      g2d.setComposite(AlphaComposite.Clear);
+      g2d.fillRect(0, 0, bufferWidth, bufferHeight);
+      g2d.setComposite(AlphaComposite.SrcOver);
 
-      // Draw ROI being created
-      if (isCreatingROI && roiStartPoint != null && roiCurrentPoint != null) {
-        drawCreationROI(g2d);
+      // Disable antialiasing for maximum performance
+      g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+      g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
+
+      // Render all ROIs at native resolution with proper positioning
+      for (UserROI roi : displayedROIs) {
+        renderROIAtNativeResolution(g2d, roi, BUFFER_MARGIN, BUFFER_MARGIN);
       }
+
+      bufferValid = true;
+      LOGGER.debug("BUFFER RENDERING COMPLETE: {} ROIs rendered to native resolution buffer", displayedROIs.size());
+
     } finally {
       g2d.dispose();
     }
   }
 
-  private void drawExistingROIs(Graphics2D g2d) {
-    for (UserROI roi : displayedROIs) {
-      drawROI(g2d, roi, roi.equals(selectedROI));
-    }
-  }
+  /**
+   * Render a single ROI to the buffer at native resolution
+   * IMPORTANT: Only apply base coordinate offsets here, not scaling/translation
+   * The main scaling and translation will be applied during copyFromMasterBuffer()
+   */
+  private void renderROIAtNativeResolution(Graphics2D g2d, UserROI roi, int offsetX, int offsetY) {
+    java.awt.Shape originalShape = getOrCalculateOriginalShape(roi);
+    if (originalShape == null) return;
 
-  private void drawROI(Graphics2D g2d, UserROI roi, boolean isSelected) {
-    // Determine ROI category and get appropriate settings
+    // Get appearance settings
     MainSettings.ROICategory category = determineROICategory(roi);
     MainSettings.ROIAppearanceSettings settings = mainSettings.getSettingsForCategory(category);
 
-    // Set stroke style using type-specific settings
-    Stroke stroke;
-    Color borderColor;
+    // Calculate position: base margin offset plus ROI-specific base coordinates
+    double totalOffsetX = offsetX;
+    double totalOffsetY = offsetY;
 
-    if (isSelected) {
-      stroke =
-          new BasicStroke(SELECTION_STROKE_WIDTH, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
-      borderColor = SELECTION_COLOR;
-    } else {
-      stroke =
-          new BasicStroke(settings.borderWidth(), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
-      // Use ROI's specific color if set, otherwise use category-specific border color
-      borderColor = roi.getDisplayColor() != null ? roi.getDisplayColor() : settings.borderColor();
+    // For ShapeRoi objects, account for their base coordinates
+    Roi imageJRoi = roi.getImageJRoi();
+    if (imageJRoi instanceof ShapeRoi) {
+      ShapeRoi shapeRoi = (ShapeRoi) imageJRoi;
+      totalOffsetX += shapeRoi.getXBase();
+      totalOffsetY += shapeRoi.getYBase();
     }
 
-    g2d.setStroke(stroke);
-    g2d.setColor(borderColor);
+    // Create transformed shape with ONLY position offset (no scaling)
+    AffineTransform transform = AffineTransform.getTranslateInstance(totalOffsetX, totalOffsetY);
+    java.awt.Shape transformedShape = transform.createTransformedShape(originalShape);
 
-    // Check if this ROI has a complex shape (vessel ROI)
-    if (roi.hasComplexShape()) {
-      drawComplexROI(g2d, roi, borderColor, settings);
-    } else {
-      drawSimpleROI(g2d, roi, borderColor, settings);
-    }
-
-    // Draw ROI name if selected
-    if (isSelected) {
-      Rectangle bounds = transformRectangle(roi.getBounds());
-      drawROILabel(g2d, roi.getName(), bounds);
-    }
-  }
-
-  /**
-   * Determine the ROI category based on the ROI properties
-   */
-  private MainSettings.ROICategory determineROICategory(UserROI roi) {
-    // First check the ROI type enum
-    UserROI.ROIType roiType = roi.getType();
-    switch (roiType) {
-      case VESSEL:
-        return MainSettings.ROICategory.VESSEL;
-      case NUCLEUS:
-        return MainSettings.ROICategory.NUCLEUS;
-      case CYTOPLASM:
-        return MainSettings.ROICategory.CYTOPLASM;
-      case CELL:
-        return MainSettings.ROICategory.CELL;
-      default:
-        break;
-    }
-
-    // Fallback to name-based detection for backward compatibility
-    String name = roi.getName().toLowerCase();
-
-    // Check for cell ROI
-    if (name.contains("cell")) {
-      return MainSettings.ROICategory.CELL;
-    }
-
-    // Check for cytoplasm ROI
-    if (name.contains("cytoplasm") || name.contains("cyto")) {
-      return MainSettings.ROICategory.CYTOPLASM;
-    }
-
-    // Check for nucleus ROI
-    if (name.contains("nucleus") || name.contains("nuclei")) {
-      return MainSettings.ROICategory.NUCLEUS;
-    }
-
-    // Check if this is a vessel ROI (has complex shape or is named as vessel)
-    if (roi.hasComplexShape() || name.contains("vessel")) {
-      return MainSettings.ROICategory.VESSEL;
-    }
-
-    // Default to vessel ROI for any other user-created ROIs
-    return MainSettings.ROICategory.VESSEL;
-  }
-
-  /**
-   * Draw a simple ROI (rectangle, square, circle)
-   */
-  private void drawSimpleROI(
-      Graphics2D g2d, UserROI roi, Color borderColor, MainSettings.ROIAppearanceSettings settings) {
-    Rectangle originalBounds = roi.getBounds();
-    Rectangle bounds = transformRectangle(originalBounds);
-
-    LOGGER.trace(
-        "Drawing simple ROI '{}': original=({},{} {}x{}) -> transformed=({},{} {}x{})",
-        roi.getName(),
-        originalBounds.x,
-        originalBounds.y,
-        originalBounds.width,
-        originalBounds.height,
-        bounds.x,
-        bounds.y,
-        bounds.width,
-        bounds.height);
-
-    // Create fill color using type-specific settings
+    // Fill shape
     Color fillColor = settings.getFillColor();
     g2d.setColor(fillColor);
+    g2d.fill(transformedShape);
 
-    switch (roi.getType()) {
-      case SQUARE:
-      case RECTANGLE:
-        g2d.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
-        break;
-      case CIRCLE:
-        g2d.fillOval(bounds.x, bounds.y, bounds.width, bounds.height);
-        break;
-      default:
-        g2d.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
-        break;
-    }
-
-    // Draw the ROI boundary on top of the fill
+    // Draw border
+    Stroke borderStroke = new BasicStroke(settings.borderWidth());
+    g2d.setStroke(borderStroke);
+    Color borderColor = roi.getDisplayColor() != null ? roi.getDisplayColor() : settings.borderColor();
     g2d.setColor(borderColor);
-    switch (roi.getType()) {
-      case SQUARE:
-      case RECTANGLE:
-        g2d.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
-        break;
-      case CIRCLE:
-        g2d.drawOval(bounds.x, bounds.y, bounds.width, bounds.height);
-        break;
-      default:
-        g2d.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
-        break;
+    g2d.draw(transformedShape);
+  }
+  @Override
+  protected void paintComponent(Graphics g) {
+    super.paintComponent(g);
+
+    Graphics2D g2d = (Graphics2D) g.create();
+    
+    try {
+      // HIGH-LEVEL LOGGING: Track rendering path and ROI count
+      String renderingPath;
+      if (bufferValid && masterBuffer != null) {
+        renderingPath = "BUFFER_COPY";
+        copyFromMasterBuffer(g2d);
+      } else if (!displayedROIs.isEmpty()) {
+        renderingPath = "DIRECT_RENDER";
+        renderDirectly(g2d);
+      } else {
+        renderingPath = "NO_ROIS";
+      }
+      
+      // Log overall overlay state on each paint
+      LOGGER.debug("=== ROI OVERLAY PAINT ===");
+      LOGGER.debug("Rendering path: {} | ROI count: {} | Transform: scale=({}, {}), offset=({}, {})",
+          renderingPath, displayedROIs.size(), scaleX, scaleY, offsetX, offsetY);
+      LOGGER.debug("Buffer state: valid={}, size={}x{}", bufferValid,
+          masterBuffer != null ? masterBuffer.getWidth() : 0,
+          masterBuffer != null ? masterBuffer.getHeight() : 0);
+      LOGGER.debug("=== END ROI OVERLAY PAINT ===");
+
+      // Always render creation ROI directly (not in buffer)
+      if (isCreatingROI && roiStartPoint != null && roiCurrentPoint != null) {
+        renderCreationROI(g2d);
+      }
+
+    } finally {
+      g2d.dispose();
     }
   }
 
   /**
-   * Draw a complex ROI (vessel with actual shape)
+   * Fast copy from master buffer with exact coordinate synchronization
+   * CRITICAL: This must use exactly the same transform as the image
    */
-  private void drawComplexROI(
-      Graphics2D g2d, UserROI roi, Color borderColor, MainSettings.ROIAppearanceSettings settings) {
-    Roi imageJRoi = roi.getImageJRoi();
-    if (imageJRoi == null) {
-      // Fallback to simple drawing
-      drawSimpleROI(g2d, roi, borderColor, settings);
+  private void copyFromMasterBuffer(Graphics2D g2d) {
+    if (masterBuffer == null || !bufferValid) {
+      renderDirectly(g2d);
       return;
     }
 
-    Rectangle originalBounds = imageJRoi.getBounds();
-    LOGGER.trace(
-        "Drawing complex ROI '{}': ImageJ bounds=({},{} {}x{}), type={}",
-        roi.getName(),
-        originalBounds.x,
-        originalBounds.y,
-        originalBounds.width,
-        originalBounds.height,
-        imageJRoi.getTypeAsString());
-
-    // Save the current transform
-    AffineTransform originalTransform = g2d.getTransform();
-
+    // SIMPLIFIED APPROACH: The buffer contains ROIs at native resolution
+    // We always copy the entire image region from the buffer and let the transform handle positioning
+    // This eliminates complex coordinate calculations that could introduce errors
     try {
-      // Apply scaling and offset transformation with proper precision
-      AffineTransform transform = new AffineTransform();
-      // Use precise double values for translation and scaling
-      transform.translate(imageOffsetX, imageOffsetY);
-      transform.scale(scaleX, scaleY);
-      g2d.setTransform(transform);
+      int srcX = BUFFER_MARGIN;
+      int srcY = BUFFER_MARGIN;
+      int srcWidth = Math.min(imageWidth, bufferWidth - 2 * BUFFER_MARGIN);
+      int srcHeight = Math.min(imageHeight, bufferHeight - 2 * BUFFER_MARGIN);
 
-      LOGGER.trace(
-          "Complex ROI transform: translate=({}, {}), scale=({}, {})",
-          imageOffsetX,
-          imageOffsetY,
-          scaleX,
-          scaleY);
-
-      // Try to get the polygon representation of the ROI
-      Polygon polygon = imageJRoi.getPolygon();
-      if (polygon != null) {
-        // Draw fill with type-specific settings
-        Color fillColor = settings.getFillColor();
-        g2d.setColor(fillColor);
-        g2d.fillPolygon(polygon);
-
-        // Draw outline on top
-        g2d.setColor(borderColor);
-        g2d.drawPolygon(polygon);
-      } else {
-        // Fallback: draw bounding rectangle with fill
-        Rectangle bounds = imageJRoi.getBounds();
-        Color fillColor = settings.getFillColor();
-        g2d.setColor(fillColor);
-        g2d.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
-
-        g2d.setColor(borderColor);
-        g2d.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
+      if (srcWidth <= 0 || srcHeight <= 0) {
+        renderDirectly(g2d);
+        return;
       }
+
+      // Extract the image portion from the buffer (fixed region)
+      BufferedImage visiblePortion = masterBuffer.getSubimage(srcX, srcY, srcWidth, srcHeight);
+
+      // Apply EXACTLY the same transform as the image uses
+      // This ensures the overlay moves exactly the same amount as the image
+      AffineTransform transform = new AffineTransform();
+      transform.translate(offsetX, offsetY);
+      transform.scale(scaleX, scaleY);
+
+      LOGGER.debug("=== BUFFER SYNC COPY ===");
+      LOGGER.debug("Fixed buffer region: [{}:{}]x[{}:{}] from {}x{} buffer",
+          srcX, srcX + srcWidth, srcY, srcY + srcHeight, bufferWidth, bufferHeight);
+      LOGGER.debug("Transform: translate({}, {}), scale({}, {})",
+          offsetX, offsetY, scaleX, scaleY);
+      LOGGER.debug("=== END BUFFER SYNC COPY ===");
+
+      g2d.drawImage(visiblePortion, transform, null);
+
     } catch (Exception e) {
-      LOGGER.warn(
-          "Error drawing complex ROI shape, falling back to bounding box: {}", e.getMessage());
-      // Restore original transform and draw simple rectangle
-      g2d.setTransform(originalTransform);
-      drawSimpleROI(g2d, roi, borderColor, settings);
-    } finally {
-      // Always restore the original transform
-      g2d.setTransform(originalTransform);
+      LOGGER.error("Buffer copy failed, falling back to direct rendering", e);
+      renderDirectly(g2d);
     }
   }
 
-  private void drawCreationROI(Graphics2D g2d) {
+  /**
+   * Direct rendering fallback when buffer is not available
+   */
+  private void renderDirectly(Graphics2D g2d) {
+    LOGGER.debug("DIRECT RENDERING: {} ROIs with transform scale=({}, {}), offset=({}, {})",
+        displayedROIs.size(), scaleX, scaleY, offsetX, offsetY);
+    
+    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+    g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
+
+    for (UserROI roi : displayedROIs) {
+      renderROIDirect(g2d, roi);
+    }
+  }
+
+  private void renderROIDirect(Graphics2D g2d, UserROI roi) {
+    java.awt.Shape originalShape = getOrCalculateOriginalShape(roi);
+    if (originalShape == null) return;
+
+    // UNIFIED APPROACH: Use exactly the same transform as buffer copy path
+    // First, create the base transform (same as buffer copy)
+    AffineTransform transform = new AffineTransform();
+    transform.translate(offsetX, offsetY);
+    transform.scale(scaleX, scaleY);
+
+    // Apply any additional ROI-specific offsets (for ShapeRoi base coordinates)
+    Roi imageJRoi = roi.getImageJRoi();
+    if (imageJRoi instanceof ShapeRoi) {
+      ShapeRoi shapeRoi = (ShapeRoi) imageJRoi;
+      // Apply base coordinate offset AFTER the main transform
+      transform.translate(shapeRoi.getXBase(), shapeRoi.getYBase());
+    }
+
+    // Apply the transform to the shape
+    java.awt.Shape transformedShape = transform.createTransformedShape(originalShape);
+
+    // Get appearance settings and render
+    MainSettings.ROICategory category = determineROICategory(roi);
+    MainSettings.ROIAppearanceSettings settings = mainSettings.getSettingsForCategory(category);
+
+    Color fillColor = settings.getFillColor();
+    g2d.setColor(fillColor);
+    g2d.fill(transformedShape);
+
+    Stroke borderStroke = new BasicStroke(settings.borderWidth());
+    g2d.setStroke(borderStroke);
+    Color borderColor = roi.getDisplayColor() != null ? roi.getDisplayColor() : settings.borderColor();
+    g2d.setColor(borderColor);
+    g2d.draw(transformedShape);
+  }
+
+  private void renderCreationROI(Graphics2D g2d) {
     Rectangle bounds = createRectangleFromPoints(roiStartPoint, roiCurrentPoint);
 
-    // Use vessel ROI settings for creation preview
+    // UNIFIED TRANSFORM: Use exactly the same transform as other rendering paths
+    AffineTransform transform = new AffineTransform();
+    transform.translate(offsetX, offsetY);
+    transform.scale(scaleX, scaleY);
+    java.awt.Shape transformedShape = transform.createTransformedShape(bounds);
+
+    // Use vessel settings for creation preview
     MainSettings.ROIAppearanceSettings settings = mainSettings.getVesselSettings();
     Color borderColor = settings.borderColor();
 
-    // Draw fill with lower opacity for creation preview
-    float previewOpacity = Math.max(0.1f, settings.fillOpacity() * 0.5f); // Half the normal opacity
-    Color fillColor =
-        new Color(
-            borderColor.getRed(),
-            borderColor.getGreen(),
-            borderColor.getBlue(),
-            Math.round(previewOpacity * 255));
+    // Semi-transparent fill for preview
+    float previewOpacity = Math.max(0.1f, settings.fillOpacity() * 0.5f);
+    Color fillColor = new Color(
+        borderColor.getRed(),
+        borderColor.getGreen(),
+        borderColor.getBlue(),
+        Math.round(previewOpacity * 255));
+
     g2d.setColor(fillColor);
+    g2d.fill(transformedShape);
 
-    switch (creationMode) {
-      case SQUARE:
-        // Make it a square by using the smaller dimension
-        int size = Math.min(bounds.width, bounds.height);
-        g2d.fillRect(bounds.x, bounds.y, size, size);
-        break;
-      case RECTANGLE:
-        g2d.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
-        break;
-      case CIRCLE:
-        g2d.fillOval(bounds.x, bounds.y, bounds.width, bounds.height);
-        break;
-      default:
-        g2d.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
-        break;
-    }
-
-    // Draw dashed outline on top
-    g2d.setStroke(
-        new BasicStroke(
-            settings.borderWidth(),
-            BasicStroke.CAP_ROUND,
-            BasicStroke.JOIN_ROUND,
-            0,
-            DASH_PATTERN,
-            0));
+    // Dashed border
+    g2d.setStroke(new BasicStroke(
+        settings.borderWidth(),
+        BasicStroke.CAP_ROUND,
+        BasicStroke.JOIN_ROUND,
+        0,
+        DASH_PATTERN,
+        0));
     g2d.setColor(borderColor);
+    g2d.draw(transformedShape);
+  }
 
-    switch (creationMode) {
-      case SQUARE:
-        // Make it a square by using the smaller dimension
-        int size = Math.min(bounds.width, bounds.height);
-        g2d.drawRect(bounds.x, bounds.y, size, size);
-        break;
-      case RECTANGLE:
-        g2d.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
-        break;
-      case CIRCLE:
-        g2d.drawOval(bounds.x, bounds.y, bounds.width, bounds.height);
-        break;
-      default:
-        g2d.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
-        break;
+  // ===== PUBLIC API =====
+
+  public void setDisplayedROIs(List<UserROI> rois, String imageFileName) {
+    displayedROIs.clear();
+    if (rois != null) {
+      displayedROIs.addAll(rois);
+    }
+    currentImageFileName = imageFileName;
+    selectedROI = null;
+
+    // Invalidate buffer and trigger re-render
+    bufferValid = false;
+    repaint();
+
+    LOGGER.debug("Set {} ROIs for image '{}'", displayedROIs.size(), imageFileName);
+  }
+
+  public void setImageTransform(double scaleX, double scaleY, double offsetX, double offsetY) {
+    // DIAGNOSTIC LOG: Track transform changes
+    boolean scaleChanged = Math.abs(this.scaleX - scaleX) > 0.001 || Math.abs(this.scaleY - scaleY) > 0.001;
+    boolean offsetChanged = Math.abs(this.offsetX - offsetX) > 0.1 || Math.abs(this.offsetY - offsetY) > 0.1;
+    
+    this.scaleX = scaleX;
+    this.scaleY = scaleY;
+    this.offsetX = offsetX;
+    this.offsetY = offsetY;
+
+    // ENHANCED DEBUG LOGGING: Track transform values received from MainImageViewer
+    LOGGER.debug("=== ROI OVERLAY TRANSFORM UPDATE ===");
+    LOGGER.debug("Received transform - scaleX: {}, scaleY: {}", scaleX, scaleY);
+    LOGGER.debug("Received transform - offsetX: {}, offsetY: {}", offsetX, offsetY);
+    LOGGER.debug("Transform changes - scale: {}, offset: {}", scaleChanged, offsetChanged);
+    if (offsetChanged) {
+      LOGGER.debug("DIAGNOSTIC: Offset change detected - this indicates scrolling/zoom");
+    }
+    LOGGER.debug("=== END ROI OVERLAY TRANSFORM UPDATE ===");
+
+    // No need to invalidate buffer - just repaint with new transform
+    repaint();
+  }
+
+  public void setImageDimensions(int width, int height) {
+    if (this.imageWidth != width || this.imageHeight != height) {
+      this.imageWidth = width;
+      this.imageHeight = height;
+
+      ensureBufferSize(width, height);
+
+      // Trigger buffer re-render on dimension change
+      if (!displayedROIs.isEmpty()) {
+        renderToMasterBuffer();
+      }
     }
   }
 
-  private void drawROILabel(Graphics2D g2d, String label, Rectangle bounds) {
-    FontMetrics fm = g2d.getFontMetrics();
-    int labelWidth = fm.stringWidth(label);
-    int labelHeight = fm.getHeight();
-
-    // Position label above the ROI
-    int labelX = bounds.x + (bounds.width - labelWidth) / 2;
-    int labelY = bounds.y - 5;
-
-    // Ensure label is within component bounds
-    labelX = Math.max(0, Math.min(labelX, getWidth() - labelWidth));
-    labelY = Math.max(labelHeight, labelY);
-
-    // Draw label background
-    g2d.setColor(new Color(0, 0, 0, 128));
-    g2d.fillRect(labelX - 2, labelY - labelHeight + 2, labelWidth + 4, labelHeight);
-
-    // Draw label text
-    g2d.setColor(Color.WHITE);
-    g2d.drawString(label, labelX, labelY);
+  public void updateSettings(MainSettings newSettings) {
+    this.mainSettings = Objects.requireNonNull(newSettings, "newSettings");
+    bufferValid = false; // Settings change requires re-render
+    repaint();
   }
 
-  private Rectangle transformRectangle(Rectangle original) {
-    // Use high-precision transformation with proper rounding
-    double transformedX = original.x * scaleX + imageOffsetX;
-    double transformedY = original.y * scaleY + imageOffsetY;
-    double transformedWidth = original.width * scaleX;
-    double transformedHeight = original.height * scaleY;
-
-    int x = (int) Math.round(transformedX);
-    int y = (int) Math.round(transformedY);
-    int width = (int) Math.round(transformedWidth);
-    int height = (int) Math.round(transformedHeight);
-
-    LOGGER.trace(
-        "Transform rectangle: ({},{} {}x{}) -> ({},{} {}x{}) [scale=({},{}), offset=({},{})]",
-        original.x,
-        original.y,
-        original.width,
-        original.height,
-        x,
-        y,
-        width,
-        height,
-        scaleX,
-        scaleY,
-        imageOffsetX,
-        imageOffsetY);
-
-    return new Rectangle(x, y, width, height);
+  public void addROIOverlayListener(ROIOverlayListener listener) {
+    listeners.add(listener);
   }
 
-  private Rectangle inverseTransformRectangle(Rectangle transformed) {
-    // Use Math.round for better precision instead of casting to int
-    int x = (int) Math.round((transformed.x - imageOffsetX) / scaleX);
-    int y = (int) Math.round((transformed.y - imageOffsetY) / scaleY);
-    int width = (int) Math.round(transformed.width / scaleX);
-    int height = (int) Math.round(transformed.height / scaleY);
-    return new Rectangle(x, y, width, height);
+  public void removeROIOverlayListener(ROIOverlayListener listener) {
+    listeners.remove(listener);
   }
 
-  private Rectangle createRectangleFromPoints(Point start, Point end) {
-    int x = Math.min(start.x, end.x);
-    int y = Math.min(start.y, end.y);
-    int width = Math.abs(end.x - start.x);
-    int height = Math.abs(end.y - start.y);
-    return new Rectangle(x, y, width, height);
+  // ===== ROI CREATION AND SELECTION =====
+
+  public void setROICreationMode(UserROI.ROIType type) {
+    creationMode = type;
+    isCreatingROI = false;
+    roiStartPoint = null;
+    roiCurrentPoint = null;
+    setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
   }
+
+  public void disableROICreationMode() {
+    isCreatingROI = false;
+    roiStartPoint = null;
+    roiCurrentPoint = null;
+    setCursor(Cursor.getDefaultCursor());
+    repaint();
+  }
+
+  public void selectROI(UserROI roi) {
+    selectedROI = roi;
+    repaint();
+    listeners.forEach(listener -> {
+      try {
+        listener.onROISelected(roi);
+      } catch (Exception e) {
+        LOGGER.error("Error notifying ROI selection", e);
+      }
+    });
+  }
+
+  public void clearSelection() {
+    selectedROI = null;
+    repaint();
+    listeners.forEach(listener -> {
+      try {
+        listener.onROIDeselected();
+      } catch (Exception e) {
+        LOGGER.error("Error notifying ROI deselection", e);
+      }
+    });
+  }
+
+  // ===== MOUSE HANDLING =====
 
   private void handleMousePressed(MouseEvent e) {
     if (SwingUtilities.isLeftMouseButton(e)) {
       if (creationMode != null && currentImageFileName != null) {
-        // Start creating a new ROI
         isCreatingROI = true;
         roiStartPoint = e.getPoint();
         roiCurrentPoint = e.getPoint();
         clearSelection();
         repaint();
       } else {
-        // Check if clicking on an existing ROI
         UserROI clickedROI = findROIAtPoint(e.getPoint());
         if (clickedROI != null) {
           selectROI(clickedROI);
@@ -627,44 +587,31 @@ public class ROIOverlay extends JComponent {
 
   private void handleMouseReleased(MouseEvent e) {
     if (isCreatingROI && roiStartPoint != null && roiCurrentPoint != null) {
-      // Create the ROI
       Rectangle bounds = createRectangleFromPoints(roiStartPoint, roiCurrentPoint);
 
-      // Minimum size check
       if (bounds.width > 5 && bounds.height > 5) {
-        // Transform coordinates back to image space
         Rectangle imageBounds = inverseTransformRectangle(bounds);
 
-        // Create the appropriate ROI type
         UserROI newROI;
         if (creationMode == UserROI.ROIType.SQUARE) {
           int size = Math.min(imageBounds.width, imageBounds.height);
-          newROI =
-              UserROI.createSquareROI(imageBounds.x, imageBounds.y, size, currentImageFileName);
+          newROI = UserROI.createSquareROI(imageBounds.x, imageBounds.y, size, currentImageFileName);
         } else {
-          newROI =
-              UserROI.createRectangleROI(
-                  imageBounds.x,
-                  imageBounds.y,
-                  imageBounds.width,
-                  imageBounds.height,
-                  currentImageFileName);
+          newROI = UserROI.createRectangleROI(
+              imageBounds.x, imageBounds.y, imageBounds.width, imageBounds.height, currentImageFileName);
         }
 
-        // Notify listeners
-        listeners.forEach(
-            listener -> {
-              try {
-                listener.onROICreated(newROI);
-              } catch (Exception ex) {
-                LOGGER.error("Error notifying ROI overlay listener", ex);
-              }
-            });
+        listeners.forEach(listener -> {
+          try {
+            listener.onROICreated(newROI);
+          } catch (Exception ex) {
+            LOGGER.error("Error notifying ROI creation", ex);
+          }
+        });
 
         LOGGER.info("Created new {} ROI: {}", creationMode, newROI);
       }
 
-      // Reset creation state
       isCreatingROI = false;
       roiStartPoint = null;
       roiCurrentPoint = null;
@@ -673,59 +620,69 @@ public class ROIOverlay extends JComponent {
   }
 
   private void handleMouseClicked(MouseEvent e) {
-    // Handle double-click for ROI editing (future enhancement)
     if (e.getClickCount() == 2) {
       UserROI clickedROI = findROIAtPoint(e.getPoint());
       if (clickedROI != null) {
         LOGGER.debug("Double-clicked ROI: {}", clickedROI.getName());
-        // Future: Open ROI properties dialog
       }
     }
   }
 
   private UserROI findROIAtPoint(Point point) {
-    // Check ROIs in reverse order (top to bottom)
     for (int i = displayedROIs.size() - 1; i >= 0; i--) {
       UserROI roi = displayedROIs.get(i);
-
-      if (roi.hasComplexShape()) {
-        // For complex shapes, check the actual shape
-        if (isPointInComplexROI(point, roi)) {
-          return roi;
-        }
-      } else {
-        // For simple shapes, check the bounding rectangle
-        Rectangle transformedBounds = transformRectangle(roi.getBounds());
-        if (transformedBounds.contains(point)) {
-          return roi;
-        }
+      if (isPointInROI(point, roi)) {
+        return roi;
       }
     }
     return null;
   }
 
-  /**
-   * Check if a point is inside a complex ROI shape
-   */
-  private boolean isPointInComplexROI(Point point, UserROI roi) {
-    Roi imageJRoi = roi.getImageJRoi();
-    if (imageJRoi == null) {
-      return false;
+  private boolean isPointInROI(Point point, UserROI roi) {
+    java.awt.Shape originalShape = getOrCalculateOriginalShape(roi);
+    if (originalShape == null) return false;
+
+    // Transform point back to image coordinates
+    double imageX = (point.x - offsetX) / scaleX;
+    double imageY = (point.y - offsetY) / scaleY;
+
+    return originalShape.contains(imageX, imageY);
+  }
+
+  // ===== UTILITY METHODS =====
+
+  private MainSettings.ROICategory determineROICategory(UserROI roi) {
+    UserROI.ROIType roiType = roi.getType();
+    switch (roiType) {
+      case VESSEL: return MainSettings.ROICategory.VESSEL;
+      case NUCLEUS: return MainSettings.ROICategory.NUCLEUS;
+      case CYTOPLASM: return MainSettings.ROICategory.CYTOPLASM;
+      case CELL: return MainSettings.ROICategory.CELL;
+      default: break;
     }
 
-    try {
-      // Transform the point back to image coordinates with better precision
-      double imageX = (point.x - imageOffsetX) / scaleX;
-      double imageY = (point.y - imageOffsetY) / scaleY;
+    String name = roi.getName().toLowerCase();
+    if (name.contains("cell")) return MainSettings.ROICategory.CELL;
+    if (name.contains("cytoplasm") || name.contains("cyto")) return MainSettings.ROICategory.CYTOPLASM;
+    if (name.contains("nucleus") || name.contains("nuclei")) return MainSettings.ROICategory.NUCLEUS;
+    if (roi.hasComplexShape() || name.contains("vessel")) return MainSettings.ROICategory.VESSEL;
 
-      // Check if the point is contained in the ImageJ ROI
-      return imageJRoi.contains((int) Math.round(imageX), (int) Math.round(imageY));
-    } catch (Exception e) {
-      LOGGER.warn(
-          "Error checking point in complex ROI, falling back to bounding box: {}", e.getMessage());
-      // Fallback to bounding box check
-      Rectangle transformedBounds = transformRectangle(roi.getBounds());
-      return transformedBounds.contains(point);
-    }
+    return MainSettings.ROICategory.VESSEL;
+  }
+
+  private Rectangle createRectangleFromPoints(Point start, Point end) {
+    int x = Math.min(start.x, end.x);
+    int y = Math.min(start.y, end.y);
+    int width = Math.abs(end.x - start.x);
+    int height = Math.abs(end.y - start.y);
+    return new Rectangle(x, y, width, height);
+  }
+
+  private Rectangle inverseTransformRectangle(Rectangle transformed) {
+    int x = (int) Math.round((transformed.x - offsetX) / scaleX);
+    int y = (int) Math.round((transformed.y - offsetY) / scaleY);
+    int width = (int) Math.round(transformed.width / scaleX);
+    int height = (int) Math.round(transformed.height / scaleY);
+    return new Rectangle(x, y, width, height);
   }
 }
