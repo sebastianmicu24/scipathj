@@ -57,7 +57,6 @@ public class Java21ClassLoaderFix {
      fixApplied.set(true);
 
    } catch (Exception e) {
-     LOGGER.debug("ClassLoader fix issue (non-critical): {}", e.getMessage());
      // Don't throw exception - let the application continue and hope for the best
    }
  }
@@ -74,7 +73,6 @@ public class Java21ClassLoaderFix {
     try {
       if (originalClassLoader != null) {
         Thread.currentThread().setContextClassLoader(originalClassLoader);
-        LOGGER.debug("Restored original ClassLoader: {}", originalClassLoader.getClass().getName());
       }
     } catch (Exception e) {
       LOGGER.warn("Failed to restore original ClassLoader", e);
@@ -99,10 +97,9 @@ public class Java21ClassLoaderFix {
               Object currentScl = sclField.get(null);
               if (currentScl != null && !isURLClassLoader((ClassLoader) currentScl)) {
                 sclField.set(null, compatibleClassLoader);
-                LOGGER.debug("Replaced system class loader reference");
               }
             } catch (Exception e) {
-              LOGGER.debug("Could not replace system class loader reference: {}", e.getMessage());
+              // Could not replace system class loader reference
             }
 
             try {
@@ -110,9 +107,8 @@ public class Java21ClassLoaderFix {
               Field contextClassLoaderField = Thread.class.getDeclaredField("contextClassLoader");
               contextClassLoaderField.setAccessible(true);
               contextClassLoaderField.set(Thread.currentThread(), compatibleClassLoader);
-              LOGGER.debug("Set thread context class loader");
             } catch (Exception e) {
-              LOGGER.debug("Could not set thread context class loader: {}", e.getMessage());
+              // Could not set thread context class loader
             }
 
             return null;
@@ -133,9 +129,6 @@ public class Java21ClassLoaderFix {
         // Fallback: create URLClassLoader with empty URL array
         // This still provides URLClassLoader interface compatibility
         urls = new URL[0];
-        LOGGER.debug("Created URLClassLoader with empty URL array as fallback");
-      } else {
-        LOGGER.debug("Created URLClassLoader with {} URLs from parent", urls.length);
       }
 
       return new URLClassLoader(urls, parent);
@@ -197,14 +190,13 @@ public class Java21ClassLoaderFix {
                     urls[i] = new java.io.File(paths[i]).toURI().toURL();
                   } catch (Exception e) {
                     // Skip invalid paths
-                    LOGGER.debug("Skipping invalid classpath entry: {}", paths[i]);
                   }
                 }
                 return urls;
               }
 
             } catch (Exception e) {
-              LOGGER.debug("Failed to extract URLs from ClassLoader", e);
+              // Failed to extract URLs from ClassLoader
             }
 
             return new URL[0];
@@ -277,7 +269,7 @@ public class Java21ClassLoaderFix {
           try {
             urls[i] = new java.io.File(paths[i]).toURI().toURL();
           } catch (Exception e) {
-            LOGGER.debug("Skipping invalid classpath entry: {}", paths[i]);
+            // Skipping invalid classpath entry
           }
         }
       }
@@ -290,7 +282,7 @@ public class Java21ClassLoaderFix {
       Thread.currentThread().setContextClassLoader(compatibleClassLoader);
 
       fixApplied.set(true);
-      LOGGER.info("Forced URLClassLoader environment created successfully");
+      LOGGER.debug("Forced URLClassLoader environment created successfully");
 
     } catch (Exception e) {
       LOGGER.error("Failed to force URLClassLoader environment", e);

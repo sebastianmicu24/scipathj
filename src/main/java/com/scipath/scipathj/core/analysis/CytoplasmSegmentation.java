@@ -442,12 +442,8 @@ public class CytoplasmSegmentation {
           });
     }
 
-    // Add ROIs to manager
-    if (settings.createCellROIs()) {
-      cellROIs.forEach(roiManager::addROI);
-    }
-
-    cytoplasmROIs.forEach(roiManager::addROI);
+    // ROI addition is handled centrally by AnalysisPipeline.addROIsToManager()
+    // to avoid duplication - DO NOT add cellROIs or cytoplasmROIs directly here
   }
 
   /**

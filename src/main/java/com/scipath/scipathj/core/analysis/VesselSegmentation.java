@@ -153,8 +153,8 @@ public class VesselSegmentation {
       // Step 6: Find vessels using particle analysis with actual shapes
       List<UserROI> vesselROIs = findVesselsFromBinaryImage(workingImage);
 
-      // Step 7: Add ROIs to the ROI manager
-      vesselROIs.forEach(roiManager::addROI);
+      // ROI addition is handled centrally by AnalysisPipeline.addROIsToManager()
+      // to avoid duplication - DO NOT add vesselROIs.forEach(roiManager::addROI) here
 
       LOGGER.info("Vessel segmentation completed. Found {} vessels", vesselROIs.size());
 

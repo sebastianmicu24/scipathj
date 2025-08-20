@@ -684,8 +684,7 @@ public class MainWindow extends JFrame {
    */
   private void openMainSettings(java.awt.event.ActionEvent e) {
     LOGGER.debug("Main settings dialog requested");
-    MainSettingsDialog dialog =
-        new MainSettingsDialog(this, configurationManager, this::handleSettingsChanged);
+    MainSettingsDialog dialog = new MainSettingsDialog(this, configurationManager, this::handleSettingsChanged);
     dialog.setVisible(true);
 
     if (dialog.isSettingsChanged()) {
@@ -701,7 +700,6 @@ public class MainWindow extends JFrame {
           JOptionPane.INFORMATION_MESSAGE);
     }
   }
-
   /**
    * Refresh UI components that depend on main settings.
    */
@@ -713,6 +711,21 @@ public class MainWindow extends JFrame {
 
     // Update any other components that depend on main settings
     LOGGER.debug("UI refreshed with new main settings");
+  }
+
+  /**
+   * Initialize the image viewer with loaded settings at startup.
+   */
+  public void initializeImageViewerWithSettings() {
+    if (mainImageViewer != null && configurationManager != null) {
+      MainSettings loadedSettings = configurationManager.loadMainSettings();
+      if (loadedSettings != null) {
+        mainImageViewer.initializeWithSettings(loadedSettings);
+        LOGGER.debug("Initialized image viewer with loaded main settings");
+      } else {
+        LOGGER.warn("Could not load main settings for image viewer initialization");
+      }
+    }
   }
 
   /**
@@ -738,13 +751,12 @@ public class MainWindow extends JFrame {
     }
 
     // Bring main window to front and request focus to ensure immediate visual update
-    SwingUtilities.invokeLater(
-        () -> {
-          toFront();
-          requestFocus();
-          setState(java.awt.Frame.NORMAL);
-          LOGGER.debug("Main window brought to front and focused");
-        });
+    SwingUtilities.invokeLater(() -> {
+      toFront();
+      requestFocus();
+      setState(java.awt.Frame.NORMAL);
+      LOGGER.debug("Main window brought to front and focused");
+    });
 
     // Any other components that depend on MainSettings should be updated here
     LOGGER.debug("All UI components updated with new main settings");

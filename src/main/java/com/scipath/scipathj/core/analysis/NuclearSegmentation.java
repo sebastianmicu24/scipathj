@@ -165,8 +165,8 @@ public class NuclearSegmentation implements AutoCloseable {
       // Execute StarDist with H&E model
       List<NucleusROI> nucleiROIs = executeStarDistHE(inputDataset);
 
-      // Add to ROI manager
-      nucleiROIs.forEach(roiManager::addROI);
+      // ROI addition is handled centrally by AnalysisPipeline.addROIsToManager()
+      // to avoid duplication - DO NOT add nucleiROIs.forEach(roiManager::addROI) here
 
       LOGGER.info("Nuclear segmentation completed. Found {} nuclei", nucleiROIs.size());
       return nucleiROIs;
@@ -335,6 +335,15 @@ public class NuclearSegmentation implements AutoCloseable {
     System.setProperty("org.slf4j.simpleLogger.log.org.tensorflow", "warn");
     System.setProperty("org.slf4j.simpleLogger.log.de.csbdresden", "warn");
 
+    // Additional logging optimizations to reduce CSBDeep verbosity
+    System.setProperty("org.slf4j.simpleLogger.log.de.csbdresden.csbdeep", "error");
+    System.setProperty("org.slf4j.simpleLogger.log.de.csbdresden.stardist", "error");
+    System.setProperty("org.slf4j.simpleLogger.log.org.tensorflow.native", "error");
+    System.setProperty("org.slf4j.simpleLogger.log.org.tensorflow.internal", "error");
+
+    // Set default log level to reduce general noise
+    System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "warn");
+
     // Skip CSBDeep file access attempts to avoid permission errors
     System.setProperty("de.csbdresden.csbdeep.skipFileAccess", "true");
     System.setProperty("csbdeep.loadFromJarOnly", "true");
@@ -365,6 +374,9 @@ public class NuclearSegmentation implements AutoCloseable {
 
       // Close all StarDist windows including ROI Manager
       closeStarDistWindows();
+
+      // Note: ROI addition is handled centrally by AnalysisPipeline.addROIsToManager()
+      // to avoid duplication. DO NOT add nucleiROIs.forEach(roiManager::addROI) here.
 
       return nucleusROIs;
 

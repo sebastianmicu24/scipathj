@@ -1,5 +1,6 @@
 package com.scipath.scipathj.ui.components;
 
+import com.scipath.scipathj.core.config.MainSettings;
 import com.scipath.scipathj.data.model.UserROI;
 import com.scipath.scipathj.ui.themes.ThemeManager;
 import com.scipath.scipathj.ui.utils.ImageLoader;
@@ -64,6 +65,16 @@ public class MainImageViewer extends JPanel
     initializeComponents();
     setupROISystem();
     showEmptyState();
+  }
+
+  /**
+   * Initialize the overlay with loaded settings after construction
+   */
+  public void initializeWithSettings(MainSettings mainSettings) {
+    if (roiOverlay != null && mainSettings != null) {
+      roiOverlay.updateSettings(mainSettings);
+      LOGGER.debug("Initialized ROI overlay with loaded settings");
+    }
   }
 
   private void initializeComponents() {

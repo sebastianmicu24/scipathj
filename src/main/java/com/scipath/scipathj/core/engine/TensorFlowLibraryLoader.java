@@ -31,11 +31,11 @@ public class TensorFlowLibraryLoader {
    */
   public static synchronized boolean loadTensorFlowLibrary() {
    if (libraryLoaded) {
-     LOGGER.debug("TensorFlow library already loaded from: {}", loadedLibraryPath);
+     LOGGER.trace("TensorFlow library already loaded from: {}", loadedLibraryPath);
      return true;
    }
 
-   LOGGER.info("Attempting to load TensorFlow native library with Java 21 compatibility");
+   LOGGER.debug("Attempting to load TensorFlow native library with Java 21 compatibility");
 
    // Apply ClassLoader fixes before attempting to load
    Java21ClassLoaderFix.applyFix();
@@ -58,7 +58,7 @@ public class TensorFlowLibraryLoader {
    * Strategy 5: Try to use TensorFlow's own loading mechanism with ClassLoader fixes.
    */
   private static boolean tryTensorFlowNativeLoad() {
-    LOGGER.debug("Trying TensorFlow's native loading mechanism");
+    LOGGER.trace("Trying TensorFlow's native loading mechanism");
 
     return AccessController.doPrivileged(
         new PrivilegedAction<Boolean>() {
@@ -73,7 +73,7 @@ public class TensorFlowLibraryLoader {
 
               libraryLoaded = true;
               loadedLibraryPath = "TensorFlow NativeLibrary.load()";
-              LOGGER.info("Successfully loaded TensorFlow library using NativeLibrary.load()");
+              LOGGER.debug("Successfully loaded TensorFlow library using NativeLibrary.load()");
               return true;
 
             } catch (Exception e) {
@@ -88,7 +88,7 @@ public class TensorFlowLibraryLoader {
 
                 libraryLoaded = true;
                 loadedLibraryPath = "TensorFlow.version() - " + version;
-                LOGGER.info("TensorFlow library appears to be loaded (version: {})", version);
+                LOGGER.debug("TensorFlow library appears to be loaded (version: {})", version);
                 return true;
 
               } catch (Exception e2) {

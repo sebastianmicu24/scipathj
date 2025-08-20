@@ -95,22 +95,47 @@ public class TensorFlowNetwork<T extends RealType<T>> extends DefaultNetwork<T> 
 
   @Override
   public void loadLibrary() {
-    tensorFlowService.loadLibrary();
-    if (tensorFlowService.getStatus().isLoaded()) {
-      log(tensorFlowService.getStatus().getInfo());
+    // Check if TensorFlow library is already loaded by our optimized loader
+    if (com.scipath.scipathj.core.engine.TensorFlowLibraryLoader.isLibraryLoaded()) {
+      log("TensorFlow library already loaded by optimized loader");
       tensorFlowLoaded = true;
-    } else {
-      tensorFlowLoaded = false;
-      logService.error(
-          "Could not load TensorFlow. Check previous errors and warnings for details.");
-      JOptionPane.showMessageDialog(
-          null,
-          "<html>Could not load TensorFlow.<br/>Opening the TensorFlow Library Management"
-              + " tool.</html>",
-          "Loading TensorFlow failed",
-          JOptionPane.ERROR_MESSAGE);
-      commandService.run(TensorFlowLibraryManagementCommand.class, true);
+      return;
     }
+
+    try {
+      tensorFlowService.loadLibrary();
+      if (tensorFlowService.getStatus().isLoaded()) {
+        log(tensorFlowService.getStatus().getInfo());
+        tensorFlowLoaded = true;
+      } else {
+        tensorFlowLoaded = false;
+        logService.error(
+            "Could not load TensorFlow. Check previous errors and warnings for details.");
+        JOptionPane.showMessageDialog(
+            null,
+            "<html>Could not load TensorFlow.<br/>Opening the TensorFlow Library Management"
+                + " tool.</html>",
+            "Loading TensorFlow failed",
+            JOptionPane.ERROR_MESSAGE);
+        commandService.run(TensorFlowLibraryManagementCommand.class, true);
+      }
+    } catch (Exception e) {
+      log("TensorFlowService.loadLibrary() failed: " + e.getMessage());
+      // Try to load with our optimized loader as fallback
+      try {
+        if (com.scipath.scipathj.core.engine.TensorFlowLibraryLoader.loadTensorFlowLibrary()) {
+          log("TensorFlow library loaded successfully using optimized loader");
+          tensorFlowLoaded = true;
+        } else {
+          tensorFlowLoaded = false;
+          logService.error("All TensorFlow loading methods failed");
+        }
+      } catch (Exception e2) {
+        tensorFlowLoaded = false;
+        logService.error("Failed to load TensorFlow with any method: " + e2.getMessage());
+      }
+    }
+    return;
   }
 
   @Override
@@ -178,9 +203,18 @@ public class TensorFlowNetwork<T extends RealType<T>> extends DefaultNetwork<T> 
       }
       com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
           "Attempting to load cached model using TensorFlowService");
-      model = tensorFlowService.loadCachedModel(source, modelName, MODEL_TAG);
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
-          "TensorFlowService.loadCachedModel() completed");
+
+      // Try to load cached model with error handling for cache issues
+      try {
+        model = tensorFlowService.loadCachedModel(source, modelName, MODEL_TAG);
+        com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+            "TensorFlowService.loadCachedModel() completed");
+      } catch (Exception e) {
+        log("TensorFlowService.loadCachedModel() failed due to cache error: " + e.getMessage());
+        com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+            "TensorFlowService.loadCachedModel() failed due to cache error: " + e.getMessage());
+        model = null; // Force fallback to direct loading
+      }
       //			loadNetworkSettingsFromJson(tensorFlowService.loadFile(source, modelName, "meta.json"));
     } catch (TensorFlowException e) {
       com.scipath.scipathj.core.utils.DirectFileLogger.logException(
@@ -198,30 +232,51 @@ public class TensorFlowNetwork<T extends RealType<T>> extends DefaultNetwork<T> 
     }
     if (model != null && model.model() != null) {
       try {
-        // Try to extract signature definition from the model
+        // Validate that the model is properly loaded before proceeding
         if (model.model() instanceof org.tensorflow.SavedModelBundle) {
           org.tensorflow.SavedModelBundle savedModel =
               (org.tensorflow.SavedModelBundle) model.model();
-          byte[] metaGraphDef = savedModel.metaGraphDef();
-          if (metaGraphDef != null && metaGraphDef.length > 0) {
-            MetaGraphDef mgd = MetaGraphDef.parseFrom(metaGraphDef);
-            sig = mgd.getSignatureDefOrThrow(DEFAULT_SERVING_SIGNATURE_DEF_KEY);
-            log(
-                "Successfully loaded model signature with "
-                    + sig.getInputsCount()
-                    + " inputs and "
-                    + sig.getOutputsCount()
-                    + " outputs");
-            com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
-                "Successfully loaded model signature with "
-                    + sig.getInputsCount()
-                    + " inputs and "
-                    + sig.getOutputsCount()
-                    + " outputs");
-          } else {
-            log("No metaGraphDef found in SavedModelBundle");
-            com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
-                "No metaGraphDef found in SavedModelBundle");
+
+          // Additional validation: check if model has required components
+          try {
+            byte[] metaGraphDef = savedModel.metaGraphDef();
+            if (metaGraphDef != null && metaGraphDef.length > 0) {
+              MetaGraphDef mgd = MetaGraphDef.parseFrom(metaGraphDef);
+              sig = mgd.getSignatureDefOrThrow(DEFAULT_SERVING_SIGNATURE_DEF_KEY);
+
+              // Validate signature has required inputs and outputs
+              if (sig.getInputsCount() > 0 && sig.getOutputsCount() > 0) {
+                log(
+                    "Successfully loaded model signature with "
+                        + sig.getInputsCount()
+                        + " inputs and "
+                        + sig.getOutputsCount()
+                        + " outputs");
+                com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+                    "Successfully loaded model signature with "
+                        + sig.getInputsCount()
+                        + " inputs and "
+                        + sig.getOutputsCount()
+                        + " outputs");
+                com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+                    "Model loaded successfully via TensorFlowService");
+                return true;
+              } else {
+                log("Model signature is missing required inputs or outputs");
+                com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+                    "Model signature is missing required inputs or outputs");
+                sig = null;
+              }
+            } else {
+              log("No metaGraphDef found in SavedModelBundle");
+              com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+                  "No metaGraphDef found in SavedModelBundle");
+              sig = null;
+            }
+          } catch (InvalidProtocolBufferException e) {
+            log("Failed to parse model signature: " + e.getMessage());
+            com.scipath.scipathj.core.utils.DirectFileLogger.logException(
+                "TENSORFLOW", "Failed to parse model signature", e);
             sig = null;
           }
         } else {
@@ -230,20 +285,12 @@ public class TensorFlowNetwork<T extends RealType<T>> extends DefaultNetwork<T> 
               "Model is not a SavedModelBundle, signature will be null");
           sig = null;
         }
-      } catch (InvalidProtocolBufferException e) {
-        log("Failed to parse model signature: " + e.getMessage());
-        com.scipath.scipathj.core.utils.DirectFileLogger.logException(
-            "TENSORFLOW", "Failed to parse model signature", e);
-        sig = null;
       } catch (Exception e) {
         log("Error loading model signature: " + e.getMessage());
         com.scipath.scipathj.core.utils.DirectFileLogger.logException(
             "TENSORFLOW", "Error loading model signature", e);
         sig = null;
       }
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
-          "Model loaded successfully via TensorFlowService");
-      return true;
     } else {
       logService.error(
           "TensorFlowService.loadCachedModel() returned null model.model() - trying direct"
@@ -304,6 +351,7 @@ public class TensorFlowNetwork<T extends RealType<T>> extends DefaultNetwork<T> 
         return false;
       }
     }
+    return false;
   }
 
   private void loadNetworkSettingsFromJson(File jsonFile) {

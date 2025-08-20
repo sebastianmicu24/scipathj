@@ -69,7 +69,13 @@ public final class ApplicationContext {
     if (engine == null || configurationManager == null) {
       throw new IllegalStateException("Application context not initialized");
     }
-    return new MainWindow(engine, configurationManager);
+    MainWindow mainWindow = new MainWindow(engine, configurationManager);
+
+    // Initialize the image viewer with loaded settings
+    mainWindow.initializeImageViewerWithSettings();
+    LOGGER.debug("Main window created and initialized with settings");
+
+    return mainWindow;
   }
 
   /**
