@@ -1,6 +1,7 @@
 package com.scipath.scipathj.ui.main;
 
 import com.scipath.scipathj.core.config.ConfigurationManager;
+import com.scipath.scipathj.core.config.MainSettings;
 import com.scipath.scipathj.core.engine.SciPathJEngine;
 import com.scipath.scipathj.data.model.UserROI;
 import com.scipath.scipathj.ui.components.FolderSelectionPanel;
@@ -683,7 +684,8 @@ public class MainWindow extends JFrame {
    */
   private void openMainSettings(java.awt.event.ActionEvent e) {
     LOGGER.debug("Main settings dialog requested");
-    MainSettingsDialog dialog = new MainSettingsDialog(this, configurationManager);
+    MainSettingsDialog dialog =
+        new MainSettingsDialog(this, configurationManager, this::handleSettingsChanged);
     dialog.setVisible(true);
 
     if (dialog.isSettingsChanged()) {
@@ -711,5 +713,40 @@ public class MainWindow extends JFrame {
 
     // Update any other components that depend on main settings
     LOGGER.debug("UI refreshed with new main settings");
+  }
+
+  /**
+   * Handle settings changes from the MainSettingsDialog.
+   * This method is called when the user saves changes in the settings dialog.
+   *
+   * @param newSettings The updated MainSettings
+   */
+  private void handleSettingsChanged(MainSettings newSettings) {
+    LOGGER.info("Main settings changed, updating UI components");
+
+    // Update any ROI overlays if they exist and refresh the entire viewer
+    if (mainImageViewer != null && mainImageViewer.getROIOverlay() != null) {
+      mainImageViewer.getROIOverlay().updateSettings(newSettings);
+      LOGGER.debug("Updated ROI overlay with new settings");
+    }
+
+    // Force a complete refresh of the image viewer (like after zoom/scroll)
+    if (mainImageViewer != null) {
+      mainImageViewer.revalidate();
+      mainImageViewer.repaint();
+      LOGGER.debug("Forced complete refresh of image viewer");
+    }
+
+    // Bring main window to front and request focus to ensure immediate visual update
+    SwingUtilities.invokeLater(
+        () -> {
+          toFront();
+          requestFocus();
+          setState(java.awt.Frame.NORMAL);
+          LOGGER.debug("Main window brought to front and focused");
+        });
+
+    // Any other components that depend on MainSettings should be updated here
+    LOGGER.debug("All UI components updated with new main settings");
   }
 }

@@ -431,7 +431,7 @@ public class MainImageViewer extends JPanel
       String fileName = currentImageFile.getName();
       List<UserROI> rois = roiManager.getROIsForImage(fileName);
       roiOverlay.setDisplayedROIs(rois, fileName);
-      LOGGER.debug("Updated ROI overlay with {} ROIs for image '{}'", rois.size(), fileName);
+      // LOGGER.debug("Updated ROI overlay with {} ROIs for image '{}'", rois.size(), fileName);
     }
   }
 
@@ -712,7 +712,7 @@ public class MainImageViewer extends JPanel
   /**
    * Update ROI overlay transform to account for current zoom and scroll position
    */
-  private void updateROIOverlayTransform() {
+  public void updateROIOverlayTransform() {
     if (roiOverlay == null || currentImagePlus == null || imageLabel.getIcon() == null) return;
 
     // Get current scroll position

@@ -1,32 +1,51 @@
 package com.scipath.scipathj.core.config;
 
 import java.awt.*;
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
- * Main application settings class for global configuration.
- * Manages scale conversion, type-specific ROI appearance, and other global settings with persistence.
- * Uses dependency injection instead of singleton pattern for better testability and flexibility.
+ * Immutable configuration record for main application settings.
+ * Manages scale conversion and type-specific ROI appearance settings.
+ * Follows dependency injection principles and uses Java 16+ record syntax for immutability.
+ *
+ * @param pixelsPerMicrometer The scale conversion factor (pixels per micrometer)
+ * @param scaleUnit The unit for scale display (e.g., "μm")
+ * @param vesselSettings Appearance settings for vessel ROIs
+ * @param nucleusSettings Appearance settings for nucleus ROIs
+ * @param cytoplasmSettings Appearance settings for cytoplasm ROIs
+ * @param cellSettings Appearance settings for cell ROIs
  *
  * @author Sebastian Micu
- * @version 1.0.0
+ * @version 2.0.0
  * @since 1.0.0
  */
-public class MainSettings {
+public record MainSettings(
+    double pixelsPerMicrometer,
+    String scaleUnit,
+    ROIAppearanceSettings vesselSettings,
+    ROIAppearanceSettings nucleusSettings,
+    ROIAppearanceSettings cytoplasmSettings,
+    ROIAppearanceSettings cellSettings) {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(MainSettings.class);
+  // Default values for scale conversion
+  public static final double DEFAULT_PIXELS_PER_MICROMETER = 1.0;
+  public static final String DEFAULT_SCALE_UNIT = "μm";
+
+  // Legacy constants for backward compatibility
+  public static final double DEFAULT_PIXEL_WIDTH = 1.0;
+  public static final double DEFAULT_PIXEL_HEIGHT = 1.0;
+  public static final String DEFAULT_PIXEL_UNIT = "μm";
+  public static final Color DEFAULT_BORDER_COLOR = new Color(255, 0, 0);
+  public static final float DEFAULT_FILL_OPACITY = 0.2f;
+  public static final int DEFAULT_BORDER_WIDTH = 2;
 
   /**
-   * Enum for different ROI types that can have different appearance settings
+   * Enum for different ROI categories that can have different appearance settings.
    */
   public enum ROICategory {
-    VESSEL("Vessel", new Color(255, 0, 0), 0.2f, 2), // Red
-    NUCLEUS("Nucleus", new Color(0, 0, 255), 0.2f, 2), // Blue
-    CYTOPLASM("Cytoplasm", new Color(0, 255, 0), 0.2f, 2), // Green
-    CELL("Cell", new Color(255, 255, 0), 0.1f, 1); // Yellow
+    VESSEL("Vessel", new Color(255, 0, 0), 0.2f, 2),
+    NUCLEUS("Nucleus", new Color(0, 0, 255), 0.2f, 2),
+    CYTOPLASM("Cytoplasm", new Color(0, 255, 0), 0.2f, 2),
+    CELL("Cell", new Color(255, 255, 0), 0.1f, 1);
 
     private final String displayName;
     private final Color defaultBorderColor;
@@ -63,22 +82,15 @@ public class MainSettings {
 
   /**
    * Immutable settings record for ROI appearance configuration.
-   * Uses Java 16+ record syntax for conciseness and immutability.
    *
    * @param borderColor The border color for the ROI
    * @param fillOpacity The fill opacity (0.0-1.0)
    * @param borderWidth The border width in pixels (must be at least 1)
-   *
-   * @author Sebastian Micu
-   * @version 1.0.0
-   * @since 1.0.0
    */
   public record ROIAppearanceSettings(Color borderColor, float fillOpacity, int borderWidth) {
 
     /**
-     * Creates a new ROIAppearanceSettings with validation.
-     *
-     * @throws IllegalArgumentException if any parameter is invalid
+     * Compact constructor with validation.
      */
     public ROIAppearanceSettings {
       if (borderColor == null) {
@@ -94,7 +106,7 @@ public class MainSettings {
     }
 
     /**
-     * Creates a new ROIAppearanceSettings from a ROI category's defaults.
+     * Creates ROI appearance settings from a category's defaults.
      *
      * @param category The ROI category to use for default values
      * @return A new instance with the category's default settings
@@ -121,7 +133,6 @@ public class MainSettings {
      *
      * @param newBorderColor The new border color
      * @return A new instance with the updated border color
-     * @throws IllegalArgumentException if borderColor is null
      */
     public ROIAppearanceSettings withBorderColor(Color newBorderColor) {
       return new ROIAppearanceSettings(newBorderColor, fillOpacity, borderWidth);
@@ -132,7 +143,6 @@ public class MainSettings {
      *
      * @param newFillOpacity The new fill opacity (0.0-1.0)
      * @return A new instance with the updated fill opacity
-     * @throws IllegalArgumentException if fillOpacity is invalid
      */
     public ROIAppearanceSettings withFillOpacity(float newFillOpacity) {
       return new ROIAppearanceSettings(borderColor, newFillOpacity, borderWidth);
@@ -143,329 +153,178 @@ public class MainSettings {
      *
      * @param newBorderWidth The new border width (must be at least 1)
      * @return A new instance with the updated border width
-     * @throws IllegalArgumentException if borderWidth is invalid
      */
     public ROIAppearanceSettings withBorderWidth(int newBorderWidth) {
       return new ROIAppearanceSettings(borderColor, fillOpacity, newBorderWidth);
     }
-
-    /**
-     * Creates a copy of this settings instance.
-     *
-     * @return A new instance with the same values
-     */
-    public ROIAppearanceSettings copy() {
-      return new ROIAppearanceSettings(new Color(borderColor.getRGB()), fillOpacity, borderWidth);
-    }
-
-    /**
-     * Validates the current settings and returns whether they are valid.
-     *
-     * @return true if settings are valid, false otherwise
-     */
-    public boolean isValid() {
-      try {
-        validate();
-        return true;
-      } catch (IllegalStateException e) {
-        return false;
-      }
-    }
-
-    /**
-     * Validate that all current settings are within acceptable ranges.
-     *
-     * @throws IllegalStateException if any setting is invalid
-     */
-    public void validate() {
-      if (borderColor == null) {
-        throw new IllegalStateException("Border color cannot be null");
-      }
-      if (fillOpacity < 0.0f || fillOpacity > 1.0f) {
-        throw new IllegalStateException(
-            "Invalid fill opacity: " + fillOpacity + " (must be 0.0-1.0)");
-      }
-      if (borderWidth < 1) {
-        throw new IllegalStateException(
-            "Invalid border width: " + borderWidth + " (must be at least 1)");
-      }
-    }
-
-    /**
-     * Get a string representation of current settings.
-     *
-     * @return String representation of settings
-     */
-    @Override
-    public String toString() {
-      return String.format(
-          "ROIAppearanceSettings[RGB(%d,%d,%d), opacity=%.2f, width=%d]",
-          borderColor.getRed(),
-          borderColor.getGreen(),
-          borderColor.getBlue(),
-          fillOpacity,
-          borderWidth);
-    }
   }
 
-  // Default values for scale conversion
-  public static final double DEFAULT_PIXELS_PER_MICROMETER =
-      1.0; // 1 pixel = 1 micrometer by default
-  public static final String DEFAULT_SCALE_UNIT = "μm"; // micrometers
-
-  // Additional constants needed by ConfigurationManager
-  public static final double DEFAULT_PIXEL_WIDTH = 1.0;
-  public static final double DEFAULT_PIXEL_HEIGHT = 1.0;
-  public static final String DEFAULT_PIXEL_UNIT = "μm";
-  public static final Color DEFAULT_BORDER_COLOR = new Color(255, 0, 0); // Red
-  public static final float DEFAULT_FILL_OPACITY = 0.2f;
-  public static final int DEFAULT_BORDER_WIDTH = 2;
-
-  // Current values (initialized with defaults)
-  private double pixelsPerMicrometer = DEFAULT_PIXELS_PER_MICROMETER;
-  private String scaleUnit = DEFAULT_SCALE_UNIT;
-
-  // Type-specific ROI appearance settings (mutable references to immutable records)
-  private ROIAppearanceSettings vesselSettings;
-  private ROIAppearanceSettings nucleusSettings;
-  private ROIAppearanceSettings cytoplasmSettings;
-  private ROIAppearanceSettings cellSettings;
-
-  // Settings change listeners
-  private final List<SettingsChangeListener> listeners;
-
-  public interface SettingsChangeListener {
-    void onSettingsChanged();
+  /**
+   * Compact constructor with validation.
+   */
+  public MainSettings {
+    if (pixelsPerMicrometer <= 0) {
+      throw new IllegalArgumentException(
+          "Pixels per micrometer must be positive, got: " + pixelsPerMicrometer);
+    }
+    if (scaleUnit == null || scaleUnit.trim().isEmpty()) {
+      throw new IllegalArgumentException("Scale unit cannot be null or empty");
+    }
+    if (vesselSettings == null) {
+      throw new IllegalArgumentException("Vessel settings cannot be null");
+    }
+    if (nucleusSettings == null) {
+      throw new IllegalArgumentException("Nucleus settings cannot be null");
+    }
+    if (cytoplasmSettings == null) {
+      throw new IllegalArgumentException("Cytoplasm settings cannot be null");
+    }
+    if (cellSettings == null) {
+      throw new IllegalArgumentException("Cell settings cannot be null");
+    }
   }
 
   /**
    * Creates a new MainSettings instance with default values.
-   * Uses dependency injection pattern instead of singleton for better testability.
-   */
-  public MainSettings() {
-    // Initialize type-specific settings with defaults
-    this.vesselSettings = ROIAppearanceSettings.fromCategory(ROICategory.VESSEL);
-    this.nucleusSettings = ROIAppearanceSettings.fromCategory(ROICategory.NUCLEUS);
-    this.cytoplasmSettings = ROIAppearanceSettings.fromCategory(ROICategory.CYTOPLASM);
-    this.cellSettings = ROIAppearanceSettings.fromCategory(ROICategory.CELL);
-
-    this.listeners = new CopyOnWriteArrayList<>();
-    LOGGER.debug("MainSettings initialized with default values for all ROI types");
-  }
-
-  /**
-   * Creates a new MainSettings instance with custom values.
    *
-   * @param pixelsPerMicrometer The scale conversion factor
-   * @param scaleUnit The unit for scale display
-   * @param vesselSettings Settings for vessel ROIs
-   * @param nucleusSettings Settings for nucleus ROIs
-   * @param cytoplasmSettings Settings for cytoplasm ROIs
-   * @param cellSettings Settings for cell ROIs
+   * @return A new MainSettings instance with default values
    */
-  public MainSettings(
-      double pixelsPerMicrometer,
-      String scaleUnit,
-      ROIAppearanceSettings vesselSettings,
-      ROIAppearanceSettings nucleusSettings,
-      ROIAppearanceSettings cytoplasmSettings,
-      ROIAppearanceSettings cellSettings) {
-    this.pixelsPerMicrometer = pixelsPerMicrometer;
-    this.scaleUnit = scaleUnit;
-    this.vesselSettings = vesselSettings;
-    this.nucleusSettings = nucleusSettings;
-    this.cytoplasmSettings = cytoplasmSettings;
-    this.cellSettings = cellSettings;
-    this.listeners = new CopyOnWriteArrayList<>();
-
-    validate(); // Validate all settings on construction
-    LOGGER.debug("MainSettings initialized with custom values");
-  }
-
-  // Scale conversion getters
-  public double getPixelsPerMicrometer() {
-    return pixelsPerMicrometer;
-  }
-
-  public String getScaleUnit() {
-    return scaleUnit;
-  }
-
-  // Settings change listener management
-  public void addSettingsChangeListener(SettingsChangeListener listener) {
-    listeners.add(listener);
-  }
-
-  public void removeSettingsChangeListener(SettingsChangeListener listener) {
-    listeners.remove(listener);
-  }
-
-  private void notifySettingsChanged() {
-    listeners.forEach(
-        listener -> {
-          try {
-            listener.onSettingsChanged();
-          } catch (Exception e) {
-            LOGGER.error("Error notifying settings change listener", e);
-          }
-        });
-  }
-
-  // Type-specific ROI appearance getters
-  public ROIAppearanceSettings getVesselSettings() {
-    return vesselSettings;
-  }
-
-  public ROIAppearanceSettings getNucleusSettings() {
-    return nucleusSettings;
-  }
-
-  public ROIAppearanceSettings getCytoplasmSettings() {
-    return cytoplasmSettings;
-  }
-
-  public ROIAppearanceSettings getCellSettings() {
-    return cellSettings;
-  }
-
-  // Convenience methods for backward compatibility (use vessel settings as default)
-  public Color getRoiBorderColor() {
-    return vesselSettings.borderColor();
-  }
-
-  public Color getRoiFillColor() {
-    return vesselSettings.getFillColor();
-  }
-
-  public float getRoiFillOpacity() {
-    return vesselSettings.fillOpacity();
+  public static MainSettings createDefault() {
+    return new MainSettings(
+        DEFAULT_PIXELS_PER_MICROMETER,
+        DEFAULT_SCALE_UNIT,
+        ROIAppearanceSettings.fromCategory(ROICategory.VESSEL),
+        ROIAppearanceSettings.fromCategory(ROICategory.NUCLEUS),
+        ROIAppearanceSettings.fromCategory(ROICategory.CYTOPLASM),
+        ROIAppearanceSettings.fromCategory(ROICategory.CELL));
   }
 
   /**
-   * Get appearance settings for a specific ROI category
+   * Get appearance settings for a specific ROI category.
+   *
+   * @param category The ROI category
+   * @return The appearance settings for the category
    */
   public ROIAppearanceSettings getSettingsForCategory(ROICategory category) {
-    switch (category) {
-      case VESSEL:
-        return vesselSettings;
-      case NUCLEUS:
-        return nucleusSettings;
-      case CYTOPLASM:
-        return cytoplasmSettings;
-      case CELL:
-        return cellSettings;
-      default:
-        return vesselSettings; // Default to vessel settings
-    }
-  }
-
-  // Scale conversion setters with validation
-  public void setPixelsPerMicrometer(double pixelsPerMicrometer) {
-    if (pixelsPerMicrometer <= 0) {
-      throw new IllegalArgumentException("Pixels per micrometer must be positive");
-    }
-    this.pixelsPerMicrometer = pixelsPerMicrometer;
-    LOGGER.debug("Pixels per micrometer set to: {}", pixelsPerMicrometer);
-  }
-
-  public void setScaleUnit(String scaleUnit) {
-    if (scaleUnit == null || scaleUnit.trim().isEmpty()) {
-      throw new IllegalArgumentException("Scale unit cannot be null or empty");
-    }
-    this.scaleUnit = scaleUnit.trim();
-    LOGGER.debug("Scale unit set to: {}", scaleUnit);
-  }
-
-  // ROI settings setters (creates new immutable instances)
-  public void setVesselSettings(ROIAppearanceSettings newSettings) {
-    if (newSettings == null) {
-      throw new IllegalArgumentException("Vessel settings cannot be null");
-    }
-    this.vesselSettings = newSettings;
-    notifySettingsChanged();
-    LOGGER.debug("Vessel settings updated: {}", newSettings);
-  }
-
-  public void setNucleusSettings(ROIAppearanceSettings newSettings) {
-    if (newSettings == null) {
-      throw new IllegalArgumentException("Nucleus settings cannot be null");
-    }
-    this.nucleusSettings = newSettings;
-    notifySettingsChanged();
-    LOGGER.debug("Nucleus settings updated: {}", newSettings);
-  }
-
-  public void setCytoplasmSettings(ROIAppearanceSettings newSettings) {
-    if (newSettings == null) {
-      throw new IllegalArgumentException("Cytoplasm settings cannot be null");
-    }
-    this.cytoplasmSettings = newSettings;
-    notifySettingsChanged();
-    LOGGER.debug("Cytoplasm settings updated: {}", newSettings);
-  }
-
-  public void setCellSettings(ROIAppearanceSettings newSettings) {
-    if (newSettings == null) {
-      throw new IllegalArgumentException("Cell settings cannot be null");
-    }
-    this.cellSettings = newSettings;
-    notifySettingsChanged();
-    LOGGER.debug("Cell settings updated: {}", newSettings);
-  }
-
-  // Convenience setters for backward compatibility (delegates to vessel settings)
-  public void setRoiBorderColor(Color roiBorderColor) {
-    setVesselSettings(vesselSettings.withBorderColor(roiBorderColor));
-    LOGGER.debug(
-        "Vessel ROI border color set to: RGB({}, {}, {})",
-        roiBorderColor.getRed(),
-        roiBorderColor.getGreen(),
-        roiBorderColor.getBlue());
-  }
-
-  public void setRoiFillOpacity(float roiFillOpacity) {
-    setVesselSettings(vesselSettings.withFillOpacity(roiFillOpacity));
-    LOGGER.debug("Vessel ROI fill opacity set to: {}", roiFillOpacity);
-  }
-
-  public void setRoiBorderWidth(int roiBorderWidth) {
-    setVesselSettings(vesselSettings.withBorderWidth(roiBorderWidth));
-    LOGGER.debug("Vessel ROI border width set to: {}", roiBorderWidth);
+    return switch (category) {
+      case VESSEL -> vesselSettings;
+      case NUCLEUS -> nucleusSettings;
+      case CYTOPLASM -> cytoplasmSettings;
+      case CELL -> cellSettings;
+    };
   }
 
   /**
-   * Update settings for a specific ROI category
+   * Creates a new MainSettings instance with updated pixels per micrometer.
+   *
+   * @param newPixelsPerMicrometer The new pixels per micrometer value
+   * @return A new MainSettings instance with updated value
    */
-  public void updateCategorySettings(
-      ROICategory category, Color borderColor, float fillOpacity, int borderWidth) {
-    ROIAppearanceSettings newSettings =
-        new ROIAppearanceSettings(borderColor, fillOpacity, borderWidth);
+  public MainSettings withPixelsPerMicrometer(double newPixelsPerMicrometer) {
+    return new MainSettings(
+        newPixelsPerMicrometer,
+        scaleUnit,
+        vesselSettings,
+        nucleusSettings,
+        cytoplasmSettings,
+        cellSettings);
+  }
 
-    switch (category) {
-      case VESSEL:
-        setVesselSettings(newSettings);
-        break;
-      case NUCLEUS:
-        setNucleusSettings(newSettings);
-        break;
-      case CYTOPLASM:
-        setCytoplasmSettings(newSettings);
-        break;
-      case CELL:
-        setCellSettings(newSettings);
-        break;
-      default:
-        throw new IllegalArgumentException("Unknown ROI category: " + category);
-    }
+  /**
+   * Creates a new MainSettings instance with updated scale unit.
+   *
+   * @param newScaleUnit The new scale unit
+   * @return A new MainSettings instance with updated value
+   */
+  public MainSettings withScaleUnit(String newScaleUnit) {
+    return new MainSettings(
+        pixelsPerMicrometer,
+        newScaleUnit,
+        vesselSettings,
+        nucleusSettings,
+        cytoplasmSettings,
+        cellSettings);
+  }
 
-    LOGGER.debug(
-        "Updated {} settings: color=RGB({},{},{}), opacity={}, width={}",
-        category.getDisplayName(),
-        borderColor.getRed(),
-        borderColor.getGreen(),
-        borderColor.getBlue(),
-        fillOpacity,
-        borderWidth);
+  /**
+   * Creates a new MainSettings instance with updated vessel settings.
+   *
+   * @param newVesselSettings The new vessel settings
+   * @return A new MainSettings instance with updated settings
+   */
+  public MainSettings withVesselSettings(ROIAppearanceSettings newVesselSettings) {
+    return new MainSettings(
+        pixelsPerMicrometer,
+        scaleUnit,
+        newVesselSettings,
+        nucleusSettings,
+        cytoplasmSettings,
+        cellSettings);
+  }
+
+  /**
+   * Creates a new MainSettings instance with updated nucleus settings.
+   *
+   * @param newNucleusSettings The new nucleus settings
+   * @return A new MainSettings instance with updated settings
+   */
+  public MainSettings withNucleusSettings(ROIAppearanceSettings newNucleusSettings) {
+    return new MainSettings(
+        pixelsPerMicrometer,
+        scaleUnit,
+        vesselSettings,
+        newNucleusSettings,
+        cytoplasmSettings,
+        cellSettings);
+  }
+
+  /**
+   * Creates a new MainSettings instance with updated cytoplasm settings.
+   *
+   * @param newCytoplasmSettings The new cytoplasm settings
+   * @return A new MainSettings instance with updated settings
+   */
+  public MainSettings withCytoplasmSettings(ROIAppearanceSettings newCytoplasmSettings) {
+    return new MainSettings(
+        pixelsPerMicrometer,
+        scaleUnit,
+        vesselSettings,
+        nucleusSettings,
+        newCytoplasmSettings,
+        cellSettings);
+  }
+
+  /**
+   * Creates a new MainSettings instance with updated cell settings.
+   *
+   * @param newCellSettings The new cell settings
+   * @return A new MainSettings instance with updated settings
+   */
+  public MainSettings withCellSettings(ROIAppearanceSettings newCellSettings) {
+    return new MainSettings(
+        pixelsPerMicrometer,
+        scaleUnit,
+        vesselSettings,
+        nucleusSettings,
+        cytoplasmSettings,
+        newCellSettings);
+  }
+
+  /**
+   * Creates a new MainSettings instance with updated settings for a specific category.
+   *
+   * @param category The ROI category to update
+   * @param newSettings The new settings for the category
+   * @return A new MainSettings instance with updated settings
+   */
+  public MainSettings withCategorySettings(
+      ROICategory category, ROIAppearanceSettings newSettings) {
+    return switch (category) {
+      case VESSEL -> withVesselSettings(newSettings);
+      case NUCLEUS -> withNucleusSettings(newSettings);
+      case CYTOPLASM -> withCytoplasmSettings(newSettings);
+      case CELL -> withCellSettings(newSettings);
+    };
   }
 
   /**
@@ -500,130 +359,86 @@ public class MainSettings {
   }
 
   /**
-   * Reset all settings to their default values.
-   */
-  public void resetToDefaults() {
-    pixelsPerMicrometer = DEFAULT_PIXELS_PER_MICROMETER;
-    scaleUnit = DEFAULT_SCALE_UNIT;
-
-    // Reset all ROI category settings to defaults
-    vesselSettings = ROIAppearanceSettings.fromCategory(ROICategory.VESSEL);
-    nucleusSettings = ROIAppearanceSettings.fromCategory(ROICategory.NUCLEUS);
-    cytoplasmSettings = ROIAppearanceSettings.fromCategory(ROICategory.CYTOPLASM);
-    cellSettings = ROIAppearanceSettings.fromCategory(ROICategory.CELL);
-
-    notifySettingsChanged();
-    LOGGER.info(
-        "Main settings reset to defaults for vessel, nucleus, cytoplasm, and cell ROI types");
-  }
-
-  /**
    * Check if current settings are different from defaults.
    *
    * @return true if any setting differs from its default value
    */
   public boolean hasCustomValues() {
-    return pixelsPerMicrometer != DEFAULT_PIXELS_PER_MICROMETER
-        || !scaleUnit.equals(DEFAULT_SCALE_UNIT)
-        || hasCustomROISettings();
+    MainSettings defaultSettings = createDefault();
+    return !this.equals(defaultSettings);
   }
 
-  private boolean hasCustomROISettings() {
-    ROIAppearanceSettings defaultVessel = ROIAppearanceSettings.fromCategory(ROICategory.VESSEL);
-    ROIAppearanceSettings defaultNucleus = ROIAppearanceSettings.fromCategory(ROICategory.NUCLEUS);
-    ROIAppearanceSettings defaultCytoplasm =
-        ROIAppearanceSettings.fromCategory(ROICategory.CYTOPLASM);
-    ROIAppearanceSettings defaultCell = ROIAppearanceSettings.fromCategory(ROICategory.CELL);
+  // Legacy compatibility methods (delegate to vessel settings)
 
-    return !vesselSettings.equals(defaultVessel)
-        || !nucleusSettings.equals(defaultNucleus)
-        || !cytoplasmSettings.equals(defaultCytoplasm)
-        || !cellSettings.equals(defaultCell);
+  /**
+   * @deprecated Use vesselSettings().borderColor() instead
+   */
+  @Deprecated
+  public Color getRoiBorderColor() {
+    return vesselSettings.borderColor();
   }
 
   /**
-   * Get a string representation of current settings.
-   *
-   * @return String representation of settings
+   * @deprecated Use vesselSettings().getFillColor() instead
    */
-  @Override
-  public String toString() {
-    return String.format(
-        "MainSettings{pixelsPerMicrometer=%.3f, scaleUnit='%s', "
-            + "vessel=%s, nucleus=%s, cytoplasm=%s, cell=%s}",
-        pixelsPerMicrometer,
-        scaleUnit,
-        formatROISettings("Vessel", vesselSettings),
-        formatROISettings("Nucleus", nucleusSettings),
-        formatROISettings("Cytoplasm", cytoplasmSettings),
-        formatROISettings("Cell", cellSettings));
-  }
-
-  private String formatROISettings(String type, ROIAppearanceSettings settings) {
-    return String.format(
-        "%s[RGB(%d,%d,%d),opacity=%.2f,width=%d]",
-        type,
-        settings.borderColor().getRed(),
-        settings.borderColor().getGreen(),
-        settings.borderColor().getBlue(),
-        settings.fillOpacity(),
-        settings.borderWidth());
+  @Deprecated
+  public Color getRoiFillColor() {
+    return vesselSettings.getFillColor();
   }
 
   /**
-   * Validate that all current settings are within acceptable ranges.
-   *
-   * @throws IllegalStateException if any setting is invalid
+   * @deprecated Use vesselSettings().fillOpacity() instead
    */
-  public void validate() {
-    if (pixelsPerMicrometer <= 0) {
-      throw new IllegalStateException("Invalid pixels per micrometer: " + pixelsPerMicrometer);
-    }
-    if (scaleUnit == null || scaleUnit.trim().isEmpty()) {
-      throw new IllegalStateException("Invalid scale unit: " + scaleUnit);
-    }
-
-    // Validate all ROI category settings
-    validateROISettings("Vessel", vesselSettings);
-    validateROISettings("Nucleus", nucleusSettings);
-    validateROISettings("Cytoplasm", cytoplasmSettings);
-    validateROISettings("Cell", cellSettings);
-  }
-
-  private void validateROISettings(String categoryName, ROIAppearanceSettings settings) {
-    if (settings == null) {
-      throw new IllegalStateException(categoryName + " settings cannot be null");
-    }
-    try {
-      settings.validate();
-    } catch (IllegalStateException e) {
-      throw new IllegalStateException(
-          "Invalid " + categoryName + " settings: " + e.getMessage(), e);
-    }
+  @Deprecated
+  public float getRoiFillOpacity() {
+    return vesselSettings.fillOpacity();
   }
 
   /**
-   * Creates a new MainSettings instance with default values.
-   * Factory method for easier instantiation.
-   *
-   * @return A new MainSettings instance with default values
+   * @deprecated Use pixelsPerMicrometer() instead
    */
-  public static MainSettings createDefault() {
-    return new MainSettings();
+  @Deprecated
+  public double getPixelsPerMicrometer() {
+    return pixelsPerMicrometer;
   }
 
   /**
-   * Creates a copy of this MainSettings instance.
-   *
-   * @return A new MainSettings instance with the same values
+   * @deprecated Use scaleUnit() instead
    */
-  public MainSettings copy() {
-    return new MainSettings(
-        pixelsPerMicrometer,
-        scaleUnit,
-        vesselSettings.copy(),
-        nucleusSettings.copy(),
-        cytoplasmSettings.copy(),
-        cellSettings.copy());
+  @Deprecated
+  public String getScaleUnit() {
+    return scaleUnit;
+  }
+
+  /**
+   * @deprecated Use vesselSettings() instead
+   */
+  @Deprecated
+  public ROIAppearanceSettings getVesselSettings() {
+    return vesselSettings;
+  }
+
+  /**
+   * @deprecated Use nucleusSettings() instead
+   */
+  @Deprecated
+  public ROIAppearanceSettings getNucleusSettings() {
+    return nucleusSettings;
+  }
+
+  /**
+   * @deprecated Use cytoplasmSettings() instead
+   */
+  @Deprecated
+  public ROIAppearanceSettings getCytoplasmSettings() {
+    return cytoplasmSettings;
+  }
+
+  /**
+   * @deprecated Use cellSettings() instead
+   */
+  @Deprecated
+  public ROIAppearanceSettings getCellSettings() {
+    return cellSettings;
   }
 }

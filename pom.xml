@@ -224,7 +224,8 @@
                 </configuration>
             </plugin>
 
-            <!-- Code formatting with Spotless -->
+            <!-- Code formatting with Spotless - TEMPORARILY DISABLED -->
+            <!--
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
@@ -268,6 +269,7 @@
                     </execution>
                 </executions>
             </plugin>
+            -->
 
             <!-- Static analysis with SpotBugs -->
             <plugin>

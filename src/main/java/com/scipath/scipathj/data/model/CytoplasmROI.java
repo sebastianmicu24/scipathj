@@ -35,11 +35,11 @@ public class CytoplasmROI extends UserROI {
     this.cytoplasmArea = roi.getStatistics().area;
     this.segmentationMethod = "Voronoi_Subtraction";
 
-    LOGGER.debug(
-        "Created CytoplasmROI: {} with area: {:.1f} pixels (complex shape: {})",
-        cytoplasmName,
-        cytoplasmArea,
-        hasComplexShape());
+    // LOGGER.debug(
+    //     "Created CytoplasmROI: {} with area: {:.1f} pixels (complex shape: {})",
+    //     cytoplasmName,
+    //     cytoplasmArea,
+    //     hasComplexShape());
   }
 
   /**

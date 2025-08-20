@@ -103,7 +103,7 @@ public class NuclearSegmentation implements AutoCloseable {
     try {
       LOGGER.info("Initializing SciJava context for nuclear segmentation");
 
-      // Create a minimal SciJava context with required services
+      // Create SciJava context with required services
       this.context =
           new Context(
               CommandService.class,
@@ -115,15 +115,16 @@ public class NuclearSegmentation implements AutoCloseable {
               org.scijava.convert.ConvertService.class,
               org.scijava.module.ModuleService.class,
               net.imagej.tensorflow.TensorFlowService.class,
+              // Add UI services back as they are required
               org.scijava.ui.UIService.class,
+              org.scijava.display.DisplayService.class,
+              net.imagej.display.ImageDisplayService.class,
               net.imagej.lut.LUTService.class,
               net.imagej.ops.OpService.class,
               org.scijava.prefs.PrefService.class,
               org.scijava.io.IOService.class,
-              org.scijava.display.DisplayService.class,
               org.scijava.parse.ParseService.class,
               org.scijava.object.ObjectService.class,
-              net.imagej.display.ImageDisplayService.class,
               net.imagej.types.DataTypeService.class,
               org.scijava.app.AppService.class,
               org.scijava.event.EventService.class);
@@ -170,7 +171,27 @@ public class NuclearSegmentation implements AutoCloseable {
       LOGGER.info("Nuclear segmentation completed. Found {} nuclei", nucleiROIs.size());
       return nucleiROIs;
 
+    } catch (java.security.AccessControlException e) {
+      LOGGER.error(
+          "Access control error during segmentation for image: {} - {}",
+          imageFileName,
+          e.getMessage());
+      throw new NuclearSegmentationException(
+          "Access denied during segmentation for " + imageFileName + ". Check file permissions.",
+          e);
     } catch (Exception e) {
+      // Check if it's a model file access error
+      if (e.getMessage() != null && e.getMessage().contains("Accesso negato")) {
+        LOGGER.error(
+            "Model file access denied for image: {} - Try checking model file permissions",
+            imageFileName);
+        throw new NuclearSegmentationException(
+            "Model file access denied for "
+                + imageFileName
+                + ". Check model file permissions in src/main/resources/models/",
+            e);
+      }
+
       LOGGER.error("StarDist nuclear segmentation failed for image: {}", imageFileName, e);
       throw new NuclearSegmentationException("Nuclear segmentation failed for " + imageFileName, e);
     }
@@ -301,11 +322,22 @@ public class NuclearSegmentation implements AutoCloseable {
       throws NuclearSegmentationException {
     LOGGER.info("Executing StarDist2D with H&E model choice: {}", settings.modelChoice());
 
+    // Close any existing ROI Manager and other StarDist windows before execution
+    closeStarDistWindows();
+
     // Clear any existing ROI Manager
     RoiManager ijRoiManager = RoiManager.getInstance();
     if (ijRoiManager != null) {
       ijRoiManager.reset();
     }
+
+    // Set system properties to optimize CSBDeep behavior and reduce logging noise
+    System.setProperty("org.slf4j.simpleLogger.log.org.tensorflow", "warn");
+    System.setProperty("org.slf4j.simpleLogger.log.de.csbdresden", "warn");
+
+    // Skip CSBDeep file access attempts to avoid permission errors
+    System.setProperty("de.csbdresden.csbdeep.skipFileAccess", "true");
+    System.setProperty("csbdeep.loadFromJarOnly", "true");
 
     try {
       // Create StarDist parameters
@@ -330,6 +362,10 @@ public class NuclearSegmentation implements AutoCloseable {
 
       // Convert to NucleusROI objects
       List<NucleusROI> nucleusROIs = convertToNucleusROIs(detectedRois);
+
+      // Close all StarDist windows including ROI Manager
+      closeStarDistWindows();
+
       return nucleusROIs;
 
     } catch (java.util.concurrent.ExecutionException ee) {
@@ -345,6 +381,73 @@ public class NuclearSegmentation implements AutoCloseable {
       Thread.currentThread().interrupt();
       throw new NuclearSegmentationException(
           "StarDist2D command was interrupted: " + ie.getMessage(), ie);
+    }
+  }
+
+  /**
+   * Close all StarDist-related windows including ROI Manager and other analysis windows.
+   */
+  private void closeStarDistWindows() {
+    try {
+      // Close ROI Manager first
+      RoiManager roiManager = RoiManager.getInstance();
+      if (roiManager != null) {
+        roiManager.close();
+        LOGGER.debug("ROI Manager closed");
+      }
+
+      // Close other StarDist windows using WindowManager
+      java.awt.Window[] allWindows = java.awt.Window.getWindows();
+      for (java.awt.Window window : allWindows) {
+        if (window.isVisible()) {
+          String title = window.getName();
+          if (title != null) {
+            String lowerTitle = title.toLowerCase();
+            // Close windows that might be opened by StarDist
+            if (lowerTitle.contains("voronoi")
+                || lowerTitle.contains("cytoplasm")
+                || lowerTitle.contains("stardist")
+                || lowerTitle.contains("csbdeep")
+                || lowerTitle.contains("probability")
+                || lowerTitle.contains("distance")) {
+              window.setVisible(false);
+              window.dispose();
+              LOGGER.debug("Closed StarDist window: {}", title);
+            }
+          }
+        }
+      }
+
+      // Also try to close windows using ImageJ's WindowManager
+      try {
+        String[] windowTitles = ij.WindowManager.getNonImageTitles();
+        if (windowTitles != null) {
+          for (String title : windowTitles) {
+            if (title != null) {
+              String lowerTitle = title.toLowerCase();
+              if (lowerTitle.contains("voronoi")
+                  || lowerTitle.contains("cytoplasm")
+                  || lowerTitle.contains("stardist")
+                  || lowerTitle.contains("csbdeep")
+                  || lowerTitle.contains("probability")
+                  || lowerTitle.contains("distance")
+                  || lowerTitle.contains("roi manager")) {
+                java.awt.Window window = ij.WindowManager.getWindow(title);
+                if (window != null && window.isVisible()) {
+                  window.setVisible(false);
+                  window.dispose();
+                  LOGGER.debug("Closed ImageJ window: {}", title);
+                }
+              }
+            }
+          }
+        }
+      } catch (Exception e) {
+        LOGGER.debug("Could not access ImageJ WindowManager: {}", e.getMessage());
+      }
+
+    } catch (Exception e) {
+      LOGGER.warn("Error closing StarDist windows", e);
     }
   }
 
@@ -368,6 +471,7 @@ public class NuclearSegmentation implements AutoCloseable {
     params.put("nmsThresh", (double) settings.nmsThresh());
 
     // Output settings from configuration - force ROI only output to avoid display issues
+    // Note: We still need ROI Manager output to extract the ROIs, but we'll close it immediately
     params.put("outputType", "ROI Manager");
     params.put("excludeBoundary", settings.excludeBoundary());
     params.put("roiPosition", settings.roiPosition());

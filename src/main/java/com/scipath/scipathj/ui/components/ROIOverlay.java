@@ -9,6 +9,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.AffineTransform;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import javax.swing.*;
 import org.slf4j.Logger;
@@ -17,20 +18,23 @@ import org.slf4j.LoggerFactory;
 /**
  * Transparent overlay component that displays ROIs on top of images.
  * Handles ROI rendering and mouse interactions for ROI selection and creation.
+ * Updated to work with immutable MainSettings using dependency injection pattern.
  *
- * NOTE: The square ROI selection is currently a temporary feature for testing purposes.
+ * @author Sebastian Micu
+ * @version 2.0.0
+ * @since 1.0.0
  */
 public class ROIOverlay extends JComponent {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(ROIOverlay.class);
 
-  // ROI display settings (using MainSettings for configurable appearance)
+  // ROI display constants
   private static final int SELECTION_STROKE_WIDTH = UIConstants.SELECTION_STROKE_WIDTH;
   private static final float[] DASH_PATTERN = UIConstants.DASH_PATTERN;
   private static final Color SELECTION_COLOR = UIConstants.ROI_SELECTION_COLOR;
 
-  // Main settings for configurable appearance
-  private final MainSettings mainSettings;
+  // Main settings for configurable appearance (now mutable to support updates)
+  private MainSettings mainSettings;
 
   // Current ROIs to display
   private final List<UserROI> displayedROIs;
@@ -62,18 +66,20 @@ public class ROIOverlay extends JComponent {
     void onROIDeselected();
   }
 
+  /**
+   * Create a new ROI overlay with dependency injection.
+   *
+   * @param mainSettings Initial settings for ROI appearance
+   */
   public ROIOverlay(MainSettings mainSettings) {
     this.displayedROIs = new CopyOnWriteArrayList<>();
     this.listeners = new CopyOnWriteArrayList<>();
-    this.mainSettings = mainSettings;
+    this.mainSettings = Objects.requireNonNull(mainSettings, "mainSettings");
 
     setOpaque(false);
     setBackground(new Color(0, 0, 0, 0)); // Fully transparent
 
     setupMouseHandlers();
-
-    // Listen for settings changes to refresh the display
-    mainSettings.addSettingsChangeListener(this::onSettingsChanged);
   }
 
   /**
@@ -85,11 +91,15 @@ public class ROIOverlay extends JComponent {
   }
 
   /**
-   * Handle settings changes by refreshing the display
+   * Update the settings used for ROI rendering.
+   * This should be called when MainSettings change to refresh the display.
+   *
+   * @param newSettings The updated MainSettings instance
    */
-  private void onSettingsChanged() {
+  public void updateSettings(MainSettings newSettings) {
+    this.mainSettings = Objects.requireNonNull(newSettings, "newSettings");
     SwingUtilities.invokeLater(this::repaint);
-    LOGGER.debug("ROI overlay refreshed due to settings change");
+    LOGGER.debug("ROI overlay settings updated and display refreshed");
   }
 
   private void setupMouseHandlers() {
@@ -145,8 +155,7 @@ public class ROIOverlay extends JComponent {
     this.currentImageFileName = imageFileName;
     this.selectedROI = null;
     repaint();
-    LOGGER.debug(
-        "Updated displayed ROIs: {} ROIs for image '{}'", this.displayedROIs.size(), imageFileName);
+    // LOGGER.debug("Updated displayed ROIs: {} ROIs for image '{}'", this.displayedROIs.size(), imageFileName);
   }
 
   /**

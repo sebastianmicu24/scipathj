@@ -33,47 +33,34 @@ public class Java21ClassLoaderFix {
    * This method should be called before initializing TensorFlow/CSBDeep.
    */
   public static synchronized void applyFix() {
-    if (fixApplied.get()) {
-      LOGGER.debug("Java 21 ClassLoader fix already applied");
-      return;
-    }
+   if (fixApplied.get()) {
+     return;
+   }
 
-    try {
-      LOGGER.info("Applying Java 21 ClassLoader compatibility fix for TensorFlow/CSBDeep");
+   try {
+     // Store original class loaders
+     originalClassLoader = Thread.currentThread().getContextClassLoader();
+     originalSystemClassLoader = ClassLoader.getSystemClassLoader();
 
-      // Store original class loaders
-      originalClassLoader = Thread.currentThread().getContextClassLoader();
-      originalSystemClassLoader = ClassLoader.getSystemClassLoader();
+     // Check if we're running on Java 9+ where AppClassLoader is not URLClassLoader
+     if (isJava9Plus() && !isURLClassLoader(originalClassLoader)) {
+       // Create a compatible URLClassLoader wrapper
+       compatibleClassLoader = createCompatibleClassLoader(originalClassLoader);
 
-      // Check if we're running on Java 9+ where AppClassLoader is not URLClassLoader
-      if (isJava9Plus() && !isURLClassLoader(originalClassLoader)) {
-        LOGGER.debug(
-            "Detected Java 9+ with non-URLClassLoader: {}",
-            originalClassLoader.getClass().getName());
+       // Set the compatible class loader as the context class loader
+       Thread.currentThread().setContextClassLoader(compatibleClassLoader);
 
-        // Create a compatible URLClassLoader wrapper
-        compatibleClassLoader = createCompatibleClassLoader(originalClassLoader);
+       // Try to replace the system class loader reference if possible
+       replaceSystemClassLoaderReferences();
+     }
 
-        // Set the compatible class loader as the context class loader
-        Thread.currentThread().setContextClassLoader(compatibleClassLoader);
+     fixApplied.set(true);
 
-        // Try to replace the system class loader reference if possible
-        replaceSystemClassLoaderReferences();
-
-        LOGGER.info("Successfully applied Java 21 ClassLoader fix");
-      } else {
-        LOGGER.debug(
-            "ClassLoader fix not needed - already compatible: {}",
-            originalClassLoader.getClass().getName());
-      }
-
-      fixApplied.set(true);
-
-    } catch (Exception e) {
-      LOGGER.error("Failed to apply Java 21 ClassLoader fix", e);
-      // Don't throw exception - let the application continue and hope for the best
-    }
-  }
+   } catch (Exception e) {
+     LOGGER.debug("ClassLoader fix issue (non-critical): {}", e.getMessage());
+     // Don't throw exception - let the application continue and hope for the best
+   }
+ }
 
   /**
    * Restores the original ClassLoader after TensorFlow/CSBDeep operations.

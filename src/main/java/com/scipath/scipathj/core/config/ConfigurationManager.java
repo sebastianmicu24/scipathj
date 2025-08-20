@@ -622,10 +622,16 @@ public class ConfigurationManager {
     String value = properties.getProperty(key);
     if (value != null) {
       try {
+        // First try Color.decode() for hex formats
         return Color.decode(value);
       } catch (NumberFormatException e) {
-        // Log warning and return default
-        System.err.println("Invalid color value for " + key + ": " + value);
+        try {
+          // If decode fails, try parseColor for R,G,B format
+          return parseColor(value);
+        } catch (Exception parseException) {
+          // Log warning and return default
+          System.err.println("Invalid color value for " + key + ": " + value);
+        }
       }
     }
     return defaultValue;

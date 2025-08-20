@@ -33,115 +33,53 @@ public class TensorFlowNetworkWrapper<T extends net.imglib2.type.numeric.RealTyp
 
   @Override
   public void loadLibrary() {
-    DirectFileLogger.logTensorFlow("=== INIZIO CARICAMENTO LIBRERIA TENSORFLOW ===");
-    DirectFileLogger.logTensorFlow("Java Version: " + System.getProperty("java.version"));
-    DirectFileLogger.logTensorFlow("Java Vendor: " + System.getProperty("java.vendor"));
-    DirectFileLogger.logTensorFlow(
-        "OS: " + System.getProperty("os.name") + " " + System.getProperty("os.version"));
-
     LOGGER.info("Loading TensorFlow library with Java 21 compatibility fixes");
 
     try {
-      // Apply comprehensive ClassLoader fixes before TensorFlow loading
-      DirectFileLogger.logTensorFlow(
-          "Applicazione fix ClassLoader prima del caricamento TensorFlow");
+      // Apply ClassLoader fixes before TensorFlow loading
       LOGGER.debug("Applying ClassLoader fixes before TensorFlow library loading");
       Java21ClassLoaderFix.applyFix();
-      Java21ClassLoaderFix.forceURLClassLoaderEnvironment();
-
-      String classLoaderInfo = Java21ClassLoaderFix.getClassLoaderInfo();
-      DirectFileLogger.logTensorFlow("ClassLoader info: " + classLoaderInfo);
-      LOGGER.debug("ClassLoader info before TensorFlow loading: {}", classLoaderInfo);
 
       // Store current thread context
       Thread currentThread = Thread.currentThread();
       ClassLoader originalContextClassLoader = currentThread.getContextClassLoader();
       try {
-        // First try our custom TensorFlow library loader
-        DirectFileLogger.logTensorFlow("Tentativo di caricamento TensorFlow con custom loader");
+        // Try our custom TensorFlow library loader first
         LOGGER.debug("Attempting to load TensorFlow library using custom loader");
         boolean customLoadSuccess = TensorFlowLibraryLoader.loadTensorFlowLibrary();
 
-        DirectFileLogger.logTensorFlow("Custom loader success: " + customLoadSuccess);
-
         if (customLoadSuccess) {
           String loadedPath = TensorFlowLibraryLoader.getLoadedLibraryPath();
-          DirectFileLogger.logTensorFlow(
-              "TensorFlow library caricata con successo dal path: " + loadedPath);
           LOGGER.info("TensorFlow library loaded successfully using custom loader");
           LOGGER.info("Library loaded from: {}", loadedPath);
 
-          // Still call the TensorFlow service to initialize properly
-          try {
-            DirectFileLogger.logTensorFlow("Inizializzazione TensorFlow service...");
-            DirectFileLogger.logTensorFlow(
-                "TensorFlow service class: "
-                    + (tensorFlowService != null
-                        ? tensorFlowService.getClass().getName()
-                        : "null"));
+          // If custom loader works, skip the service initialization to avoid UI plugin errors
+          LOGGER.debug("Skipping TensorFlow service initialization since native library is loaded");
+          setTensorFlowLoaded(true);
+          return; // Exit early to avoid UI plugin errors
+        }
 
-            if (tensorFlowService != null) {
-              tensorFlowService.loadLibrary();
-              boolean serviceLoaded = tensorFlowService.getStatus().isLoaded();
-              DirectFileLogger.logTensorFlow("TensorFlow service loaded: " + serviceLoaded);
+        // If custom loader fails, try the standard approach
+        LOGGER.warn("Custom TensorFlow library loader failed, trying standard approach");
 
-              if (serviceLoaded) {
-                String statusInfo = tensorFlowService.getStatus().getInfo();
-                DirectFileLogger.logTensorFlow("TensorFlow service info: " + statusInfo);
-                LOGGER.info("TensorFlow service initialized successfully");
-                log(statusInfo);
-                setTensorFlowLoaded(true);
-              } else {
-                // Even if service reports not loaded, we loaded the native library
-                DirectFileLogger.logTensorFlow("Service non caricato ma libreria nativa OK");
-                LOGGER.warn("TensorFlow service reports not loaded, but native library is loaded");
-                setTensorFlowLoaded(true);
-              }
-            } else {
-              DirectFileLogger.logTensorFlow("ERRORE: tensorFlowService è null!");
-              setTensorFlowLoaded(true); // Procediamo comunque se la libreria nativa è caricata
-            }
-          } catch (Exception serviceException) {
-            DirectFileLogger.logTensorFlowException(
-                "Eccezione durante inizializzazione service", serviceException);
-            LOGGER.warn(
-                "TensorFlow service initialization failed, but native library is loaded",
-                serviceException);
+        if (tensorFlowService != null) {
+          tensorFlowService.loadLibrary();
+
+          boolean serviceLoaded = tensorFlowService.getStatus().isLoaded();
+          if (serviceLoaded) {
+            String statusInfo = tensorFlowService.getStatus().getInfo();
+            LOGGER.info("TensorFlow library loaded successfully using standard approach");
+            log(statusInfo);
             setTensorFlowLoaded(true);
-          }
-        } else {
-          String loaderStatus = TensorFlowLibraryLoader.getLoadingStatus();
-          DirectFileLogger.logTensorFlow("Custom loader fallito, status: " + loaderStatus);
-          DirectFileLogger.logTensorFlow("Tentativo con approccio standard...");
-
-          LOGGER.warn("Custom TensorFlow library loader failed, trying standard approach");
-          LOGGER.debug("Custom loader status: {}", loaderStatus);
-
-          // Fall back to original approach
-          if (tensorFlowService != null) {
-            tensorFlowService.loadLibrary();
-
-            boolean serviceLoaded = tensorFlowService.getStatus().isLoaded();
-            DirectFileLogger.logTensorFlow("Standard approach - service loaded: " + serviceLoaded);
-
-            if (serviceLoaded) {
-              String statusInfo = tensorFlowService.getStatus().getInfo();
-              DirectFileLogger.logTensorFlow("Standard approach - service info: " + statusInfo);
-              LOGGER.info("TensorFlow library loaded successfully using standard approach");
-              log(statusInfo);
-              setTensorFlowLoaded(true);
-            } else {
-              DirectFileLogger.logTensorFlow("ERRORE: Tutti gli approcci di caricamento falliti");
-              LOGGER.error("TensorFlow library failed to load using all approaches");
-              setTensorFlowLoaded(false);
-              handleTensorFlowLoadFailure();
-            }
           } else {
-            DirectFileLogger.logTensorFlow(
-                "ERRORE: tensorFlowService è null per approccio standard");
+            LOGGER.error("TensorFlow library failed to load using all approaches");
             setTensorFlowLoaded(false);
             handleTensorFlowLoadFailure();
           }
+        } else {
+          LOGGER.error("TensorFlow service is null - cannot load library");
+          setTensorFlowLoaded(false);
+          handleTensorFlowLoadFailure();
         }
 
       } finally {
@@ -152,27 +90,10 @@ public class TensorFlowNetworkWrapper<T extends net.imglib2.type.numeric.RealTyp
         }
       }
     } catch (Exception e) {
-      DirectFileLogger.log(
-          "TensorFlowNetworkWrapper",
-          "ECCEZIONE durante caricamento TensorFlow: "
-              + e.getClass().getSimpleName()
-              + " - "
-              + e.getMessage());
-      if (e.getCause() != null) {
-        DirectFileLogger.log(
-            "TensorFlowNetworkWrapper",
-            "Causa: "
-                + e.getCause().getClass().getSimpleName()
-                + " - "
-                + e.getCause().getMessage());
-      }
       LOGGER.error("Failed to load TensorFlow library with ClassLoader fixes", e);
       setTensorFlowLoaded(false);
       handleTensorFlowLoadFailure();
     }
-
-    DirectFileLogger.log(
-        "TensorFlowNetworkWrapper", "=== FINE CARICAMENTO LIBRERIA TENSORFLOW ===");
   }
 
   /**

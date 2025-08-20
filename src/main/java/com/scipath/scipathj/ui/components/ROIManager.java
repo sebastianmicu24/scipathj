@@ -80,7 +80,7 @@ public class ROIManager {
     String imageFileName = roi.getImageFileName();
     imageROIs.computeIfAbsent(imageFileName, k -> new ArrayList<>()).add(roi);
 
-    LOGGER.info("Added ROI '{}' to image '{}'", roi.getName(), imageFileName);
+    // LOGGER.info("Added ROI '{}' to image '{}'", roi.getName(), imageFileName);
 
     // Notify listeners
     listeners.forEach(

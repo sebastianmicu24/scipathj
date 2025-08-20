@@ -34,7 +34,7 @@ public class CellROI extends UserROI {
     this.cellArea = roi.getStatistics().area;
     this.segmentationMethod = "Voronoi_Tessellation";
 
-    LOGGER.debug("Created CellROI: {} with area: {:.1f} pixels", cellName, cellArea);
+    // LOGGER.debug("Created CellROI: {} with area: {:.1f} pixels", cellName, cellArea);
   }
 
   /**
@@ -150,12 +150,12 @@ public class CellROI extends UserROI {
         this.nucleusToCytoplasmRatio = 0.0;
       }
 
-      LOGGER.debug(
-          "Calculated N/C ratio for {}: {:.3f} (nucleus: {:.1f}, cytoplasm: {:.1f})",
-          getName(),
-          nucleusToCytoplasmRatio,
-          nucleusArea,
-          cytoplasmArea);
+    //   LOGGER.debug(
+    //       "Calculated N/C ratio for {}: {:.3f} (nucleus: {:.1f}, cytoplasm: {:.1f})",
+    //       getName(),
+    //       nucleusToCytoplasmRatio,
+    //       nucleusArea,
+    //       cytoplasmArea);
     }
   }
 
