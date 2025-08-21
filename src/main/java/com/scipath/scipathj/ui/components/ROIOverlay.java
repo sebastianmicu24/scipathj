@@ -92,6 +92,10 @@ public class ROIOverlay extends JComponent {
     this.mainSettings = Objects.requireNonNull(mainSettings, "mainSettings");
     setOpaque(false);
 
+    // Configure tooltip for immediate appearance and persistence
+    ToolTipManager.sharedInstance().setInitialDelay(0);
+    ToolTipManager.sharedInstance().setDismissDelay(Integer.MAX_VALUE); // Never dismiss automatically
+
     setupMouseHandlers();
     LOGGER.info("Created ultra-efficient ROI overlay");
   }
@@ -121,6 +125,26 @@ public class ROIOverlay extends JComponent {
 
     addMouseListener(mouseHandler);
     addMouseMotionListener(mouseHandler);
+
+    // Add mouse motion listener for hover tooltips
+    addMouseMotionListener(new MouseAdapter() {
+      @Override
+      public void mouseMoved(MouseEvent e) {
+        handleMouseMoved(e);
+      }
+    });
+
+    // Add mouse listener for clearing tooltip when mouse exits
+    addMouseListener(new MouseAdapter() {
+      @Override
+      public void mouseExited(MouseEvent e) {
+        // Only clear tooltip if we're truly not over any ROI
+        UserROI roiAtExit = findROIAtPoint(e.getPoint());
+        if (roiAtExit == null) {
+          setToolTipText(null);
+        }
+      }
+    });
   }
 
   // ===== SINGLE-CALCULATION SHAPE SYSTEM =====
@@ -669,27 +693,65 @@ public class ROIOverlay extends JComponent {
     }
   }
 
+  private void handleMouseMoved(MouseEvent e) {
+    UserROI hoveredROI = findROIAtPoint(e.getPoint());
+    if (hoveredROI != null) {
+      // Determine ROI type and category
+      MainSettings.ROICategory category = determineROICategory(hoveredROI);
+      String roiType = category.getDisplayName();
+      String roiId = String.valueOf(hoveredROI.getName());
+      String cellType = ""; // Will be used for cell classification later
+
+      // Create tooltip text
+      String tooltipText = String.format(
+          "<html><b>ROI Information</b><br/>" +
+          "ROI Type: %s<br/>" +
+          "ROI ID: %s<br/>" +
+          "Cell Type: %s</html>",
+          roiType, roiId, cellType.isEmpty() ? "(Not classified)" : cellType);
+
+      // Set tooltip on the overlay
+      setToolTipText(tooltipText);
+
+      // Force tooltip to show immediately
+      ToolTipManager.sharedInstance().mouseMoved(e);
+    } else {
+      // Clear tooltip when not over any ROI
+      setToolTipText(null);
+    }
+  }
+
   private UserROI findROIAtPoint(Point point) {
     // Iterate backwards to find topmost visible ROI
     for (int i = displayedROIs.size() - 1; i >= 0; i--) {
       UserROI roi = displayedROIs.get(i);
+
       // Only consider ROIs that pass the current filter
-      if (shouldDisplayROI(roi) && isPointInROI(point, roi)) {
-        return roi;
+      if (shouldDisplayROI(roi)) {
+        if (isPointInROI(point, roi)) {
+          return roi;
+        }
       }
     }
     return null;
   }
 
   private boolean isPointInROI(Point point, UserROI roi) {
-    java.awt.Shape originalShape = getOrCalculateOriginalShape(roi);
-    if (originalShape == null) return false;
+    Roi imageJRoi = roi.getImageJRoi();
+    if (imageJRoi == null) return false;
 
-    // Transform point back to image coordinates
+    // Transform screen point to image coordinates
     double imageX = (point.x - offsetX) / scaleX;
     double imageY = (point.y - offsetY) / scaleY;
 
-    return originalShape.contains(imageX, imageY);
+    // Use ImageJ's built-in contains method for accurate coordinate handling
+    try {
+      return imageJRoi.contains((int)imageX, (int)imageY);
+    } catch (Exception e) {
+      // Fallback to bounds check if contains() fails
+      Rectangle bounds = roi.getBounds();
+      return bounds.contains(imageX, imageY);
+    }
   }
 
  /**
