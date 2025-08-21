@@ -19,12 +19,13 @@ import java.awt.*;
  * @since 1.0.0
  */
 public record MainSettings(
-    double pixelsPerMicrometer,
-    String scaleUnit,
-    ROIAppearanceSettings vesselSettings,
-    ROIAppearanceSettings nucleusSettings,
-    ROIAppearanceSettings cytoplasmSettings,
-    ROIAppearanceSettings cellSettings) {
+     double pixelsPerMicrometer,
+     String scaleUnit,
+     ROIAppearanceSettings vesselSettings,
+     ROIAppearanceSettings nucleusSettings,
+     ROIAppearanceSettings cytoplasmSettings,
+     ROIAppearanceSettings cellSettings,
+     IgnoreROIAppearanceSettings ignoreSettings) {
 
   // Default values for scale conversion
   public static final double DEFAULT_PIXELS_PER_MICROMETER = 1.0;
@@ -37,6 +38,11 @@ public record MainSettings(
   public static final Color DEFAULT_BORDER_COLOR = new Color(255, 0, 0);
   public static final float DEFAULT_FILL_OPACITY = 0.2f;
   public static final int DEFAULT_BORDER_WIDTH = 2;
+
+  // Default constants for ignore ROI settings
+  public static final int DEFAULT_BORDER_DISTANCE = 10; // pixels
+  public static final Color DEFAULT_IGNORE_COLOR = new Color(128, 128, 128); // Gray
+  public static final boolean DEFAULT_SHOW_IGNORE_ROIS = true;
 
   /**
    * Enum for different ROI categories that can have different appearance settings.
@@ -160,6 +166,70 @@ public record MainSettings(
   }
 
   /**
+   * Immutable settings record for ignore ROI appearance configuration.
+   *
+   * @param borderDistance The distance from image borders in pixels to consider ROIs as ignore
+   * @param ignoreColor The color to display ignored ROIs
+   * @param showIgnoredROIs Whether to show ignored ROIs at all
+   */
+  public record IgnoreROIAppearanceSettings(int borderDistance, Color ignoreColor, boolean showIgnoredROIs) {
+
+    /**
+     * Compact constructor with validation.
+     */
+    public IgnoreROIAppearanceSettings {
+      if (borderDistance < 0) {
+        throw new IllegalArgumentException("Border distance must be non-negative, got: " + borderDistance);
+      }
+      if (ignoreColor == null) {
+        throw new IllegalArgumentException("Ignore color cannot be null");
+      }
+    }
+
+    /**
+     * Creates ignore ROI appearance settings with default values.
+     *
+     * @return A new instance with default settings
+     */
+    public static IgnoreROIAppearanceSettings createDefault() {
+      return new IgnoreROIAppearanceSettings(
+          DEFAULT_BORDER_DISTANCE,
+          DEFAULT_IGNORE_COLOR,
+          DEFAULT_SHOW_IGNORE_ROIS);
+    }
+
+    /**
+     * Creates a new instance with updated border distance.
+     *
+     * @param newBorderDistance The new border distance (must be >= 0)
+     * @return A new instance with the updated border distance
+     */
+    public IgnoreROIAppearanceSettings withBorderDistance(int newBorderDistance) {
+      return new IgnoreROIAppearanceSettings(newBorderDistance, ignoreColor, showIgnoredROIs);
+    }
+
+    /**
+     * Creates a new instance with updated ignore color.
+     *
+     * @param newIgnoreColor The new ignore color
+     * @return A new instance with the updated ignore color
+     */
+    public IgnoreROIAppearanceSettings withIgnoreColor(Color newIgnoreColor) {
+      return new IgnoreROIAppearanceSettings(borderDistance, newIgnoreColor, showIgnoredROIs);
+    }
+
+    /**
+     * Creates a new instance with updated show ignored ROIs setting.
+     *
+     * @param newShowIgnoredROIs Whether to show ignored ROIs
+     * @return A new instance with the updated setting
+     */
+    public IgnoreROIAppearanceSettings withShowIgnoredROIs(boolean newShowIgnoredROIs) {
+      return new IgnoreROIAppearanceSettings(borderDistance, ignoreColor, newShowIgnoredROIs);
+    }
+  }
+
+  /**
    * Compact constructor with validation.
    */
   public MainSettings {
@@ -196,7 +266,8 @@ public record MainSettings(
         ROIAppearanceSettings.fromCategory(ROICategory.VESSEL),
         ROIAppearanceSettings.fromCategory(ROICategory.NUCLEUS),
         ROIAppearanceSettings.fromCategory(ROICategory.CYTOPLASM),
-        ROIAppearanceSettings.fromCategory(ROICategory.CELL));
+        ROIAppearanceSettings.fromCategory(ROICategory.CELL),
+        IgnoreROIAppearanceSettings.createDefault());
   }
 
   /**
@@ -227,7 +298,8 @@ public record MainSettings(
         vesselSettings,
         nucleusSettings,
         cytoplasmSettings,
-        cellSettings);
+        cellSettings,
+        ignoreSettings);
   }
 
   /**
@@ -243,7 +315,8 @@ public record MainSettings(
         vesselSettings,
         nucleusSettings,
         cytoplasmSettings,
-        cellSettings);
+        cellSettings,
+        ignoreSettings);
   }
 
   /**
@@ -259,7 +332,8 @@ public record MainSettings(
         newVesselSettings,
         nucleusSettings,
         cytoplasmSettings,
-        cellSettings);
+        cellSettings,
+        ignoreSettings);
   }
 
   /**
@@ -275,7 +349,8 @@ public record MainSettings(
         vesselSettings,
         newNucleusSettings,
         cytoplasmSettings,
-        cellSettings);
+        cellSettings,
+        ignoreSettings);
   }
 
   /**
@@ -291,7 +366,8 @@ public record MainSettings(
         vesselSettings,
         nucleusSettings,
         newCytoplasmSettings,
-        cellSettings);
+        cellSettings,
+        ignoreSettings);
   }
 
   /**
@@ -307,7 +383,8 @@ public record MainSettings(
         vesselSettings,
         nucleusSettings,
         cytoplasmSettings,
-        newCellSettings);
+        newCellSettings,
+        ignoreSettings);
   }
 
   /**
@@ -325,6 +402,23 @@ public record MainSettings(
       case CYTOPLASM -> withCytoplasmSettings(newSettings);
       case CELL -> withCellSettings(newSettings);
     };
+  }
+
+  /**
+   * Creates a new MainSettings instance with updated ignore settings.
+   *
+   * @param newIgnoreSettings The new ignore settings
+   * @return A new MainSettings instance with updated ignore settings
+   */
+  public MainSettings withIgnoreSettings(IgnoreROIAppearanceSettings newIgnoreSettings) {
+    return new MainSettings(
+        pixelsPerMicrometer,
+        scaleUnit,
+        vesselSettings,
+        nucleusSettings,
+        cytoplasmSettings,
+        cellSettings,
+        newIgnoreSettings);
   }
 
   /**
@@ -440,5 +534,13 @@ public record MainSettings(
   @Deprecated
   public ROIAppearanceSettings getCellSettings() {
     return cellSettings;
+  }
+
+  /**
+   * @deprecated Use ignoreSettings() instead
+   */
+  @Deprecated
+  public IgnoreROIAppearanceSettings getIgnoreSettings() {
+    return ignoreSettings;
   }
 }

@@ -42,6 +42,7 @@ public class UserROI {
   private final String imageFileName;
   private Color displayColor;
   private String notes;
+  private boolean ignored = false;
 
   // For complex shapes (like vessels), store the actual ImageJ ROI
   private final Roi imageJRoi;
@@ -141,6 +142,38 @@ public class UserROI {
 
   public String getNotes() {
     return notes;
+  }
+
+  public boolean isIgnored() {
+    return ignored;
+  }
+
+  public void setIgnored(boolean ignored) {
+    this.ignored = ignored;
+  }
+
+  /**
+   * Checks if this ROI should be ignored based on its distance from image borders.
+   *
+   * @param imageWidth The width of the image
+   * @param imageHeight The height of the image
+   * @param borderDistance The minimum distance from borders to not be ignored
+   * @return true if this ROI should be ignored
+   */
+  public boolean shouldBeIgnored(int imageWidth, int imageHeight, int borderDistance) {
+    Rectangle bounds = getBounds();
+
+    // Calculate distances to all four borders
+    int distanceToLeft = bounds.x;
+    int distanceToTop = bounds.y;
+    int distanceToRight = imageWidth - (bounds.x + bounds.width);
+    int distanceToBottom = imageHeight - (bounds.y + bounds.height);
+
+    // ROI should be ignored if it's too close to any border
+    return distanceToLeft < borderDistance
+        || distanceToTop < borderDistance
+        || distanceToRight < borderDistance
+        || distanceToBottom < borderDistance;
   }
 
   // Additional getter for complex shapes

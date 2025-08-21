@@ -637,11 +637,12 @@ public class ROIToolbar extends JPanel {
     if (counts == null) return;
 
     // Debug logging to understand the counts
-    // LOGGER.debug("Updating ROI counts: Vessels={}, Nuclei={}, Cytoplasms={}, Cells={}",
+    // LOGGER.debug("Updating ROI counts: Vessels={}, Nuclei={}, Cytoplasms={}, Cells={}, Ignored={}",
         // counts.getOrDefault(MainSettings.ROICategory.VESSEL, 0),
         // counts.getOrDefault(MainSettings.ROICategory.NUCLEUS, 0),
         // counts.getOrDefault(MainSettings.ROICategory.CYTOPLASM, 0),
-        // counts.getOrDefault(MainSettings.ROICategory.CELL, 0));
+        // counts.getOrDefault(MainSettings.ROICategory.CELL, 0),
+        // counts.getOrDefault(null, 0));
 
     // Update button text with counts
     updateButtonText(vesselButton, "Vessels", counts.getOrDefault(MainSettings.ROICategory.VESSEL, 0));
@@ -649,13 +650,8 @@ public class ROIToolbar extends JPanel {
     updateButtonText(cytoplasmButton, "Cytoplasms", counts.getOrDefault(MainSettings.ROICategory.CYTOPLASM, 0));
     updateButtonText(cellButton, "Cells", counts.getOrDefault(MainSettings.ROICategory.CELL, 0));
 
-    // For ignore button, calculate ROIs that would be hidden
-    int totalROIs = counts.values().stream().mapToInt(Integer::intValue).sum();
-    int visibleROIs = (vesselFilterEnabled ? counts.getOrDefault(MainSettings.ROICategory.VESSEL, 0) : 0) +
-                      (nucleusFilterEnabled ? counts.getOrDefault(MainSettings.ROICategory.NUCLEUS, 0) : 0) +
-                      (cytoplasmFilterEnabled ? counts.getOrDefault(MainSettings.ROICategory.CYTOPLASM, 0) : 0) +
-                      (cellFilterEnabled ? counts.getOrDefault(MainSettings.ROICategory.CELL, 0) : 0);
-    int ignoredROIs = totalROIs - visibleROIs;
+    // For ignore button, use the actual ignored ROI count (stored with null key)
+    int ignoredROIs = counts.getOrDefault(null, 0);
     updateButtonText(ignoreButton, "Ignore", ignoredROIs);
   }
 

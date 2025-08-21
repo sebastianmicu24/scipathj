@@ -41,6 +41,7 @@ public class MainSettingsDialog extends JDialog {
   private ROICategoryPanel nucleusPanel;
   private ROICategoryPanel cytoplasmPanel;
   private ROICategoryPanel cellPanel;
+  private IgnoreROIPanel ignorePanel;
 
   // Result tracking
   private boolean settingsChanged = false;
@@ -94,6 +95,7 @@ public class MainSettingsDialog extends JDialog {
     nucleusPanel = new ROICategoryPanel(MainSettings.ROICategory.NUCLEUS);
     cytoplasmPanel = new ROICategoryPanel(MainSettings.ROICategory.CYTOPLASM);
     cellPanel = new ROICategoryPanel(MainSettings.ROICategory.CELL);
+    ignorePanel = new IgnoreROIPanel();
   }
 
   /**
@@ -115,6 +117,7 @@ public class MainSettingsDialog extends JDialog {
     tabbedPane.addTab("Nucleus ROIs", nucleusPanel);
     tabbedPane.addTab("Cytoplasm ROIs", cytoplasmPanel);
     tabbedPane.addTab("Cell ROIs", cellPanel);
+    tabbedPane.addTab("Ignore ROI Settings", ignorePanel);
 
     // Button panel
     JPanel buttonPanel = createButtonPanel();
@@ -235,6 +238,7 @@ public class MainSettingsDialog extends JDialog {
     nucleusPanel.loadSettings(currentSettings.nucleusSettings());
     cytoplasmPanel.loadSettings(currentSettings.cytoplasmSettings());
     cellPanel.loadSettings(currentSettings.cellSettings());
+    ignorePanel.loadSettings(currentSettings.ignoreSettings());
 
     updateScalePreview();
     LOGGER.debug("Loaded current settings into dialog components");
@@ -278,7 +282,8 @@ public class MainSettingsDialog extends JDialog {
       return vesselPanel.validateInputs()
           && nucleusPanel.validateInputs()
           && cytoplasmPanel.validateInputs()
-          && cellPanel.validateInputs();
+          && cellPanel.validateInputs()
+          && ignorePanel.validateInputs();
 
     } catch (Exception e) {
       showErrorMessage("Invalid input values: " + e.getMessage());
@@ -299,7 +304,8 @@ public class MainSettingsDialog extends JDialog {
         vesselPanel.createSettings(),
         nucleusPanel.createSettings(),
         cytoplasmPanel.createSettings(),
-        cellPanel.createSettings());
+        cellPanel.createSettings(),
+        ignorePanel.createSettings());
   }
 
   /**
@@ -517,6 +523,125 @@ public class MainSettingsDialog extends JDialog {
       JOptionPane.showMessageDialog(
           this,
           category.getDisplayName() + " ROI: " + message,
+          "Invalid Input",
+          JOptionPane.ERROR_MESSAGE);
+    }
+  }
+
+  /**
+   * Panel for configuring ignore ROI settings.
+   */
+  private static class IgnoreROIPanel extends JPanel {
+
+    private final JSpinner borderDistanceSpinner;
+    private final JButton ignoreColorButton;
+    private final JCheckBox showIgnoredROIsCheckBox;
+
+    public IgnoreROIPanel() {
+      super(new GridBagLayout());
+      setBorder(
+          BorderFactory.createCompoundBorder(
+              UIUtils.createPadding(UIConstants.LARGE_SPACING),
+              BorderFactory.createTitledBorder("Ignore ROI Settings")));
+
+      GridBagConstraints gbc = new GridBagConstraints();
+      gbc.insets =
+          new Insets(
+              UIConstants.MEDIUM_SPACING,
+              UIConstants.MEDIUM_SPACING,
+              UIConstants.MEDIUM_SPACING,
+              UIConstants.MEDIUM_SPACING);
+      gbc.anchor = GridBagConstraints.WEST;
+
+      // Border distance
+      gbc.gridx = 0;
+      gbc.gridy = 0;
+      JLabel borderDistanceLabel =
+          UIUtils.createLabel("Border Distance (pixels):", UIConstants.NORMAL_FONT_SIZE, null);
+      add(borderDistanceLabel, gbc);
+
+      gbc.gridx = 1;
+      gbc.fill = GridBagConstraints.HORIZONTAL;
+      gbc.weightx = 1.0;
+      borderDistanceSpinner =
+          new JSpinner(new SpinnerNumberModel(MainSettings.DEFAULT_BORDER_DISTANCE, 0, 1000, 1));
+      borderDistanceSpinner.setToolTipText("Distance from image borders to consider ROIs as ignore");
+      add(borderDistanceSpinner, gbc);
+
+      // Ignore color
+      gbc.gridx = 0;
+      gbc.gridy = 1;
+      gbc.fill = GridBagConstraints.NONE;
+      gbc.weightx = 0.0;
+      JLabel ignoreColorLabel =
+          UIUtils.createLabel("Ignore Color:", UIConstants.NORMAL_FONT_SIZE, null);
+      add(ignoreColorLabel, gbc);
+
+      gbc.gridx = 1;
+      gbc.fill = GridBagConstraints.HORIZONTAL;
+      gbc.weightx = 1.0;
+      ignoreColorButton = new JButton();
+      ignoreColorButton.setPreferredSize(new Dimension(100, 30));
+      ignoreColorButton.setBackground(MainSettings.DEFAULT_IGNORE_COLOR);
+      ignoreColorButton.setToolTipText("Click to change ignore ROI color");
+      ignoreColorButton.addActionListener(this::chooseIgnoreColor);
+      add(ignoreColorButton, gbc);
+
+      // Show ignored ROIs checkbox
+      gbc.gridx = 0;
+      gbc.gridy = 2;
+      gbc.gridwidth = 2;
+      gbc.fill = GridBagConstraints.HORIZONTAL;
+      gbc.weightx = 1.0;
+      showIgnoredROIsCheckBox = new JCheckBox("Show ignored ROIs on image");
+      showIgnoredROIsCheckBox.setSelected(MainSettings.DEFAULT_SHOW_IGNORE_ROIS);
+      showIgnoredROIsCheckBox.setToolTipText("Whether to display ignored ROIs or hide them completely");
+      add(showIgnoredROIsCheckBox, gbc);
+    }
+
+    private void chooseIgnoreColor(ActionEvent e) {
+      Color currentColor = ignoreColorButton.getBackground();
+      Color newColor =
+          JColorChooser.showDialog(
+              this, "Choose Ignore ROI Color", currentColor);
+      if (newColor != null) {
+        ignoreColorButton.setBackground(newColor);
+      }
+    }
+
+    public void loadSettings(MainSettings.IgnoreROIAppearanceSettings settings) {
+      borderDistanceSpinner.setValue(settings.borderDistance());
+      ignoreColorButton.setBackground(settings.ignoreColor());
+      showIgnoredROIsCheckBox.setSelected(settings.showIgnoredROIs());
+    }
+
+    public MainSettings.IgnoreROIAppearanceSettings createSettings() {
+      return new MainSettings.IgnoreROIAppearanceSettings(
+          (Integer) borderDistanceSpinner.getValue(),
+          ignoreColorButton.getBackground(),
+          showIgnoredROIsCheckBox.isSelected());
+    }
+
+    public boolean validateInputs() {
+      try {
+        int borderDistance = (Integer) borderDistanceSpinner.getValue();
+
+        if (borderDistance < 0) {
+          showValidationError("Border distance must be non-negative");
+          return false;
+        }
+
+        return true;
+      } catch (Exception e) {
+        showValidationError("Invalid settings: " + e.getMessage());
+        return false;
+      }
+    }
+
+    private void showValidationError(String message) {
+      JOptionPane.showMessageDialog(
+          this,
+          "Ignore ROI Settings: " + message,
           "Invalid Input",
           JOptionPane.ERROR_MESSAGE);
     }

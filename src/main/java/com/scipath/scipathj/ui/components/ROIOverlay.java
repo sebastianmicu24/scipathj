@@ -247,6 +247,31 @@ public class ROIOverlay extends JComponent {
     MainSettings.ROICategory category = determineROICategory(roi);
     MainSettings.ROIAppearanceSettings settings = mainSettings.getSettingsForCategory(category);
 
+    // Check if ROI should be ignored
+    boolean isIgnored = roi.isIgnored();
+    Color fillColor, borderColor;
+    float borderWidth;
+
+    if (isIgnored) {
+      // Use ignore settings for ignored ROIs
+      MainSettings.IgnoreROIAppearanceSettings ignoreSettings = mainSettings.ignoreSettings();
+      if (!ignoreSettings.showIgnoredROIs()) {
+        return; // Don't render ignored ROIs if they're disabled
+      }
+      fillColor = new Color(
+          ignoreSettings.ignoreColor().getRed(),
+          ignoreSettings.ignoreColor().getGreen(),
+          ignoreSettings.ignoreColor().getBlue(),
+          (int)(settings.fillOpacity() * 255));
+      borderColor = ignoreSettings.ignoreColor();
+      borderWidth = settings.borderWidth();
+    } else {
+      // Use normal settings for regular ROIs
+      fillColor = settings.getFillColor();
+      borderColor = roi.getDisplayColor() != null ? roi.getDisplayColor() : settings.borderColor();
+      borderWidth = settings.borderWidth();
+    }
+
     // Calculate position: base margin offset plus ROI-specific base coordinates
     double totalOffsetX = offsetX;
     double totalOffsetY = offsetY;
@@ -264,14 +289,12 @@ public class ROIOverlay extends JComponent {
     java.awt.Shape transformedShape = transform.createTransformedShape(originalShape);
 
     // Fill shape
-    Color fillColor = settings.getFillColor();
     g2d.setColor(fillColor);
     g2d.fill(transformedShape);
 
     // Draw border
-    Stroke borderStroke = new BasicStroke(settings.borderWidth());
+    Stroke borderStroke = new BasicStroke(borderWidth);
     g2d.setStroke(borderStroke);
-    Color borderColor = roi.getDisplayColor() != null ? roi.getDisplayColor() : settings.borderColor();
     g2d.setColor(borderColor);
     g2d.draw(transformedShape);
   }
@@ -335,14 +358,14 @@ public class ROIOverlay extends JComponent {
       // Apply EXACTLY the same transform as the image uses
       // This ensures the overlay moves exactly the same amount as the image
       AffineTransform transform = new AffineTransform();
-      transform.translate(offsetX, offsetY);
       transform.scale(scaleX, scaleY);
+      transform.translate(offsetX / scaleX, offsetY / scaleY);
 
-      
+
       g2d.drawImage(visiblePortion, transform, null);
 
     } catch (Exception e) {
-     
+
     }
   }
 
@@ -371,8 +394,8 @@ public class ROIOverlay extends JComponent {
     // UNIFIED APPROACH: Use exactly the same transform as buffer copy path
     // First, create the base transform (same as buffer copy)
     AffineTransform transform = new AffineTransform();
-    transform.translate(offsetX, offsetY);
     transform.scale(scaleX, scaleY);
+    transform.translate(offsetX / scaleX, offsetY / scaleY);
 
     // Apply any additional ROI-specific offsets (for ShapeRoi base coordinates)
     Roi imageJRoi = roi.getImageJRoi();
@@ -389,13 +412,36 @@ public class ROIOverlay extends JComponent {
     MainSettings.ROICategory category = determineROICategory(roi);
     MainSettings.ROIAppearanceSettings settings = mainSettings.getSettingsForCategory(category);
 
-    Color fillColor = settings.getFillColor();
+    // Check if ROI should be ignored
+    boolean isIgnored = roi.isIgnored();
+    Color fillColor, borderColor;
+    float borderWidth;
+
+    if (isIgnored) {
+      // Use ignore settings for ignored ROIs
+      MainSettings.IgnoreROIAppearanceSettings ignoreSettings = mainSettings.ignoreSettings();
+      if (!ignoreSettings.showIgnoredROIs()) {
+        return; // Don't render ignored ROIs if they're disabled
+      }
+      fillColor = new Color(
+          ignoreSettings.ignoreColor().getRed(),
+          ignoreSettings.ignoreColor().getGreen(),
+          ignoreSettings.ignoreColor().getBlue(),
+          (int)(settings.fillOpacity() * 255));
+      borderColor = ignoreSettings.ignoreColor();
+      borderWidth = settings.borderWidth();
+    } else {
+      // Use normal settings for regular ROIs
+      fillColor = settings.getFillColor();
+      borderColor = roi.getDisplayColor() != null ? roi.getDisplayColor() : settings.borderColor();
+      borderWidth = settings.borderWidth();
+    }
+
     g2d.setColor(fillColor);
     g2d.fill(transformedShape);
 
-    Stroke borderStroke = new BasicStroke(settings.borderWidth());
+    Stroke borderStroke = new BasicStroke(borderWidth);
     g2d.setStroke(borderStroke);
-    Color borderColor = roi.getDisplayColor() != null ? roi.getDisplayColor() : settings.borderColor();
     g2d.setColor(borderColor);
     g2d.draw(transformedShape);
   }
@@ -405,8 +451,8 @@ public class ROIOverlay extends JComponent {
 
     // UNIFIED TRANSFORM: Use exactly the same transform as other rendering paths
     AffineTransform transform = new AffineTransform();
-    transform.translate(offsetX, offsetY);
     transform.scale(scaleX, scaleY);
+    transform.translate(offsetX / scaleX, offsetY / scaleY);
     java.awt.Shape transformedShape = transform.createTransformedShape(bounds);
 
     // Use vessel settings for creation preview

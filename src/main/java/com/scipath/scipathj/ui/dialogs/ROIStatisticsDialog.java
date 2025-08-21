@@ -13,6 +13,8 @@ import java.util.stream.Collectors;
 import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
+import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
+import org.kordamp.ikonli.swing.FontIcon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,7 +55,7 @@ public class ROIStatisticsDialog extends JDialog {
 
   private void initializeComponents() {
     // Create table model with columns
-    String[] columnNames = {"Image", "Total ROIs", "Vessels", "Nuclei", "Cytoplasms", "Cells", "Other"};
+    String[] columnNames = {"Image", "Total ROIs", "Vessels", "Nuclei", "Cytoplasms", "Cells", "Ignored"};
     tableModel = new DefaultTableModel(columnNames, 0) {
       @Override
       public boolean isCellEditable(int row, int column) {
@@ -80,6 +82,15 @@ public class ROIStatisticsDialog extends JDialog {
       statisticsTable.getColumnModel().getColumn(i).setCellRenderer(centerRenderer);
     }
 
+    // Set custom renderer for ignored column (column 6, now the last column) to show in ignore color
+    DefaultTableCellRenderer ignoredRenderer = new DefaultTableCellRenderer();
+    ignoredRenderer.setHorizontalAlignment(SwingConstants.CENTER);
+    if (mainSettings != null) {
+      ignoredRenderer.setForeground(mainSettings.ignoreSettings().ignoreColor());
+      ignoredRenderer.setFont(ignoredRenderer.getFont().deriveFont(Font.BOLD));
+    }
+    statisticsTable.getColumnModel().getColumn(6).setCellRenderer(ignoredRenderer);
+
     // Create summary labels
     totalROIsLabel = UIUtils.createLabel("Total ROIs: 0", UIConstants.SMALL_FONT_SIZE, UIManager.getColor("Label.foreground"));
     totalImagesLabel = UIUtils.createLabel("Total Images: 0", UIConstants.SMALL_FONT_SIZE, UIManager.getColor("Label.foreground"));
@@ -101,12 +112,24 @@ public class ROIStatisticsDialog extends JDialog {
     tableScrollPane.setBorder(UIUtils.createPadding(UIConstants.MEDIUM_SPACING));
     add(tableScrollPane, BorderLayout.CENTER);
 
-    // Summary panel
-    JPanel summaryPanel = new JPanel(new GridLayout(1, 3, UIConstants.MEDIUM_SPACING, 0));
+    // Summary panel with export button
+    JPanel summaryPanel = new JPanel(new BorderLayout());
     summaryPanel.setBorder(UIUtils.createPadding(UIConstants.MEDIUM_SPACING));
-    summaryPanel.add(totalImagesLabel);
-    summaryPanel.add(totalROIsLabel);
-    summaryPanel.add(averageROIsLabel);
+
+    // Left side: statistics labels
+    JPanel statsPanel = new JPanel(new GridLayout(1, 3, UIConstants.MEDIUM_SPACING, 0));
+    statsPanel.add(totalImagesLabel);
+    statsPanel.add(totalROIsLabel);
+    statsPanel.add(averageROIsLabel);
+    summaryPanel.add(statsPanel, BorderLayout.CENTER);
+
+    // Right side: export button
+    JButton exportButton = UIUtils.createStandardButton("Export to CSV", FontIcon.of(FontAwesomeSolid.DOWNLOAD, 16));
+    exportButton.addActionListener(this::exportToCSV);
+    JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+    buttonPanel.add(exportButton);
+    summaryPanel.add(buttonPanel, BorderLayout.EAST);
+
     add(summaryPanel, BorderLayout.SOUTH);
   }
 
@@ -128,11 +151,16 @@ public class ROIStatisticsDialog extends JDialog {
       String imageName = getDisplayImageName(entry.getKey());
       List<UserROI> rois = entry.getValue();
 
-      // Count ROIs by category
+      // Count ROIs by category and ignore status
       Map<MainSettings.ROICategory, Long> categoryCounts = new java.util.HashMap<>();
+      long ignoredCount = 0;
       for (UserROI roi : rois) {
-        MainSettings.ROICategory category = determineROICategory(roi);
-        categoryCounts.put(category, categoryCounts.getOrDefault(category, 0L) + 1);
+        if (roi.isIgnored()) {
+          ignoredCount++;
+        } else {
+          MainSettings.ROICategory category = determineROICategory(roi);
+          categoryCounts.put(category, categoryCounts.getOrDefault(category, 0L) + 1);
+        }
       }
 
       int totalForImage = rois.size();
@@ -143,10 +171,6 @@ public class ROIStatisticsDialog extends JDialog {
       int cytoplasmCount = categoryCounts.getOrDefault(MainSettings.ROICategory.CYTOPLASM, 0L).intValue();
       int cellCount = categoryCounts.getOrDefault(MainSettings.ROICategory.CELL, 0L).intValue();
 
-      // Calculate other types (ROIs that don't fit into the main categories)
-      int categorizedCount = vesselCount + nucleusCount + cytoplasmCount + cellCount;
-      int otherCount = totalForImage - categorizedCount;
-
       // Add row to table
       tableModel.addRow(new Object[]{
           imageName,
@@ -155,7 +179,7 @@ public class ROIStatisticsDialog extends JDialog {
           String.valueOf(nucleusCount),
           String.valueOf(cytoplasmCount),
           String.valueOf(cellCount),
-          String.valueOf(otherCount)
+          String.valueOf(ignoredCount)
       });
     }
 
@@ -222,6 +246,76 @@ public class ROIStatisticsDialog extends JDialog {
     if (roi.hasComplexShape() || name.contains("vessel")) return MainSettings.ROICategory.VESSEL;
 
     return MainSettings.ROICategory.VESSEL; // Default fallback
+  }
+
+  private void exportToCSV(ActionEvent e) {
+    // Show file chooser for CSV export
+    JFileChooser fileChooser = new JFileChooser();
+    fileChooser.setDialogTitle("Export ROI Statistics to CSV");
+    fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("CSV files (*.csv)", "csv"));
+
+    // Suggest filename
+    fileChooser.setSelectedFile(new java.io.File("roi_statistics.csv"));
+
+    int result = fileChooser.showSaveDialog(this);
+    if (result == JFileChooser.APPROVE_OPTION) {
+      java.io.File outputFile = fileChooser.getSelectedFile();
+
+      // Ensure .csv extension
+      if (!outputFile.getName().toLowerCase().endsWith(".csv")) {
+        outputFile = new java.io.File(outputFile.getAbsolutePath() + ".csv");
+      }
+
+      try {
+        exportTableToCSV(outputFile);
+        JOptionPane.showMessageDialog(
+            this,
+            "ROI statistics exported successfully to:\n" + outputFile.getAbsolutePath(),
+            "Export Successful",
+            JOptionPane.INFORMATION_MESSAGE);
+      } catch (Exception ex) {
+        LOGGER.error("Error exporting to CSV: {}", ex.getMessage());
+        JOptionPane.showMessageDialog(
+            this,
+            "Error exporting to CSV:\n" + ex.getMessage(),
+            "Export Error",
+            JOptionPane.ERROR_MESSAGE);
+      }
+    }
+  }
+
+  private void exportTableToCSV(java.io.File outputFile) throws java.io.IOException {
+    try (java.io.FileWriter writer = new java.io.FileWriter(outputFile)) {
+      // Write CSV header
+      writer.write("Image,Total ROIs,Vessels,Nuclei,Cytoplasms,Cells,Ignored\n");
+
+      // Write table data
+      for (int i = 0; i < tableModel.getRowCount(); i++) {
+        for (int j = 0; j < tableModel.getColumnCount(); j++) {
+          String value = tableModel.getValueAt(i, j).toString();
+          // Escape commas and quotes in CSV
+          if (value.contains(",") || value.contains("\"")) {
+            value = "\"" + value.replace("\"", "\"\"") + "\"";
+          }
+          writer.write(value);
+          if (j < tableModel.getColumnCount() - 1) {
+            writer.write(",");
+          }
+        }
+        writer.write("\n");
+      }
+
+      // Write summary information
+      writer.write("\n");
+      writer.write("Summary:\n");
+      writer.write("Total Images," + roiData.size() + "\n");
+      int totalROIs = roiData.values().stream().mapToInt(List::size).sum();
+      writer.write("Total ROIs," + totalROIs + "\n");
+      double avgROIs = roiData.isEmpty() ? 0.0 : (double) totalROIs / roiData.size();
+      writer.write("Average ROIs per Image," + String.format("%.1f", avgROIs) + "\n");
+
+      LOGGER.info("Successfully exported ROI statistics to: {}", outputFile.getAbsolutePath());
+    }
   }
 
 }

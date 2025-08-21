@@ -480,13 +480,18 @@ public class ConfigurationManager {
         loadROIAppearanceSettings(properties, "cytoplasm");
     MainSettings.ROIAppearanceSettings cellSettings = loadROIAppearanceSettings(properties, "cell");
 
+    // Load ignore ROI settings
+    MainSettings.IgnoreROIAppearanceSettings ignoreSettings =
+        loadIgnoreROIAppearanceSettings(properties);
+
     return new MainSettings(
         pixelsPerMicrometer,
         scaleUnit,
         vesselSettings,
         nucleusSettings,
         cytoplasmSettings,
-        cellSettings);
+        cellSettings,
+        ignoreSettings);
   }
 
   private MainSettings.ROIAppearanceSettings loadROIAppearanceSettings(
@@ -534,6 +539,9 @@ public class ConfigurationManager {
     saveROICategorySettings(properties, "cytoplasm", settings.getCytoplasmSettings());
     saveROICategorySettings(properties, "cell", settings.getCellSettings());
 
+    // Save ignore ROI settings
+    saveIgnoreROIAppearanceSettings(properties, settings.getIgnoreSettings());
+
     // For backward compatibility, also save vessel ROI settings as legacy properties
     properties.setProperty(
         "roiBorderColor", colorToString(settings.getVesselSettings().borderColor()));
@@ -568,6 +576,20 @@ public class ConfigurationManager {
     properties.setProperty(categoryPrefix + ".borderColor", colorToString(settings.borderColor()));
     properties.setProperty(categoryPrefix + ".fillOpacity", String.valueOf(settings.fillOpacity()));
     properties.setProperty(categoryPrefix + ".borderWidth", String.valueOf(settings.borderWidth()));
+  }
+
+  private MainSettings.IgnoreROIAppearanceSettings loadIgnoreROIAppearanceSettings(Properties properties) {
+    int borderDistance = getIntProperty(properties, "ignore.borderDistance", MainSettings.DEFAULT_BORDER_DISTANCE);
+    Color ignoreColor = getColorProperty(properties, "ignore.ignoreColor", MainSettings.DEFAULT_IGNORE_COLOR);
+    boolean showIgnoredROIs = getBooleanProperty(properties, "ignore.showIgnoredROIs", MainSettings.DEFAULT_SHOW_IGNORE_ROIS);
+
+    return new MainSettings.IgnoreROIAppearanceSettings(borderDistance, ignoreColor, showIgnoredROIs);
+  }
+
+  private void saveIgnoreROIAppearanceSettings(Properties properties, MainSettings.IgnoreROIAppearanceSettings settings) {
+    properties.setProperty("ignore.borderDistance", String.valueOf(settings.borderDistance()));
+    properties.setProperty("ignore.ignoreColor", colorToString(settings.ignoreColor()));
+    properties.setProperty("ignore.showIgnoredROIs", String.valueOf(settings.showIgnoredROIs()));
   }
 
   // === GENERIC PROPERTY LOADING HELPERS ===

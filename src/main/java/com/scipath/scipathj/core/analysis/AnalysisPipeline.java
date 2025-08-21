@@ -47,6 +47,9 @@ public class AnalysisPipeline {
   private final MainSettings mainSettings;
   private final ROIManager roiManager;
 
+  // Image information for ignore calculation
+  private ImagePlus currentImage;
+
   // Progress tracking
   private final AtomicBoolean isProcessing = new AtomicBoolean(false);
   private final AtomicBoolean cancelRequested = new AtomicBoolean(false);
@@ -248,6 +251,7 @@ public class AnalysisPipeline {
    */
   public ImageAnalysisResult processImage(final ImagePlus imagePlus, final String fileName)
       throws ImageProcessingException {
+    this.currentImage = imagePlus; // Store for ignore calculation
     try {
       // Step 1: Vessel Segmentation
       VesselSegmentation vesselSegmentation =
@@ -320,37 +324,68 @@ public class AnalysisPipeline {
   }
 
   /**
-   * Adds ROIs to the manager with appropriate colors.
+   * Adds ROIs to the manager with appropriate colors and ignore status.
    * This method follows the Single Responsibility Principle by separating ROI management.
+   * Ensures consistency: if a cell or cytoplasm is ignored, its nucleus is also ignored.
    */
   private void addROIsToManager(
       final List<UserROI> vesselROIs,
       final List<NucleusROI> nucleusROIs,
       final List<CellROI> cellROIs,
       final List<CytoplasmROI> cytoplasmROIs) {
+
+    // Get image dimensions for ignore calculation
+    int imageWidth = currentImage.getWidth();
+    int imageHeight = currentImage.getHeight();
+    int borderDistance = mainSettings.ignoreSettings().borderDistance();
+
+    // First pass: mark ROIs as ignored based on border distance
     vesselROIs.forEach(
         roi -> {
           roi.setDisplayColor(mainSettings.getVesselSettings().borderColor());
-          roiManager.addROI(roi);
+          // Mark as ignored if too close to borders
+          roi.setIgnored(roi.shouldBeIgnored(imageWidth, imageHeight, borderDistance));
         });
 
     nucleusROIs.forEach(
         roi -> {
           roi.setDisplayColor(mainSettings.getNucleusSettings().borderColor());
-          roiManager.addROI(roi);
+          // Mark as ignored if too close to borders
+          roi.setIgnored(roi.shouldBeIgnored(imageWidth, imageHeight, borderDistance));
         });
 
     cellROIs.forEach(
         roi -> {
           roi.setDisplayColor(mainSettings.getCellSettings().borderColor());
-          roiManager.addROI(roi);
+          // Mark as ignored if too close to borders
+          roi.setIgnored(roi.shouldBeIgnored(imageWidth, imageHeight, borderDistance));
         });
 
     cytoplasmROIs.forEach(
         roi -> {
           roi.setDisplayColor(mainSettings.getCytoplasmSettings().borderColor());
-          roiManager.addROI(roi);
+          // Mark as ignored if too close to borders
+          roi.setIgnored(roi.shouldBeIgnored(imageWidth, imageHeight, borderDistance));
         });
+
+    // Second pass: ensure consistency - if cell or cytoplasm is ignored, nucleus should be too
+    cellROIs.forEach(cell -> {
+      if (cell.isIgnored() && cell.getAssociatedNucleus() != null) {
+        cell.getAssociatedNucleus().setIgnored(true);
+      }
+    });
+
+    cytoplasmROIs.forEach(cytoplasm -> {
+      if (cytoplasm.isIgnored() && cytoplasm.getAssociatedNucleus() != null) {
+        cytoplasm.getAssociatedNucleus().setIgnored(true);
+      }
+    });
+
+    // Add all ROIs to manager after consistency check
+    vesselROIs.forEach(roiManager::addROI);
+    nucleusROIs.forEach(roiManager::addROI);
+    cellROIs.forEach(roiManager::addROI);
+    cytoplasmROIs.forEach(roiManager::addROI);
   }
 
   /**

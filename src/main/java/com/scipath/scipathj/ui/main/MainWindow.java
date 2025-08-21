@@ -776,7 +776,7 @@ public class MainWindow extends JFrame {
   }
 
   /**
-   * Get ROI counts by type for all images
+   * Get ROI counts by type for all images, including ignored ROIs
    */
   private java.util.Map<MainSettings.ROICategory, Integer> getROICountsByType() {
     java.util.Map<MainSettings.ROICategory, Integer> counts = new java.util.HashMap<>();
@@ -789,26 +789,35 @@ public class MainWindow extends JFrame {
     // Count ROIs by type across all images
     java.util.Map<String, java.util.List<UserROI>> allROIs = roiManager.getAllROIsByImage();
     int totalROIs = 0;
+    int ignoredROIs = 0;
 
     for (java.util.List<UserROI> roiList : allROIs.values()) {
       for (UserROI roi : roiList) {
-        MainSettings.ROICategory category = determineROICategory(roi);
-        counts.put(category, counts.get(category) + 1);
+        if (roi.isIgnored()) {
+          ignoredROIs++;
+        } else {
+          MainSettings.ROICategory category = determineROICategory(roi);
+          counts.put(category, counts.get(category) + 1);
+        }
         totalROIs++;
 
         // Debug logging for first few ROIs
         if (totalROIs <= 5) {
-          // LOGGER.debug("ROI '{}' of type '{}' class '{}' -> category '{}'",
-          //     roi.getName(), roi.getType(), roi.getClass().getSimpleName(), category);
+          // LOGGER.debug("ROI '{}' of type '{}' class '{}' -> category '{}' (ignored: {})",
+          //     roi.getName(), roi.getType(), roi.getClass().getSimpleName(), category, roi.isIgnored());
         }
       }
     }
 
-    // LOGGER.debug("Total ROI count by category: VESSEL={}, NUCLEUS={}, CYTOPLASM={}, CELL={}",
+    // Store ignored ROI count (we'll need to handle this in the toolbar)
+    counts.put(null, ignoredROIs); // Use null key for ignored ROIs
+
+    // LOGGER.debug("Total ROI count by category: VESSEL={}, NUCLEUS={}, CYTOPLASM={}, CELL={}, IGNORED={}",
     //     counts.get(MainSettings.ROICategory.VESSEL),
     //     counts.get(MainSettings.ROICategory.NUCLEUS),
     //     counts.get(MainSettings.ROICategory.CYTOPLASM),
-    //     counts.get(MainSettings.ROICategory.CELL));
+    //     counts.get(MainSettings.ROICategory.CELL),
+    //     ignoredROIs);
 
     return counts;
   }
