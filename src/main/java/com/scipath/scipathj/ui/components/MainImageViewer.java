@@ -31,8 +31,8 @@ public class MainImageViewer extends JPanel
   private static final int MAX_DISPLAY_SIZE = 800;
 
   // Zoom functionality
-  private static final double MIN_ZOOM = 0.1;
-  private static final double MAX_ZOOM = 5.0;
+  private static final double MIN_ZOOM = 0.1; // 10%
+  private static final double MAX_ZOOM = 4.0; // 400%
   private static final double ZOOM_STEP = 0.1;
   private double currentZoom = 1.0;
 
@@ -61,6 +61,7 @@ public class MainImageViewer extends JPanel
   private JButton zoomFitButton;
   private JButton zoom100Button;
   private JLabel zoomLabel;
+  private JSlider zoomSlider;
 
   // Performance optimization: batch update flags
   private boolean updatePending = false;
@@ -201,36 +202,60 @@ public class MainImageViewer extends JPanel
   }
 
   private JPanel createZoomControls() {
-    JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+    JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 0));
     panel.setOpaque(false);
 
-    zoomOutButton = UIUtils.createButton("", FontAwesomeSolid.SEARCH_MINUS, e -> zoomOut(null));
-    zoomOutButton.setPreferredSize(new Dimension(30, 30));
-    zoomOutButton.setToolTipText("Zoom Out");
+    // Left group: percentage label and zoom controls
+    JPanel leftGroup = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+    leftGroup.setOpaque(false);
 
     zoomLabel = new JLabel("100%");
     zoomLabel.setFont(zoomLabel.getFont().deriveFont(Font.PLAIN, UIConstants.SMALL_FONT_SIZE));
-    zoomLabel.setPreferredSize(new Dimension(50, 30));
+    zoomLabel.setPreferredSize(new Dimension(45, 30));
     zoomLabel.setHorizontalAlignment(SwingConstants.CENTER);
+    leftGroup.add(zoomLabel);
+
+    zoomOutButton = UIUtils.createButton("", FontAwesomeSolid.SEARCH_MINUS, e -> zoomOut(null));
+    zoomOutButton.setPreferredSize(new Dimension(28, 28));
+    zoomOutButton.setToolTipText("Zoom Out");
+    leftGroup.add(zoomOutButton);
+
+    // Create wide zoom slider (10% to 400%)
+    zoomSlider = new JSlider(10, 400, 100); // Values in percentage
+    zoomSlider.setPreferredSize(new Dimension(400, 20)); // Much wider slider
+    zoomSlider.setToolTipText("Zoom Level");
+    zoomSlider.setMajorTickSpacing(50);
+    zoomSlider.setMinorTickSpacing(10);
+    zoomSlider.setPaintTicks(true);
+    zoomSlider.setPaintLabels(true);
+    zoomSlider.addChangeListener(e -> {
+      double newZoom = zoomSlider.getValue() / 100.0;
+      setZoom(newZoom, null);
+    });
+    leftGroup.add(zoomSlider);
 
     zoomInButton = UIUtils.createButton("", FontAwesomeSolid.SEARCH_PLUS, e -> zoomIn(null));
-    zoomInButton.setPreferredSize(new Dimension(30, 30));
+    zoomInButton.setPreferredSize(new Dimension(28, 28));
     zoomInButton.setToolTipText("Zoom In");
+    leftGroup.add(zoomInButton);
+
+    // Right group: fit and 100% buttons
+    JPanel rightGroup = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+    rightGroup.setOpaque(false);
 
     zoomFitButton = UIUtils.createButton("", FontAwesomeSolid.EXPAND_ARROWS_ALT, e -> zoomToFit());
-    zoomFitButton.setPreferredSize(new Dimension(30, 30));
+    zoomFitButton.setPreferredSize(new Dimension(28, 28));
     zoomFitButton.setToolTipText("Fit to Window");
+    rightGroup.add(zoomFitButton);
 
     zoom100Button = UIUtils.createButton("", FontAwesomeSolid.SEARCH, e -> zoomTo100());
-    zoom100Button.setPreferredSize(new Dimension(30, 30));
+    zoom100Button.setPreferredSize(new Dimension(28, 28));
     zoom100Button.setToolTipText("100%");
+    rightGroup.add(zoom100Button);
 
-    panel.add(zoomOutButton);
-    panel.add(zoomLabel);
-    panel.add(zoomInButton);
+    panel.add(leftGroup);
     panel.add(new JSeparator(SwingConstants.VERTICAL));
-    panel.add(zoomFitButton);
-    panel.add(zoom100Button);
+    panel.add(rightGroup);
 
     setZoomControlsEnabled(false);
     return panel;
@@ -505,6 +530,7 @@ public class MainImageViewer extends JPanel
     if (zoomOutButton != null) zoomOutButton.setEnabled(enabled);
     if (zoomFitButton != null) zoomFitButton.setEnabled(enabled);
     if (zoom100Button != null) zoom100Button.setEnabled(enabled);
+    if (zoomSlider != null) zoomSlider.setEnabled(enabled);
   }
 
   private void zoomIn(Point centerPoint) {
@@ -569,8 +595,11 @@ public class MainImageViewer extends JPanel
     // Update layout
     updateLayeredPaneLayout(imageIcon);
 
-    // Update zoom label
+    // Update zoom label and slider
     updateZoomLabel();
+    if (zoomSlider != null) {
+      zoomSlider.setValue((int) Math.round(currentZoom * 100));
+    }
 
     // Restore scroll position if specified
     if (scrollPosition != null) {

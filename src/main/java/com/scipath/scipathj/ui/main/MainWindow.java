@@ -15,6 +15,7 @@ import com.scipath.scipathj.ui.components.SimpleImageGallery;
 import com.scipath.scipathj.ui.components.StatusPanel;
 import com.scipath.scipathj.ui.controllers.AnalysisController;
 import com.scipath.scipathj.ui.controllers.NavigationController;
+import com.scipath.scipathj.ui.dialogs.ROIStatisticsDialog;
 import com.scipath.scipathj.ui.dialogs.settings.MainSettingsDialog;
 import com.scipath.scipathj.ui.model.PipelineInfo;
 import com.scipath.scipathj.ui.utils.UIConstants;
@@ -56,8 +57,6 @@ public class MainWindow extends JFrame {
   private MainImageViewer mainImageViewer;
   private ROIToolbar roiToolbar;
   private StatusPanel statusPanel;
-  private JButton startButton;
-  private JButton stopButton;
 
   // ROI management
   private ROIManager roiManager;
@@ -97,7 +96,6 @@ public class MainWindow extends JFrame {
    */
   private void initializeComponents() {
     setupWindow();
-    createControlButtons();
     setupCardLayout();
     createMainPanels();
     createControllers();
@@ -129,18 +127,6 @@ public class MainWindow extends JFrame {
     setupKeyboardShortcuts();
   }
 
-  /**
-   * Creates the control buttons.
-   */
-  private void createControlButtons() {
-    startButton =
-        UIUtils.createStandardButton("Start Analysis", FontIcon.of(FontAwesomeSolid.PLAY, 16));
-    startButton.setEnabled(false);
-
-    stopButton =
-        UIUtils.createStandardButton("Stop Analysis", FontIcon.of(FontAwesomeSolid.STOP, 16));
-    stopButton.setEnabled(false);
-  }
 
   /**
    * Sets up the card layout system.
@@ -180,10 +166,6 @@ public class MainWindow extends JFrame {
     folderSelectionPanel = new FolderSelectionPanel();
     panel.add(folderSelectionPanel, BorderLayout.CENTER);
 
-    // Control buttons at the bottom
-    JPanel controlPanel = createControlButtonPanel();
-    panel.add(controlPanel, BorderLayout.SOUTH);
-
     return panel;
   }
 
@@ -197,17 +179,19 @@ public class MainWindow extends JFrame {
     panel.add(createImageViewTopPanel(), BorderLayout.NORTH);
     panel.add(createImageViewMainContent(), BorderLayout.CENTER);
 
-    // Create bottom panel with ROI toolbar and control buttons
-    JPanel bottomPanel = new JPanel(new BorderLayout());
-
-    // Add ROI toolbar
+    // Add ROI toolbar directly to the panel (it will be above the status panel)
     roiToolbar = new ROIToolbar();
-    bottomPanel.add(roiToolbar, BorderLayout.NORTH);
 
-    // Add control buttons
-    bottomPanel.add(createControlButtonPanel(), BorderLayout.SOUTH);
+    // Initialize toolbar with current settings
+    MainSettings currentSettings = configurationManager.loadMainSettings();
+    if (currentSettings != null) {
+      roiToolbar.setMainSettings(currentSettings);
+      roiToolbar.updateROITypeCounts(getROICountsByType());
+    }
 
-    panel.add(bottomPanel, BorderLayout.SOUTH);
+    roiToolbar.setPreferredSize(new Dimension(roiToolbar.getPreferredSize().width, 90));
+    panel.add(roiToolbar, BorderLayout.SOUTH);
+
     return panel;
   }
 
@@ -258,11 +242,13 @@ public class MainWindow extends JFrame {
     JPanel mainContent = new JPanel(new BorderLayout());
 
     imageGallery = new SimpleImageGallery();
-    imageGallery.setBorder(createTitledBorder("Images"));
+    // Add simple border without title
+    imageGallery.setBorder(BorderFactory.createEtchedBorder());
     mainContent.add(imageGallery, BorderLayout.WEST);
 
     mainImageViewer = new MainImageViewer();
-    mainImageViewer.setBorder(createTitledBorder("Image Viewer"));
+    // Add simple border without title
+    mainImageViewer.setBorder(BorderFactory.createEtchedBorder());
     mainContent.add(mainImageViewer, BorderLayout.CENTER);
 
     return mainContent;
@@ -280,20 +266,6 @@ public class MainWindow extends JFrame {
         new Font(Font.SANS_SERIF, Font.BOLD, (int) UIConstants.TINY_FONT_SIZE));
   }
 
-  /**
-   * Creates the control button panel for the analysis setup.
-   *
-   * @return control button panel
-   */
-  private JPanel createControlButtonPanel() {
-    JPanel panel =
-        new JPanel(
-            new FlowLayout(
-                FlowLayout.CENTER, UIConstants.LARGE_SPACING, UIConstants.LARGE_SPACING));
-    panel.add(startButton);
-    panel.add(stopButton);
-    return panel;
-  }
 
   /**
    * Creates the controllers and managers.
@@ -318,7 +290,7 @@ public class MainWindow extends JFrame {
 
     // Create analysis controller
     analysisController = new AnalysisController(engine, configurationManager, statusPanel, this);
-    analysisController.setControlButtons(startButton, stopButton);
+    analysisController.setControlButtons(statusPanel.getStartButton(), statusPanel.getStopButton());
 
     // Set up navigation controller callback
     navigationController.setStartButtonStateUpdater(this::updateStartButtonState);
@@ -380,8 +352,8 @@ public class MainWindow extends JFrame {
           }
         });
 
-    // Override start button action to use analysis controller
-    startButton.addActionListener(
+    // Setup start button action to use analysis controller
+    statusPanel.getStartButton().addActionListener(
         e -> {
           PipelineInfo pipeline = navigationController.getSelectedPipeline();
           File folder = navigationController.getSelectedFolder();
@@ -460,6 +432,37 @@ public class MainWindow extends JFrame {
               LOGGER.info("Cleared all ROIs for image: {}", currentImageName);
             }
           }
+
+          @Override
+          public void onROIFilterChanged(MainSettings.ROICategory category, boolean enabled) {
+            LOGGER.debug("ROI filter changed: {} -> {}", category, enabled);
+            // Update the ROI overlay to reflect filter changes
+            if (mainImageViewer != null && mainImageViewer.getROIOverlay() != null) {
+              // Update filter state and refresh the ROI display
+              mainImageViewer.getROIOverlay().setFilterState(category, enabled);
+              mainImageViewer.getROIOverlay().repaint();
+            }
+          }
+
+          @Override
+          public void onShowROIStatistics() {
+            // Collect ROI data from all images
+            java.util.Map<String, java.util.List<UserROI>> allROIs = roiManager.getAllROIsByImage();
+            MainSettings currentSettings = configurationManager.loadMainSettings();
+
+            // Show the statistics dialog
+            ROIStatisticsDialog dialog = new ROIStatisticsDialog(MainWindow.this, allROIs, currentSettings);
+            dialog.setVisible(true);
+
+            LOGGER.info("Showing ROI statistics dialog with {} images", allROIs.size());
+          }
+
+          @Override
+          public void onChangeROIType(String imageFileName, UserROI.ROIType newType) {
+            LOGGER.debug("ROI type change requested for image {} to type {}", imageFileName, newType);
+            // This method is called when ROI types need to be changed
+            // Implementation can be added later if needed
+          }
         });
 
     // Set up ROI manager listeners
@@ -507,6 +510,9 @@ public class MainWindow extends JFrame {
     if (currentImageName != null) {
       int totalCount = roiManager.getROICount(currentImageName);
       roiToolbar.updateROICount(totalCount);
+
+      // Also update type counts
+      roiToolbar.updateROITypeCounts(getROICountsByType());
     } else {
       roiToolbar.updateROICount(0);
     }
@@ -737,6 +743,13 @@ public class MainWindow extends JFrame {
   private void handleSettingsChanged(MainSettings newSettings) {
     LOGGER.info("Main settings changed, updating UI components");
 
+    // Update ROI toolbar with new settings
+    if (roiToolbar != null) {
+      roiToolbar.setMainSettings(newSettings);
+      roiToolbar.updateROITypeCounts(getROICountsByType());
+      LOGGER.debug("Updated ROI toolbar with new settings");
+    }
+
     // Update any ROI overlays if they exist and refresh the entire viewer
     if (mainImageViewer != null && mainImageViewer.getROIOverlay() != null) {
       mainImageViewer.getROIOverlay().updateSettings(newSettings);
@@ -760,5 +773,80 @@ public class MainWindow extends JFrame {
 
     // Any other components that depend on MainSettings should be updated here
     LOGGER.debug("All UI components updated with new main settings");
+  }
+
+  /**
+   * Get ROI counts by type for all images
+   */
+  private java.util.Map<MainSettings.ROICategory, Integer> getROICountsByType() {
+    java.util.Map<MainSettings.ROICategory, Integer> counts = new java.util.HashMap<>();
+
+    // Initialize counts
+    for (MainSettings.ROICategory category : MainSettings.ROICategory.values()) {
+      counts.put(category, 0);
+    }
+
+    // Count ROIs by type across all images
+    java.util.Map<String, java.util.List<UserROI>> allROIs = roiManager.getAllROIsByImage();
+    int totalROIs = 0;
+
+    for (java.util.List<UserROI> roiList : allROIs.values()) {
+      for (UserROI roi : roiList) {
+        MainSettings.ROICategory category = determineROICategory(roi);
+        counts.put(category, counts.get(category) + 1);
+        totalROIs++;
+
+        // Debug logging for first few ROIs
+        if (totalROIs <= 5) {
+          // LOGGER.debug("ROI '{}' of type '{}' class '{}' -> category '{}'",
+          //     roi.getName(), roi.getType(), roi.getClass().getSimpleName(), category);
+        }
+      }
+    }
+
+    // LOGGER.debug("Total ROI count by category: VESSEL={}, NUCLEUS={}, CYTOPLASM={}, CELL={}",
+    //     counts.get(MainSettings.ROICategory.VESSEL),
+    //     counts.get(MainSettings.ROICategory.NUCLEUS),
+    //     counts.get(MainSettings.ROICategory.CYTOPLASM),
+    //     counts.get(MainSettings.ROICategory.CELL));
+
+    return counts;
+  }
+
+  /**
+   * Map ROI to category based on its type and class
+   */
+  private MainSettings.ROICategory determineROICategory(UserROI roi) {
+    // First check the class type - this is more reliable than ROI type
+    if (roi instanceof com.scipath.scipathj.data.model.NucleusROI) {
+      return MainSettings.ROICategory.NUCLEUS;
+    }
+
+    // Then check the ROI type
+    UserROI.ROIType roiType = roi.getType();
+    switch (roiType) {
+      case VESSEL:
+      case COMPLEX_SHAPE:
+        return MainSettings.ROICategory.VESSEL;
+      case NUCLEUS:
+        return MainSettings.ROICategory.NUCLEUS;
+      case CYTOPLASM:
+        return MainSettings.ROICategory.CYTOPLASM;
+      case CELL:
+        return MainSettings.ROICategory.CELL;
+      default:
+        // Check name-based heuristics as fallback
+        String name = roi.getName().toLowerCase();
+        if (name.contains("vessel")) {
+          return MainSettings.ROICategory.VESSEL;
+        } else if (name.contains("nucleus") || name.contains("nuclei")) {
+          return MainSettings.ROICategory.NUCLEUS;
+        } else if (name.contains("cytoplasm") || name.contains("cyto")) {
+          return MainSettings.ROICategory.CYTOPLASM;
+        } else if (name.contains("cell")) {
+          return MainSettings.ROICategory.CELL;
+        }
+        return MainSettings.ROICategory.VESSEL; // Default fallback
+    }
   }
 }

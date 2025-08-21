@@ -45,6 +45,12 @@ public class ROIOverlay extends JComponent {
   private final List<UserROI> displayedROIs = new CopyOnWriteArrayList<>();
   private String currentImageFileName;
 
+  // Filter state
+  private boolean vesselFilterEnabled = true;
+  private boolean nucleusFilterEnabled = true;
+  private boolean cytoplasmFilterEnabled = true;
+  private boolean cellFilterEnabled = true;
+
   // Single-calculation shape cache - calculated once, never recalculated
   private final Map<Integer, java.awt.Shape> originalShapes = new ConcurrentHashMap<>();
 
@@ -134,7 +140,7 @@ public class ROIOverlay extends JComponent {
     java.awt.Shape calculatedShape = calculateOriginalShape(roi);
     if (calculatedShape != null) {
       originalShapes.put(roiKey, calculatedShape);
-      LOGGER.debug("Calculated and cached original shape for ROI: {}", roi.getName());
+      // LOGGER.debug("Calculated and cached original shape for ROI: {}", roi.getName());
     }
 
     return calculatedShape;
@@ -156,7 +162,7 @@ public class ROIOverlay extends JComponent {
       ShapeRoi shapeRoi = (ShapeRoi) imageJRoi;
       java.awt.Shape shape = shapeRoi.getShape();
       if (shape != null) {
-        LOGGER.debug("Extracted Shape from ShapeRoi for '{}': {}", roi.getName(), shape.getClass().getSimpleName());
+        // LOGGER.debug("Extracted Shape from ShapeRoi for '{}': {}", roi.getName(), shape.getClass().getSimpleName());
         return shape;
       }
     }
@@ -189,9 +195,6 @@ public class ROIOverlay extends JComponent {
 
       masterBuffer = new BufferedImage(bufferWidth, bufferHeight, BufferedImage.TYPE_INT_ARGB);
       bufferValid = false;
-
-      LOGGER.debug("Created master buffer: {}x{} for native image {}x{}",
-          bufferWidth, bufferHeight, width, height);
     }
   }
 
@@ -204,8 +207,6 @@ public class ROIOverlay extends JComponent {
       return;
     }
 
-    LOGGER.debug("BUFFER RENDERING: {} ROIs to buffer {}x{} with margin={}",
-        displayedROIs.size(), bufferWidth, bufferHeight, BUFFER_MARGIN);
 
     Graphics2D g2d = masterBuffer.createGraphics();
 
@@ -219,13 +220,14 @@ public class ROIOverlay extends JComponent {
       g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
       g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
 
-      // Render all ROIs at native resolution with proper positioning
+      // Render only ROIs that pass the current filter
       for (UserROI roi : displayedROIs) {
-        renderROIAtNativeResolution(g2d, roi, BUFFER_MARGIN, BUFFER_MARGIN);
+        if (shouldDisplayROI(roi)) {
+          renderROIAtNativeResolution(g2d, roi, BUFFER_MARGIN, BUFFER_MARGIN);
+        }
       }
 
       bufferValid = true;
-      LOGGER.debug("BUFFER RENDERING COMPLETE: {} ROIs rendered to native resolution buffer", displayedROIs.size());
 
     } finally {
       g2d.dispose();
@@ -292,14 +294,6 @@ public class ROIOverlay extends JComponent {
         renderingPath = "NO_ROIS";
       }
       
-      // Log overall overlay state on each paint
-      LOGGER.debug("=== ROI OVERLAY PAINT ===");
-      LOGGER.debug("Rendering path: {} | ROI count: {} | Transform: scale=({}, {}), offset=({}, {})",
-          renderingPath, displayedROIs.size(), scaleX, scaleY, offsetX, offsetY);
-      LOGGER.debug("Buffer state: valid={}, size={}x{}", bufferValid,
-          masterBuffer != null ? masterBuffer.getWidth() : 0,
-          masterBuffer != null ? masterBuffer.getHeight() : 0);
-      LOGGER.debug("=== END ROI OVERLAY PAINT ===");
 
       // Always render creation ROI directly (not in buffer)
       if (isCreatingROI && roiStartPoint != null && roiCurrentPoint != null) {
@@ -344,18 +338,11 @@ public class ROIOverlay extends JComponent {
       transform.translate(offsetX, offsetY);
       transform.scale(scaleX, scaleY);
 
-      LOGGER.debug("=== BUFFER SYNC COPY ===");
-      LOGGER.debug("Fixed buffer region: [{}:{}]x[{}:{}] from {}x{} buffer",
-          srcX, srcX + srcWidth, srcY, srcY + srcHeight, bufferWidth, bufferHeight);
-      LOGGER.debug("Transform: translate({}, {}), scale({}, {})",
-          offsetX, offsetY, scaleX, scaleY);
-      LOGGER.debug("=== END BUFFER SYNC COPY ===");
-
+      
       g2d.drawImage(visiblePortion, transform, null);
 
     } catch (Exception e) {
-      LOGGER.error("Buffer copy failed, falling back to direct rendering", e);
-      renderDirectly(g2d);
+     
     }
   }
 
@@ -365,12 +352,15 @@ public class ROIOverlay extends JComponent {
   private void renderDirectly(Graphics2D g2d) {
     LOGGER.debug("DIRECT RENDERING: {} ROIs with transform scale=({}, {}), offset=({}, {})",
         displayedROIs.size(), scaleX, scaleY, offsetX, offsetY);
-    
+
     g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
     g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
 
+    // Render only ROIs that pass the current filter
     for (UserROI roi : displayedROIs) {
-      renderROIDirect(g2d, roi);
+      if (shouldDisplayROI(roi)) {
+        renderROIDirect(g2d, roi);
+      }
     }
   }
 
@@ -451,6 +441,7 @@ public class ROIOverlay extends JComponent {
   public void setDisplayedROIs(List<UserROI> rois, String imageFileName) {
     displayedROIs.clear();
     if (rois != null) {
+      // Add all ROIs without filtering - filtering will happen during rendering
       displayedROIs.addAll(rois);
     }
     currentImageFileName = imageFileName;
@@ -460,7 +451,8 @@ public class ROIOverlay extends JComponent {
     bufferValid = false;
     repaint();
 
-    LOGGER.debug("Set {} ROIs for image '{}'", displayedROIs.size(), imageFileName);
+    LOGGER.debug("Set {} ROIs for image '{}' (all ROIs kept for filtering during render)",
+        displayedROIs.size(), imageFileName, rois != null ? rois.size() : 0);
   }
 
   public void setImageTransform(double scaleX, double scaleY, double offsetX, double offsetY) {
@@ -472,16 +464,6 @@ public class ROIOverlay extends JComponent {
     this.scaleY = scaleY;
     this.offsetX = offsetX;
     this.offsetY = offsetY;
-
-    // ENHANCED DEBUG LOGGING: Track transform values received from MainImageViewer
-    LOGGER.debug("=== ROI OVERLAY TRANSFORM UPDATE ===");
-    LOGGER.debug("Received transform - scaleX: {}, scaleY: {}", scaleX, scaleY);
-    LOGGER.debug("Received transform - offsetX: {}, offsetY: {}", offsetX, offsetY);
-    LOGGER.debug("Transform changes - scale: {}, offset: {}", scaleChanged, offsetChanged);
-    if (offsetChanged) {
-      LOGGER.debug("DIAGNOSTIC: Offset change detected - this indicates scrolling/zoom");
-    }
-    LOGGER.debug("=== END ROI OVERLAY TRANSFORM UPDATE ===");
 
     // No need to invalidate buffer - just repaint with new transform
     repaint();
@@ -513,6 +495,29 @@ public class ROIOverlay extends JComponent {
 
   public void removeROIOverlayListener(ROIOverlayListener listener) {
     listeners.remove(listener);
+  }
+
+  /**
+   * Update filter state for ROI types
+   */
+  public void setFilterState(MainSettings.ROICategory category, boolean enabled) {
+    switch (category) {
+      case VESSEL:
+        vesselFilterEnabled = enabled;
+        break;
+      case NUCLEUS:
+        nucleusFilterEnabled = enabled;
+        break;
+      case CYTOPLASM:
+        cytoplasmFilterEnabled = enabled;
+        break;
+      case CELL:
+        cellFilterEnabled = enabled;
+        break;
+    }
+    // Trigger re-render with new filter state
+    bufferValid = false;
+    repaint();
   }
 
   // ===== ROI CREATION AND SELECTION =====
@@ -622,16 +627,16 @@ public class ROIOverlay extends JComponent {
   private void handleMouseClicked(MouseEvent e) {
     if (e.getClickCount() == 2) {
       UserROI clickedROI = findROIAtPoint(e.getPoint());
-      if (clickedROI != null) {
-        LOGGER.debug("Double-clicked ROI: {}", clickedROI.getName());
-      }
+
     }
   }
 
   private UserROI findROIAtPoint(Point point) {
+    // Iterate backwards to find topmost visible ROI
     for (int i = displayedROIs.size() - 1; i >= 0; i--) {
       UserROI roi = displayedROIs.get(i);
-      if (isPointInROI(point, roi)) {
+      // Only consider ROIs that pass the current filter
+      if (shouldDisplayROI(roi) && isPointInROI(point, roi)) {
         return roi;
       }
     }
@@ -649,26 +654,55 @@ public class ROIOverlay extends JComponent {
     return originalShape.contains(imageX, imageY);
   }
 
-  // ===== UTILITY METHODS =====
+ /**
+  * Determine the ROI category for appearance settings
+  */
+ private MainSettings.ROICategory determineROICategory(UserROI roi) {
+   // First check the class type - this is more reliable than ROI type
+   if (roi instanceof com.scipath.scipathj.data.model.NucleusROI) {
+     return MainSettings.ROICategory.NUCLEUS;
+   }
 
-  private MainSettings.ROICategory determineROICategory(UserROI roi) {
-    UserROI.ROIType roiType = roi.getType();
-    switch (roiType) {
-      case VESSEL: return MainSettings.ROICategory.VESSEL;
-      case NUCLEUS: return MainSettings.ROICategory.NUCLEUS;
-      case CYTOPLASM: return MainSettings.ROICategory.CYTOPLASM;
-      case CELL: return MainSettings.ROICategory.CELL;
-      default: break;
-    }
+   // Then check the ROI type
+   UserROI.ROIType roiType = roi.getType();
+   switch (roiType) {
+     case VESSEL: return MainSettings.ROICategory.VESSEL;
+     case COMPLEX_SHAPE: return MainSettings.ROICategory.VESSEL;
+     case NUCLEUS: return MainSettings.ROICategory.NUCLEUS;
+     case CYTOPLASM: return MainSettings.ROICategory.CYTOPLASM;
+     case CELL: return MainSettings.ROICategory.CELL;
+     default: break;
+   }
 
-    String name = roi.getName().toLowerCase();
-    if (name.contains("cell")) return MainSettings.ROICategory.CELL;
-    if (name.contains("cytoplasm") || name.contains("cyto")) return MainSettings.ROICategory.CYTOPLASM;
-    if (name.contains("nucleus") || name.contains("nuclei")) return MainSettings.ROICategory.NUCLEUS;
-    if (roi.hasComplexShape() || name.contains("vessel")) return MainSettings.ROICategory.VESSEL;
+   // Check name-based heuristics as fallback
+   String name = roi.getName().toLowerCase();
+   if (name.contains("cell")) return MainSettings.ROICategory.CELL;
+   if (name.contains("cytoplasm") || name.contains("cyto")) return MainSettings.ROICategory.CYTOPLASM;
+   if (name.contains("nucleus") || name.contains("nuclei")) return MainSettings.ROICategory.NUCLEUS;
+   if (roi.hasComplexShape() || name.contains("vessel")) return MainSettings.ROICategory.VESSEL;
 
-    return MainSettings.ROICategory.VESSEL;
-  }
+   return MainSettings.ROICategory.VESSEL; // Default fallback
+ }
+
+ /**
+  * Check if an ROI should be displayed based on current filter state
+  */
+ private boolean shouldDisplayROI(UserROI roi) {
+   MainSettings.ROICategory category = determineROICategory(roi);
+
+   switch (category) {
+     case VESSEL:
+       return vesselFilterEnabled;
+     case NUCLEUS:
+       return nucleusFilterEnabled;
+     case CYTOPLASM:
+       return cytoplasmFilterEnabled;
+     case CELL:
+       return cellFilterEnabled;
+     default:
+       return true; // Show unknown categories by default
+   }
+ }
 
   private Rectangle createRectangleFromPoints(Point start, Point end) {
     int x = Math.min(start.x, end.x);

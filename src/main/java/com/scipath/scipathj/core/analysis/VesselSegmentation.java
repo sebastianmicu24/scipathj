@@ -308,6 +308,7 @@ public class VesselSegmentation {
    * Create a UserROI from polygon ROI with proper metadata.
    */
   private UserROI createVesselROI(ij.gui.PolygonRoi polygonRoi, String vesselName, double area) {
+    // Use the polygon ROI directly to preserve complex shape
     UserROI vesselROI = new UserROI(polygonRoi, imageFileName, vesselName);
     vesselROI.setDisplayColor(UIConstants.VESSEL_ROI_COLOR);
     vesselROI.setNotes(

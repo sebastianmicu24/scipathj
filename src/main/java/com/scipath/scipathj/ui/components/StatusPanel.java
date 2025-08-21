@@ -13,7 +13,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Status panel component for displaying application status and progress.
  *
- * <p>This component manages the status label, progress bar, and back button
+ * <p>This component manages the status label, progress bar, analysis buttons, and back button
  * that appear at the bottom of the main window.</p>
  *
  * @author Sebastian Micu
@@ -27,6 +27,8 @@ public class StatusPanel extends JPanel {
   private final JLabel statusLabel;
   private final JProgressBar progressBar;
   private final JButton backButton;
+  private final JButton startButton;
+  private final JButton stopButton;
 
   /**
    * Creates a new StatusPanel instance.
@@ -38,6 +40,8 @@ public class StatusPanel extends JPanel {
     statusLabel = new JLabel("Select a pipeline to begin");
     progressBar = new JProgressBar(0, 100);
     backButton = UIUtils.createStandardButton("Back", FontIcon.of(FontAwesomeSolid.ARROW_LEFT, 16));
+    startButton = UIUtils.createStandardButton("Start Analysis", FontIcon.of(FontAwesomeSolid.PLAY, 16));
+    stopButton = UIUtils.createStandardButton("Stop Analysis", FontIcon.of(FontAwesomeSolid.STOP, 16));
 
     setupComponents();
     setupLayout();
@@ -53,26 +57,45 @@ public class StatusPanel extends JPanel {
     progressBar.setString("Ready");
     progressBar.setVisible(false);
     backButton.setVisible(false);
+    startButton.setVisible(false);
+    stopButton.setVisible(false);
+    startButton.setEnabled(false);
+    stopButton.setEnabled(false);
   }
 
   /**
-   * Sets up the panel layout.
+   * Sets up the panel layout with a simple horizontal layout.
    */
   private void setupLayout() {
-    setLayout(new BorderLayout());
-    setBorder(
-        UIUtils.createPadding(
-            UIConstants.SMALL_SPACING,
-            UIConstants.MEDIUM_SPACING,
-            UIConstants.SMALL_SPACING,
-            UIConstants.MEDIUM_SPACING));
+    setLayout(new BoxLayout(this, BoxLayout.X_AXIS));
+    setBorder(UIUtils.createPadding(
+        UIConstants.SMALL_SPACING,
+        UIConstants.MEDIUM_SPACING,
+        UIConstants.SMALL_SPACING,
+        UIConstants.MEDIUM_SPACING));
 
-    add(statusLabel, BorderLayout.WEST);
-    add(progressBar, BorderLayout.CENTER);
+    // Set preferred height for the status panel to make it taller
+    setPreferredSize(new Dimension(getPreferredSize().width, 90));
+    setMinimumSize(new Dimension(getMinimumSize().width, 90));
 
-    JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-    rightPanel.add(backButton);
-    add(rightPanel, BorderLayout.EAST);
+    // Status label on the left
+    add(statusLabel);
+
+    // Add flexible space
+    add(Box.createHorizontalGlue());
+
+    // Progress bar
+    add(progressBar);
+    add(Box.createHorizontalStrut(UIConstants.SMALL_SPACING));
+
+    // Analysis buttons
+    add(startButton);
+    add(Box.createHorizontalStrut(UIConstants.SMALL_SPACING));
+    add(stopButton);
+    add(Box.createHorizontalStrut(UIConstants.SMALL_SPACING));
+
+    // Back button on the far right
+    add(backButton);
   }
 
   /**
@@ -188,4 +211,99 @@ public class StatusPanel extends JPanel {
   public JLabel getStatusLabel() {
     return statusLabel;
   }
+
+  /**
+   * Shows the start and stop analysis buttons.
+   */
+  public void showAnalysisButtons() {
+    startButton.setVisible(true);
+    stopButton.setVisible(true);
+    LOGGER.debug("Analysis buttons shown");
+  }
+
+  /**
+   * Hides the start and stop analysis buttons.
+   */
+  public void hideAnalysisButtons() {
+    startButton.setVisible(false);
+    stopButton.setVisible(false);
+    LOGGER.debug("Analysis buttons hidden");
+  }
+
+  /**
+   * Enables the start button.
+   */
+  public void enableStartButton() {
+    startButton.setEnabled(true);
+    LOGGER.debug("Start button enabled");
+  }
+
+  /**
+   * Disables the start button.
+   */
+  public void disableStartButton() {
+    startButton.setEnabled(false);
+    LOGGER.debug("Start button disabled");
+  }
+
+  /**
+   * Enables the stop button.
+   */
+  public void enableStopButton() {
+    stopButton.setEnabled(true);
+    LOGGER.debug("Stop button enabled");
+  }
+
+  /**
+   * Disables the stop button.
+   */
+  public void disableStopButton() {
+    stopButton.setEnabled(false);
+    LOGGER.debug("Stop button disabled");
+  }
+
+  /**
+   * Sets the start button action listener.
+   *
+   * @param listener the action listener
+   */
+  public void setStartButtonListener(ActionListener listener) {
+    // Remove existing listeners
+    for (ActionListener al : startButton.getActionListeners()) {
+      startButton.removeActionListener(al);
+    }
+    startButton.addActionListener(listener);
+  }
+
+  /**
+   * Sets the stop button action listener.
+   *
+   * @param listener the action listener
+   */
+  public void setStopButtonListener(ActionListener listener) {
+    // Remove existing listeners
+    for (ActionListener al : stopButton.getActionListeners()) {
+      stopButton.removeActionListener(al);
+    }
+    stopButton.addActionListener(listener);
+  }
+
+  /**
+   * Gets the start button component.
+   *
+   * @return the start button
+   */
+  public JButton getStartButton() {
+    return startButton;
+  }
+
+  /**
+   * Gets the stop button component.
+   *
+   * @return the stop button
+   */
+  public JButton getStopButton() {
+    return stopButton;
+  }
 }
+

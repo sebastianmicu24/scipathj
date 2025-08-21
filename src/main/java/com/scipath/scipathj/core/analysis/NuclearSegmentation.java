@@ -165,9 +165,8 @@ public class NuclearSegmentation implements AutoCloseable {
       // Execute StarDist with H&E model
       List<NucleusROI> nucleiROIs = executeStarDistHE(inputDataset);
 
-      // ROI addition is handled centrally by AnalysisPipeline.addROIsToManager()
-      // to avoid duplication - DO NOT add nucleiROIs.forEach(roiManager::addROI) here
-
+      // Note: ROI addition is handled centrally by AnalysisPipeline.addROIsToManager()
+      // to avoid duplication. DO NOT add nucleiROIs.forEach(roiManager::addROI) here.
       LOGGER.info("Nuclear segmentation completed. Found {} nuclei", nucleiROIs.size());
       return nucleiROIs;
 
@@ -481,6 +480,9 @@ public class NuclearSegmentation implements AutoCloseable {
     // Detection thresholds from configuration
     params.put("probThresh", (double) settings.probThresh());
     params.put("nmsThresh", (double) settings.nmsThresh());
+
+    LOGGER.debug("StarDist parameters - probThresh: {}, nmsThresh: {}",
+        settings.probThresh(), settings.nmsThresh());
 
     // Output settings from configuration - force ROI only output to avoid display issues
     // Note: We still need ROI Manager output to extract the ROIs, but we'll close it immediately

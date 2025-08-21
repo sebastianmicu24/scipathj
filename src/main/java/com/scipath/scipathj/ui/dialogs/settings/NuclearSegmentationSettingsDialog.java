@@ -30,10 +30,10 @@ public class NuclearSegmentationSettingsDialog extends JDialog {
   // UI Components
   private JComboBox<String> modelChoiceCombo;
   private JCheckBox normalizeInputCheck;
-  private JSpinner percentileBottomSpinner;
-  private JSpinner percentileTopSpinner;
-  private JSpinner probThreshSpinner;
-  private JSpinner nmsThreshSpinner;
+  private JSlider percentileBottomSlider;
+  private JSlider percentileTopSlider;
+  private JSlider probThreshSlider;
+  private JSlider nmsThreshSlider;
   private JSpinner nTilesSpinner;
   private JSpinner excludeBoundarySpinner;
   private JSpinner minNucleusSizeSpinner;
@@ -107,8 +107,9 @@ public class NuclearSegmentationSettingsDialog extends JDialog {
     addSeparator(panel, gbc, "Size Filtering");
     addSizeFilteringRows(panel, gbc);
 
-    // Advanced Options
-    addSeparator(panel, gbc, "Advanced Options");
+    // Advanced Options - Hidden by default as requested
+    // Uncomment the lines below to show advanced options
+    // addSeparator(panel, gbc, "Advanced Options");
     addAdvancedRows(panel, gbc);
 
     return panel;
@@ -144,46 +145,42 @@ public class NuclearSegmentationSettingsDialog extends JDialog {
     gbc.gridwidth = 1;
 
     // Percentile Bottom
-    addSpinnerRow(
+    addSliderRow(
         panel,
         gbc,
         "Bottom Percentile:",
-        new SpinnerNumberModel(
-            Float.valueOf(1.0f), Float.valueOf(0.0f), Float.valueOf(100.0f), Float.valueOf(0.1f)),
-        "Bottom percentile for normalization (0.0-100.0)");
-    percentileBottomSpinner = (JSpinner) panel.getComponent(panel.getComponentCount() - 1);
+        0, 100, 1,
+        "Bottom percentile for normalization (0-100)");
+    percentileBottomSlider = (JSlider) ((JPanel) panel.getComponent(panel.getComponentCount() - 1)).getComponent(0);
 
     // Percentile Top
-    addSpinnerRow(
+    addSliderRow(
         panel,
         gbc,
         "Top Percentile:",
-        new SpinnerNumberModel(
-            Float.valueOf(99.8f), Float.valueOf(0.0f), Float.valueOf(100.0f), Float.valueOf(0.1f)),
-        "Top percentile for normalization (0.0-100.0)");
-    percentileTopSpinner = (JSpinner) panel.getComponent(panel.getComponentCount() - 1);
+        0, 100, 99,
+        "Top percentile for normalization (0-100)");
+    percentileTopSlider = (JSlider) ((JPanel) panel.getComponent(panel.getComponentCount() - 1)).getComponent(0);
   }
 
   private void addThresholdRows(JPanel panel, GridBagConstraints gbc) {
     // Probability Threshold
-    addSpinnerRow(
+    addSliderRow(
         panel,
         gbc,
         "Probability Threshold:",
-        new SpinnerNumberModel(
-            Float.valueOf(0.5f), Float.valueOf(0.0f), Float.valueOf(1.0f), Float.valueOf(0.01f)),
+        0, 100, 50,
         "Detection probability threshold (0.0-1.0)");
-    probThreshSpinner = (JSpinner) panel.getComponent(panel.getComponentCount() - 1);
+    probThreshSlider = (JSlider) ((JPanel) panel.getComponent(panel.getComponentCount() - 1)).getComponent(0);
 
-    // NMS Threshold
-    addSpinnerRow(
+    // Overlap Threshold (formerly NMS Threshold)
+    addSliderRow(
         panel,
         gbc,
-        "NMS Threshold:",
-        new SpinnerNumberModel(
-            Float.valueOf(0.4f), Float.valueOf(0.0f), Float.valueOf(1.0f), Float.valueOf(0.01f)),
-        "Non-maximum suppression threshold (0.0-1.0)");
-    nmsThreshSpinner = (JSpinner) panel.getComponent(panel.getComponentCount() - 1);
+        "Overlap Threshold:",
+        0, 100, 40,
+        "Overlap threshold for nucleus detection (0.0-1.0)");
+    nmsThreshSlider = (JSlider) ((JPanel) panel.getComponent(panel.getComponentCount() - 1)).getComponent(0);
   }
 
   private void addProcessingRows(JPanel panel, GridBagConstraints gbc) {
@@ -241,18 +238,24 @@ public class NuclearSegmentationSettingsDialog extends JDialog {
     gbc.gridwidth = 2;
     verboseCheck = new JCheckBox("Verbose Output");
     verboseCheck.setToolTipText("Enable verbose output during processing");
+    // Hide advanced options by default as requested
+    verboseCheck.setVisible(false);
     panel.add(verboseCheck, gbc);
 
     // Show progress
     gbc.gridy++;
     showProgressCheck = new JCheckBox("Show CSBDeep Progress");
     showProgressCheck.setToolTipText("Show CSBDeep progress during processing");
+    // Hide advanced options by default as requested
+    showProgressCheck.setVisible(false);
     panel.add(showProgressCheck, gbc);
 
     // Show probability and distance maps
     gbc.gridy++;
     showProbDistCheck = new JCheckBox("Show Probability & Distance Maps");
     showProbDistCheck.setToolTipText("Display probability and distance maps (for debugging)");
+    // Hide advanced options by default as requested
+    showProbDistCheck.setVisible(false);
     panel.add(showProbDistCheck, gbc);
 
     gbc.gridwidth = 1;
@@ -312,13 +315,68 @@ public class NuclearSegmentationSettingsDialog extends JDialog {
     gbc.weightx = 0.0;
   }
 
+  private void addSliderRow(
+      JPanel panel,
+      GridBagConstraints gbc,
+      String labelText,
+      int min,
+      int max,
+      int value,
+      String tooltip) {
+    gbc.gridx = 0;
+    gbc.gridy++;
+    JLabel label = UIUtils.createLabel(labelText, UIConstants.NORMAL_FONT_SIZE, null);
+    label.setToolTipText(tooltip);
+    panel.add(label, gbc);
+
+    gbc.gridx = 1;
+    gbc.fill = GridBagConstraints.HORIZONTAL;
+    gbc.weightx = 1.0;
+
+    // Create slider
+    JSlider slider = new JSlider(min, max, value);
+    slider.setToolTipText(tooltip);
+    slider.setMajorTickSpacing((max - min) / 5);
+    slider.setMinorTickSpacing((max - min) / 20);
+    slider.setPaintTicks(true);
+    slider.setPaintLabels(true);
+    slider.setSnapToTicks(false);
+
+    // Create a panel to hold slider and value label
+    JPanel sliderPanel = new JPanel(new BorderLayout());
+    sliderPanel.add(slider, BorderLayout.CENTER);
+
+    // Add value label
+    JLabel valueLabel = new JLabel(String.valueOf(value));
+    valueLabel.setHorizontalAlignment(SwingConstants.CENTER);
+    valueLabel.setFont(valueLabel.getFont().deriveFont(UIConstants.SMALL_FONT_SIZE));
+    sliderPanel.add(valueLabel, BorderLayout.SOUTH);
+
+    // Add change listener to update label
+    slider.addChangeListener(e -> {
+      int sliderValue = slider.getValue();
+      if (min == 0 && max == 100) {
+        // Integer values for percentiles
+        valueLabel.setText(String.valueOf(sliderValue));
+      } else {
+        // Float values for thresholds (divide by 100)
+        valueLabel.setText(String.format("%.2f", sliderValue / 100.0));
+      }
+    });
+
+    panel.add(sliderPanel, gbc);
+
+    gbc.fill = GridBagConstraints.NONE;
+    gbc.weightx = 0.0;
+  }
+
   private void loadCurrentSettings() {
     modelChoiceCombo.setSelectedItem(settings.modelChoice());
     normalizeInputCheck.setSelected(settings.normalizeInput());
-    percentileBottomSpinner.setValue(settings.percentileBottom());
-    percentileTopSpinner.setValue(settings.percentileTop());
-    probThreshSpinner.setValue(settings.probThresh());
-    nmsThreshSpinner.setValue(settings.nmsThresh());
+    percentileBottomSlider.setValue(Math.round(settings.percentileBottom()));
+    percentileTopSlider.setValue(Math.round(settings.percentileTop()));
+    probThreshSlider.setValue(Math.round(settings.probThresh() * 100));
+    nmsThreshSlider.setValue(Math.round(settings.nmsThresh() * 100));
     nTilesSpinner.setValue(settings.nTiles());
     excludeBoundarySpinner.setValue(settings.excludeBoundary());
     minNucleusSizeSpinner.setValue(settings.minNucleusSize());
@@ -337,11 +395,11 @@ public class NuclearSegmentationSettingsDialog extends JDialog {
    */
   private boolean validateInputs() {
     try {
-      // Safe casting with proper type handling
-      float probThresh = ((Number) probThreshSpinner.getValue()).floatValue();
-      float nmsThresh = ((Number) nmsThreshSpinner.getValue()).floatValue();
-      float percentileBottom = ((Number) percentileBottomSpinner.getValue()).floatValue();
-      float percentileTop = ((Number) percentileTopSpinner.getValue()).floatValue();
+      // Get values from sliders (convert from int to float where needed)
+      float probThresh = probThreshSlider.getValue() / 100.0f;
+      float nmsThresh = nmsThreshSlider.getValue() / 100.0f;
+      float percentileBottom = percentileBottomSlider.getValue();
+      float percentileTop = percentileTopSlider.getValue();
       double minNucleusSize = ((Number) minNucleusSizeSpinner.getValue()).doubleValue();
       double maxNucleusSize = ((Number) maxNucleusSizeSpinner.getValue()).doubleValue();
 
@@ -351,7 +409,7 @@ public class NuclearSegmentationSettingsDialog extends JDialog {
       }
 
       if (nmsThresh < 0.0f || nmsThresh > 1.0f) {
-        showErrorMessage("NMS threshold must be between 0.0 and 1.0");
+        showErrorMessage("Overlap threshold must be between 0.0 and 1.0");
         return false;
       }
 
@@ -467,10 +525,10 @@ public class NuclearSegmentationSettingsDialog extends JDialog {
             new NuclearSegmentationSettings(
                 (String) modelChoiceCombo.getSelectedItem(),
                 normalizeInputCheck.isSelected(),
-                ((Number) percentileBottomSpinner.getValue()).floatValue(),
-                ((Number) percentileTopSpinner.getValue()).floatValue(),
-                ((Number) probThreshSpinner.getValue()).floatValue(),
-                ((Number) nmsThreshSpinner.getValue()).floatValue(),
+                percentileBottomSlider.getValue(),
+                percentileTopSlider.getValue(),
+                probThreshSlider.getValue() / 100.0f,
+                nmsThreshSlider.getValue() / 100.0f,
                 NuclearSegmentationSettings.DEFAULT_OUTPUT_TYPE,
                 ((Number) nTilesSpinner.getValue()).intValue(),
                 ((Number) excludeBoundarySpinner.getValue()).intValue(),

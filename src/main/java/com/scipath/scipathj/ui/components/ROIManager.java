@@ -78,7 +78,16 @@ public class ROIManager {
     if (roi == null) return;
 
     String imageFileName = roi.getImageFileName();
-    imageROIs.computeIfAbsent(imageFileName, k -> new ArrayList<>()).add(roi);
+    List<UserROI> roisForImage = imageROIs.computeIfAbsent(imageFileName, k -> new ArrayList<>());
+
+    // Check for duplicate ROI by ID to prevent double counting
+    boolean isDuplicate = roisForImage.stream().anyMatch(existing -> existing.getId().equals(roi.getId()));
+    if (isDuplicate) {
+      LOGGER.debug("Skipping duplicate ROI '{}' for image '{}'", roi.getName(), imageFileName);
+      return;
+    }
+
+    roisForImage.add(roi);
 
     // LOGGER.info("Added ROI '{}' to image '{}'", roi.getName(), imageFileName);
 
@@ -141,6 +150,14 @@ public class ROIManager {
    */
   public List<UserROI> getAllROIs() {
     return imageROIs.values().stream().flatMap(List::stream).collect(Collectors.toList());
+  }
+
+  /**
+   * Get all ROIs organized by image filename
+   * @return Map where key is image filename and value is list of ROIs for that image
+   */
+  public Map<String, List<UserROI>> getAllROIsByImage() {
+    return new HashMap<>(imageROIs); // Return defensive copy
   }
 
   /**
@@ -442,6 +459,10 @@ public class ROIManager {
   private Roi convertToImageJROI(UserROI userROI) {
     Roi roi;
 
+    // Debug logging to understand the issue
+    LOGGER.debug("Converting ROI: type={}, hasComplexShape={}, getImageJRoi()={}",
+        userROI.getType(), userROI.hasComplexShape(), userROI.getImageJRoi());
+
     // Check if this UserROI has a complex shape (vessel ROI)
     if (userROI.hasComplexShape()) {
       // Use the stored ImageJ ROI directly
@@ -449,12 +470,15 @@ public class ROIManager {
       if (roi != null) {
         // Clone to avoid modifying the original
         roi = (Roi) roi.clone();
+        LOGGER.debug("Using complex shape ROI: {}", roi.getClass().getSimpleName());
       } else {
         // Fallback to bounding rectangle
         roi = new Roi(userROI.getX(), userROI.getY(), userROI.getWidth(), userROI.getHeight());
+        LOGGER.warn("Complex shape ROI was null, falling back to rectangle for ROI: {}", userROI.getName());
       }
     } else {
       // Handle simple shapes
+      LOGGER.debug("Using simple shape ROI for type: {}", userROI.getType());
       switch (userROI.getType()) {
         case SQUARE:
         case RECTANGLE:
@@ -465,6 +489,18 @@ public class ROIManager {
           roi =
               new ij.gui.OvalRoi(
                   userROI.getX(), userROI.getY(), userROI.getWidth(), userROI.getHeight());
+          break;
+        case COMPLEX_SHAPE:
+        case VESSEL:
+          // Special handling for vessel ROIs that might not have complex shape flag set
+          roi = userROI.getImageJRoi();
+          if (roi != null) {
+            roi = (Roi) roi.clone();
+            LOGGER.debug("Found ImageJ ROI for vessel type: {}", roi.getClass().getSimpleName());
+          } else {
+            roi = new Roi(userROI.getX(), userROI.getY(), userROI.getWidth(), userROI.getHeight());
+            LOGGER.warn("No ImageJ ROI found for vessel type, using rectangle fallback for ROI: {}", userROI.getName());
+          }
           break;
         default:
           roi = new Roi(userROI.getX(), userROI.getY(), userROI.getWidth(), userROI.getHeight());

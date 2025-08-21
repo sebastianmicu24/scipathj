@@ -560,27 +560,27 @@ public record NuclearSegmentationSettings(
    * @throws IllegalStateException if any setting is invalid
    */
   public void validate() {
-    if (percentileBottom >= percentileTop) {
-      throw new IllegalStateException(
-          "Invalid percentile range: bottom ("
-              + percentileBottom
-              + ") >= top ("
-              + percentileTop
-              + ")");
-    }
-    if (minNucleusSize >= maxNucleusSize) {
-      throw new IllegalStateException(
-          "Invalid nucleus size range: min ("
-              + minNucleusSize
-              + ") >= max ("
-              + maxNucleusSize
-              + ")");
-    }
-    if (probThresh < 0.0f || probThresh > 1.0f) {
-      throw new IllegalStateException(
-          "Invalid probability threshold: " + probThresh + " (must be 0.0-1.0)");
-    }
-  }
+     if (percentileBottom >= percentileTop) {
+       throw new IllegalStateException(
+           "Invalid percentile range: bottom ("
+               + percentileBottom
+               + ") >= top ("
+               + percentileTop
+               + ")");
+     }
+     if (minNucleusSize >= maxNucleusSize) {
+       throw new IllegalStateException(
+           "Invalid nucleus size range: min ("
+               + minNucleusSize
+               + ") >= max ("
+               + maxNucleusSize
+               + ")");
+     }
+     if (probThresh < 0.0f || probThresh > 1.0f) {
+       throw new IllegalStateException(
+           "Invalid probability threshold: " + probThresh + " (must be 0.0-1.0)");
+     }
+   }
 
   /**
    * Get a string representation of current settings.

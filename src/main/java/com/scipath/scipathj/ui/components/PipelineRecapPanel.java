@@ -55,7 +55,9 @@ public class PipelineRecapPanel extends JPanel {
       return;
     }
 
-    pipelineNameLabel.setText(pipeline.getDisplayName());
+    // Remove the pipeline name title to make more space
+    pipelineNameLabel.setText("");
+    // pipelineNameLabel.setText(pipeline.getDisplayName());
     updateStepsDisplay();
     setVisible(true);
     revalidate();

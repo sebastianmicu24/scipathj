@@ -106,6 +106,9 @@ public class NavigationController {
     // Show back button
     statusPanel.showBackButton();
 
+    // Hide analysis buttons (not available in folder selection)
+    statusPanel.hideAnalysisButtons();
+
     // Update status
     statusPanel.setStatus("Select a folder containing images");
 
@@ -128,6 +131,9 @@ public class NavigationController {
     // Load images into gallery
     imageGallery.loadImagesFromFolder(selectedFolder);
 
+    // Show analysis buttons in status panel
+    statusPanel.showAnalysisButtons();
+
     // Update status
     statusPanel.setStatus("Select images for analysis");
 
@@ -147,6 +153,9 @@ public class NavigationController {
     // Clear image viewer
     mainImageViewer.clearImage();
 
+    // Hide analysis buttons (not available in folder selection)
+    statusPanel.hideAnalysisButtons();
+
     // Update status
     statusPanel.setStatus("Select a folder containing images");
 
@@ -165,6 +174,9 @@ public class NavigationController {
 
     // Hide back button
     statusPanel.hideBackButton();
+
+    // Hide analysis buttons
+    statusPanel.hideAnalysisButtons();
 
     // Update status
     statusPanel.setStatus("Select a pipeline to begin");

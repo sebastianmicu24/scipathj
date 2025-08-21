@@ -163,8 +163,7 @@ public class AnalysisPipeline {
         File imageFile = imageFiles[i];
         String fileName = imageFile.getName();
 
-        updateProgress(
-            i, "Processing image " + (i + 1) + "/" + imageFiles.length + ": " + fileName);
+        updateProgress(i, "Analyzing...");
 
         try {
           ImageAnalysisResult result = processImage(imageFile);
