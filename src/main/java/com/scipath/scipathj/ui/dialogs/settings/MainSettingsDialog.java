@@ -35,6 +35,7 @@ public class MainSettingsDialog extends JDialog {
   private JSpinner pixelsPerMicrometerSpinner;
   private JTextField scaleUnitField;
   private JLabel scalePreviewLabel;
+  private JSpinner borderDistanceSpinner;
 
   // UI Components for ROI categories
   private ROICategoryPanel vesselPanel;
@@ -113,11 +114,7 @@ public class MainSettingsDialog extends JDialog {
     // Main content with tabs
     JTabbedPane tabbedPane = new JTabbedPane();
     tabbedPane.addTab("Scale & Units", createScalePanel());
-    tabbedPane.addTab("Vessel ROIs", vesselPanel);
-    tabbedPane.addTab("Nucleus ROIs", nucleusPanel);
-    tabbedPane.addTab("Cytoplasm ROIs", cytoplasmPanel);
-    tabbedPane.addTab("Cell ROIs", cellPanel);
-    tabbedPane.addTab("Ignore ROI Settings", ignorePanel);
+    tabbedPane.addTab("Ignore Distance", createIgnoreDistancePanel());
 
     // Button panel
     JPanel buttonPanel = createButtonPanel();
@@ -182,6 +179,34 @@ public class MainSettingsDialog extends JDialog {
   }
 
   /**
+   * Create the ignore distance settings panel.
+   */
+  private JPanel createIgnoreDistancePanel() {
+    JPanel panel = new JPanel(new GridBagLayout());
+    panel.setBorder(UIUtils.createPadding(UIConstants.LARGE_SPACING));
+
+    GridBagConstraints gbc = new GridBagConstraints();
+    gbc.insets = new Insets(UIConstants.MEDIUM_SPACING, UIConstants.MEDIUM_SPACING,
+                           UIConstants.MEDIUM_SPACING, UIConstants.MEDIUM_SPACING);
+    gbc.anchor = GridBagConstraints.WEST;
+
+    // Border distance
+    gbc.gridx = 0;
+    gbc.gridy = 0;
+    JLabel borderDistanceLabel = UIUtils.createLabel("Border Distance (pixels):", UIConstants.NORMAL_FONT_SIZE, null);
+    panel.add(borderDistanceLabel, gbc);
+
+    gbc.gridx = 1;
+    gbc.fill = GridBagConstraints.HORIZONTAL;
+    gbc.weightx = 1.0;
+    borderDistanceSpinner = new JSpinner(new SpinnerNumberModel(MainSettings.DEFAULT_BORDER_DISTANCE, 0, 1000, 1));
+    borderDistanceSpinner.setToolTipText("Distance from image borders to consider ROIs as ignore");
+    panel.add(borderDistanceSpinner, gbc);
+
+    return panel;
+  }
+
+  /**
    * Create the button panel.
    */
   private JPanel createButtonPanel() {
@@ -191,6 +216,11 @@ public class MainSettingsDialog extends JDialog {
     JButton resetButton = UIUtils.createStandardButton("Reset to Defaults", null);
     JButton cancelButton = UIUtils.createStandardButton("Cancel", null);
     JButton okButton = UIUtils.createStandardButton("OK", null);
+
+    // Make buttons wider
+    resetButton.setPreferredSize(new Dimension(160, resetButton.getPreferredSize().height));
+    cancelButton.setPreferredSize(new Dimension(100, cancelButton.getPreferredSize().height));
+    okButton.setPreferredSize(new Dimension(100, okButton.getPreferredSize().height));
 
     resetButton.addActionListener(this::handleResetToDefaults);
     cancelButton.addActionListener(this::handleCancel);
@@ -233,12 +263,7 @@ public class MainSettingsDialog extends JDialog {
   private void loadCurrentSettings() {
     pixelsPerMicrometerSpinner.setValue(currentSettings.pixelsPerMicrometer());
     scaleUnitField.setText(currentSettings.scaleUnit());
-
-    vesselPanel.loadSettings(currentSettings.vesselSettings());
-    nucleusPanel.loadSettings(currentSettings.nucleusSettings());
-    cytoplasmPanel.loadSettings(currentSettings.cytoplasmSettings());
-    cellPanel.loadSettings(currentSettings.cellSettings());
-    ignorePanel.loadSettings(currentSettings.ignoreSettings());
+    borderDistanceSpinner.setValue(currentSettings.ignoreSettings().borderDistance());
 
     updateScalePreview();
     LOGGER.debug("Loaded current settings into dialog components");
@@ -279,11 +304,14 @@ public class MainSettingsDialog extends JDialog {
         return false;
       }
 
-      return vesselPanel.validateInputs()
-          && nucleusPanel.validateInputs()
-          && cytoplasmPanel.validateInputs()
-          && cellPanel.validateInputs()
-          && ignorePanel.validateInputs();
+      // Validate border distance
+      int borderDistance = (Integer) borderDistanceSpinner.getValue();
+      if (borderDistance < 0) {
+        showErrorMessage("Border distance must be non-negative");
+        return false;
+      }
+
+      return true;
 
     } catch (Exception e) {
       showErrorMessage("Invalid input values: " + e.getMessage());
@@ -297,15 +325,20 @@ public class MainSettingsDialog extends JDialog {
   private MainSettings createUpdatedSettings() {
     double pixelsPerMicrometer = (Double) pixelsPerMicrometerSpinner.getValue();
     String scaleUnit = scaleUnitField.getText().trim();
+    int borderDistance = (Integer) borderDistanceSpinner.getValue();
+
+    // Create updated ignore settings with new border distance but keep other ignore settings
+    MainSettings.IgnoreROIAppearanceSettings updatedIgnoreSettings =
+        currentSettings.ignoreSettings().withBorderDistance(borderDistance);
 
     return new MainSettings(
         pixelsPerMicrometer,
         scaleUnit,
-        vesselPanel.createSettings(),
-        nucleusPanel.createSettings(),
-        cytoplasmPanel.createSettings(),
-        cellPanel.createSettings(),
-        ignorePanel.createSettings());
+        currentSettings.vesselSettings(),
+        currentSettings.nucleusSettings(),
+        currentSettings.cytoplasmSettings(),
+        currentSettings.cellSettings(),
+        updatedIgnoreSettings);
   }
 
   /**
@@ -619,6 +652,8 @@ public class MainSettingsDialog extends JDialog {
       return new MainSettings.IgnoreROIAppearanceSettings(
           (Integer) borderDistanceSpinner.getValue(),
           ignoreColorButton.getBackground(),
+          MainSettings.DEFAULT_FILL_OPACITY,
+          MainSettings.DEFAULT_BORDER_WIDTH,
           showIgnoredROIsCheckBox.isSelected());
     }
 

@@ -581,14 +581,18 @@ public class ConfigurationManager {
   private MainSettings.IgnoreROIAppearanceSettings loadIgnoreROIAppearanceSettings(Properties properties) {
     int borderDistance = getIntProperty(properties, "ignore.borderDistance", MainSettings.DEFAULT_BORDER_DISTANCE);
     Color ignoreColor = getColorProperty(properties, "ignore.ignoreColor", MainSettings.DEFAULT_IGNORE_COLOR);
+    float fillOpacity = (float) getDoubleProperty(properties, "ignore.fillOpacity", MainSettings.DEFAULT_FILL_OPACITY);
+    int borderWidth = getIntProperty(properties, "ignore.borderWidth", MainSettings.DEFAULT_BORDER_WIDTH);
     boolean showIgnoredROIs = getBooleanProperty(properties, "ignore.showIgnoredROIs", MainSettings.DEFAULT_SHOW_IGNORE_ROIS);
 
-    return new MainSettings.IgnoreROIAppearanceSettings(borderDistance, ignoreColor, showIgnoredROIs);
+    return new MainSettings.IgnoreROIAppearanceSettings(borderDistance, ignoreColor, fillOpacity, borderWidth, showIgnoredROIs);
   }
 
   private void saveIgnoreROIAppearanceSettings(Properties properties, MainSettings.IgnoreROIAppearanceSettings settings) {
     properties.setProperty("ignore.borderDistance", String.valueOf(settings.borderDistance()));
     properties.setProperty("ignore.ignoreColor", colorToString(settings.ignoreColor()));
+    properties.setProperty("ignore.fillOpacity", String.valueOf(settings.fillOpacity()));
+    properties.setProperty("ignore.borderWidth", String.valueOf(settings.borderWidth()));
     properties.setProperty("ignore.showIgnoredROIs", String.valueOf(settings.showIgnoredROIs()));
   }
 

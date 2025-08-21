@@ -258,13 +258,9 @@ public class ROIOverlay extends JComponent {
       if (!ignoreSettings.showIgnoredROIs()) {
         return; // Don't render ignored ROIs if they're disabled
       }
-      fillColor = new Color(
-          ignoreSettings.ignoreColor().getRed(),
-          ignoreSettings.ignoreColor().getGreen(),
-          ignoreSettings.ignoreColor().getBlue(),
-          (int)(settings.fillOpacity() * 255));
+      fillColor = ignoreSettings.getFillColor();
       borderColor = ignoreSettings.ignoreColor();
-      borderWidth = settings.borderWidth();
+      borderWidth = ignoreSettings.borderWidth();
     } else {
       // Use normal settings for regular ROIs
       fillColor = settings.getFillColor();
@@ -423,13 +419,9 @@ public class ROIOverlay extends JComponent {
       if (!ignoreSettings.showIgnoredROIs()) {
         return; // Don't render ignored ROIs if they're disabled
       }
-      fillColor = new Color(
-          ignoreSettings.ignoreColor().getRed(),
-          ignoreSettings.ignoreColor().getGreen(),
-          ignoreSettings.ignoreColor().getBlue(),
-          (int)(settings.fillOpacity() * 255));
+      fillColor = ignoreSettings.getFillColor();
       borderColor = ignoreSettings.ignoreColor();
-      borderWidth = settings.borderWidth();
+      borderWidth = ignoreSettings.borderWidth();
     } else {
       // Use normal settings for regular ROIs
       fillColor = settings.getFillColor();

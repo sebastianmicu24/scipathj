@@ -170,9 +170,11 @@ public record MainSettings(
    *
    * @param borderDistance The distance from image borders in pixels to consider ROIs as ignore
    * @param ignoreColor The color to display ignored ROIs
+   * @param fillOpacity The fill opacity for ignored ROIs (0.0-1.0)
+   * @param borderWidth The border width in pixels for ignored ROIs (must be at least 1)
    * @param showIgnoredROIs Whether to show ignored ROIs at all
    */
-  public record IgnoreROIAppearanceSettings(int borderDistance, Color ignoreColor, boolean showIgnoredROIs) {
+  public record IgnoreROIAppearanceSettings(int borderDistance, Color ignoreColor, float fillOpacity, int borderWidth, boolean showIgnoredROIs) {
 
     /**
      * Compact constructor with validation.
@@ -183,6 +185,13 @@ public record MainSettings(
       }
       if (ignoreColor == null) {
         throw new IllegalArgumentException("Ignore color cannot be null");
+      }
+      if (fillOpacity < 0.0f || fillOpacity > 1.0f) {
+        throw new IllegalArgumentException(
+            "Fill opacity must be between 0.0 and 1.0, got: " + fillOpacity);
+      }
+      if (borderWidth < 1) {
+        throw new IllegalArgumentException("Border width must be at least 1, got: " + borderWidth);
       }
     }
 
@@ -195,6 +204,8 @@ public record MainSettings(
       return new IgnoreROIAppearanceSettings(
           DEFAULT_BORDER_DISTANCE,
           DEFAULT_IGNORE_COLOR,
+          DEFAULT_FILL_OPACITY,
+          DEFAULT_BORDER_WIDTH,
           DEFAULT_SHOW_IGNORE_ROIS);
     }
 
@@ -205,7 +216,7 @@ public record MainSettings(
      * @return A new instance with the updated border distance
      */
     public IgnoreROIAppearanceSettings withBorderDistance(int newBorderDistance) {
-      return new IgnoreROIAppearanceSettings(newBorderDistance, ignoreColor, showIgnoredROIs);
+      return new IgnoreROIAppearanceSettings(newBorderDistance, ignoreColor, fillOpacity, borderWidth, showIgnoredROIs);
     }
 
     /**
@@ -215,7 +226,7 @@ public record MainSettings(
      * @return A new instance with the updated ignore color
      */
     public IgnoreROIAppearanceSettings withIgnoreColor(Color newIgnoreColor) {
-      return new IgnoreROIAppearanceSettings(borderDistance, newIgnoreColor, showIgnoredROIs);
+      return new IgnoreROIAppearanceSettings(borderDistance, newIgnoreColor, fillOpacity, borderWidth, showIgnoredROIs);
     }
 
     /**
@@ -225,7 +236,37 @@ public record MainSettings(
      * @return A new instance with the updated setting
      */
     public IgnoreROIAppearanceSettings withShowIgnoredROIs(boolean newShowIgnoredROIs) {
-      return new IgnoreROIAppearanceSettings(borderDistance, ignoreColor, newShowIgnoredROIs);
+      return new IgnoreROIAppearanceSettings(borderDistance, ignoreColor, fillOpacity, borderWidth, newShowIgnoredROIs);
+    }
+
+    /**
+     * Creates a new instance with updated fill opacity.
+     *
+     * @param newFillOpacity The new fill opacity (0.0-1.0)
+     * @return A new instance with the updated fill opacity
+     */
+    public IgnoreROIAppearanceSettings withFillOpacity(float newFillOpacity) {
+      return new IgnoreROIAppearanceSettings(borderDistance, ignoreColor, newFillOpacity, borderWidth, showIgnoredROIs);
+    }
+
+    /**
+     * Creates a new instance with updated border width.
+     *
+     * @param newBorderWidth The new border width (must be at least 1)
+     * @return A new instance with the updated border width
+     */
+    public IgnoreROIAppearanceSettings withBorderWidth(int newBorderWidth) {
+      return new IgnoreROIAppearanceSettings(borderDistance, ignoreColor, fillOpacity, newBorderWidth, showIgnoredROIs);
+    }
+
+    /**
+     * Gets the fill color with the appropriate alpha channel based on fill opacity.
+     *
+     * @return Color with alpha channel applied
+     */
+    public Color getFillColor() {
+      int alpha = Math.round(fillOpacity * 255);
+      return new Color(ignoreColor.getRed(), ignoreColor.getGreen(), ignoreColor.getBlue(), alpha);
     }
   }
 

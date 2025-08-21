@@ -16,6 +16,7 @@ import com.scipath.scipathj.ui.components.StatusPanel;
 import com.scipath.scipathj.ui.controllers.AnalysisController;
 import com.scipath.scipathj.ui.controllers.NavigationController;
 import com.scipath.scipathj.ui.dialogs.ROIStatisticsDialog;
+import com.scipath.scipathj.ui.dialogs.settings.DisplaySettingsDialog;
 import com.scipath.scipathj.ui.dialogs.settings.MainSettingsDialog;
 import com.scipath.scipathj.ui.model.PipelineInfo;
 import com.scipath.scipathj.ui.utils.UIConstants;
@@ -204,13 +205,18 @@ public class MainWindow extends JFrame {
     // Create button panel with both change folder and main settings buttons
     JButton changeFolderButton =
         UIUtils.createSmallButton("Change Folder", FontIcon.of(FontAwesomeSolid.FOLDER_OPEN, 14));
-    changeFolderButton.setPreferredSize(new Dimension(140, 32));
+    changeFolderButton.setPreferredSize(new Dimension(180, 32));
     changeFolderButton.addActionListener(e -> navigationController.switchToFolderSelection());
 
     JButton mainSettingsButton =
         UIUtils.createSmallButton("Main Settings", FontIcon.of(FontAwesomeSolid.COG, 14));
-    mainSettingsButton.setPreferredSize(new Dimension(140, 32));
+    mainSettingsButton.setPreferredSize(new Dimension(180, 32));
     mainSettingsButton.addActionListener(this::openMainSettings);
+
+    JButton displaySettingsButton =
+        UIUtils.createSmallButton("Display Settings", FontIcon.of(FontAwesomeSolid.PALETTE, 14));
+    displaySettingsButton.setPreferredSize(new Dimension(180, 32));
+    displaySettingsButton.addActionListener(this::openDisplaySettings);
 
     JPanel buttonPanel =
         new JPanel(
@@ -222,6 +228,7 @@ public class MainWindow extends JFrame {
             UIConstants.MEDIUM_SPACING,
             UIConstants.MEDIUM_SPACING,
             UIConstants.MEDIUM_SPACING));
+    buttonPanel.add(displaySettingsButton);
     buttonPanel.add(mainSettingsButton);
     buttonPanel.add(changeFolderButton);
     topPanel.add(buttonPanel, BorderLayout.NORTH);
@@ -702,6 +709,26 @@ public class MainWindow extends JFrame {
       JOptionPane.showMessageDialog(
           this,
           "Main settings have been saved successfully.\nChanges will take effect immediately.",
+          "Settings Saved",
+          JOptionPane.INFORMATION_MESSAGE);
+    }
+  }
+
+  private void openDisplaySettings(java.awt.event.ActionEvent e) {
+    LOGGER.debug("Display settings dialog requested");
+    MainSettings currentSettings = configurationManager.loadMainSettings();
+    DisplaySettingsDialog dialog = new DisplaySettingsDialog(this, currentSettings, this::handleSettingsChanged);
+    dialog.setVisible(true);
+
+    if (dialog.isSettingsChanged()) {
+      LOGGER.info("Display settings were modified");
+      // Refresh UI components that depend on display settings
+      refreshUIWithNewSettings();
+
+      // Show confirmation message
+      JOptionPane.showMessageDialog(
+          this,
+          "Display settings have been saved successfully.\nChanges will take effect immediately.",
           "Settings Saved",
           JOptionPane.INFORMATION_MESSAGE);
     }
