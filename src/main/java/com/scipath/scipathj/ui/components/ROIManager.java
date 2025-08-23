@@ -1,6 +1,7 @@
 package com.scipath.scipathj.ui.components;
 
 import com.scipath.scipathj.data.model.UserROI;
+import com.scipath.scipathj.core.analysis.CellClassification;
 import ij.gui.Roi;
 import ij.io.RoiDecoder;
 import ij.io.RoiEncoder;
@@ -23,6 +24,9 @@ public class ROIManager {
   // Map of image filename to list of ROIs for that image
   private final Map<String, List<UserROI>> imageROIs;
 
+  // Map of ROI key to classification results for tooltip display
+  private final Map<String, CellClassification.ClassificationResult> classificationResults;
+
   // Listeners for ROI changes
   private final List<ROIChangeListener> listeners;
 
@@ -31,6 +35,7 @@ public class ROIManager {
 
   private ROIManager() {
     this.imageROIs = new ConcurrentHashMap<>();
+    this.classificationResults = new ConcurrentHashMap<>();
     this.listeners = new ArrayList<>();
   }
 
@@ -42,6 +47,51 @@ public class ROIManager {
       instance = new ROIManager();
     }
     return instance;
+  }
+
+  /**
+   * Set classification results for ROIs (used for tooltip display)
+   */
+  public void setClassificationResults(Map<String, CellClassification.ClassificationResult> results) {
+    if (results != null) {
+      this.classificationResults.putAll(results);
+      LOGGER.info("Stored {} classification results for ROI tooltips", results.size());
+    }
+  }
+
+  /**
+   * Get classification result for a specific ROI (for tooltip display)
+   */
+  public CellClassification.ClassificationResult getClassificationResult(String roiKey) {
+    return this.classificationResults.get(roiKey);
+  }
+
+  /**
+   * Get classification tooltip text for a specific ROI
+   */
+  public String getClassificationTooltipText(String roiKey) {
+    CellClassification.ClassificationResult result = this.classificationResults.get(roiKey);
+    if (result != null) {
+      return String.format("Cell type: %s (confidence: %.1f%%)",
+        result.getPredictedClass(),
+        result.getConfidence() * 100);
+    }
+    return "Cell type: (not classified)";
+  }
+
+  /**
+   * Clear all classification results
+   */
+  public void clearClassificationResults() {
+    this.classificationResults.clear();
+    LOGGER.info("Cleared all classification results");
+  }
+
+  /**
+   * Get all classification results
+   */
+  public Map<String, CellClassification.ClassificationResult> getAllClassificationResults() {
+    return new HashMap<>(this.classificationResults);
   }
 
   /**

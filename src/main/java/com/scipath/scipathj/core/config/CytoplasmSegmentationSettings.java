@@ -237,7 +237,7 @@ public record CytoplasmSegmentationSettings(
   /**
    * Creates a new instance with updated minimum cell size.
    *
-   * @param newMinCellSize The new minimum cell size (must be non-negative)
+   * @param newMinCellSize The new minimum cell size in pixels (must be non-negative)
    * @return A new instance with the updated minimum cell size
    * @throws IllegalArgumentException if minCellSize is invalid
    */
@@ -260,7 +260,7 @@ public record CytoplasmSegmentationSettings(
   /**
    * Creates a new instance with updated maximum cell size.
    *
-   * @param newMaxCellSize The new maximum cell size (must be non-negative)
+   * @param newMaxCellSize The new maximum cell size in pixels (must be non-negative)
    * @return A new instance with the updated maximum cell size
    * @throws IllegalArgumentException if maxCellSize is invalid
    */
@@ -283,7 +283,7 @@ public record CytoplasmSegmentationSettings(
   /**
    * Creates a new instance with updated minimum cytoplasm size.
    *
-   * @param newMinCytoplasmSize The new minimum cytoplasm size (must be non-negative)
+   * @param newMinCytoplasmSize The new minimum cytoplasm size in pixels (must be non-negative)
    * @return A new instance with the updated minimum cytoplasm size
    * @throws IllegalArgumentException if minCytoplasmSize is invalid
    */
@@ -301,6 +301,58 @@ public record CytoplasmSegmentationSettings(
         linkNucleusToCytoplasm,
         createCellROIs,
         excludeBorderCells);
+  }
+
+  /**
+   * Get the minimum cell size formatted with scale unit.
+   *
+   * @param mainSettings The main settings containing scale information
+   * @return Formatted string with scale unit
+   */
+  public String getMinCellSizeWithUnit(com.scipath.scipathj.core.config.MainSettings mainSettings) {
+    return mainSettings.formatPixelsWithUnit(minCellSize);
+  }
+
+  /**
+   * Get the maximum cell size formatted with scale unit.
+   *
+   * @param mainSettings The main settings containing scale information
+   * @return Formatted string with scale unit
+   */
+  public String getMaxCellSizeWithUnit(com.scipath.scipathj.core.config.MainSettings mainSettings) {
+    return mainSettings.formatPixelsWithUnit(maxCellSize);
+  }
+
+  /**
+   * Get the minimum cytoplasm size formatted with scale unit.
+   *
+   * @param mainSettings The main settings containing scale information
+   * @return Formatted string with scale unit
+   */
+  public String getMinCytoplasmSizeWithUnit(com.scipath.scipathj.core.config.MainSettings mainSettings) {
+    return mainSettings.formatPixelsWithUnit(minCytoplasmSize);
+  }
+
+  /**
+   * Convert a scaled size value to pixels using the provided scale settings.
+   *
+   * @param scaledSize The size in scaled units
+   * @param mainSettings The main settings containing scale information
+   * @return The size converted to pixels
+   */
+  public static double scaledSizeToPixels(double scaledSize, com.scipath.scipathj.core.config.MainSettings mainSettings) {
+    return mainSettings.micrometersToPixels(scaledSize);
+  }
+
+  /**
+   * Convert a pixel size to scaled units using the provided scale settings.
+   *
+   * @param pixelSize The size in pixels
+   * @param mainSettings The main settings containing scale information
+   * @return The size converted to scaled units
+   */
+  public static double pixelsToScaledSize(double pixelSize, com.scipath.scipathj.core.config.MainSettings mainSettings) {
+    return mainSettings.pixelsToMicrometers(pixelSize);
   }
 
   /**

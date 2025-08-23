@@ -68,6 +68,7 @@ public class FeatureExtraction {
     private final List<UserROI> cytoplasmROIs;
     private final List<UserROI> cellROIs;
     private final FeatureExtractionSettings settings;
+    private final com.scipath.scipathj.core.config.MainSettings mainSettings;
 
     // H&E deconvolution (computed once)
     private ImagePlus hematoxylinImage;
@@ -95,7 +96,8 @@ public class FeatureExtraction {
             List<UserROI> nucleusROIs,
             List<UserROI> cytoplasmROIs,
             List<UserROI> cellROIs,
-            FeatureExtractionSettings settings) {
+            FeatureExtractionSettings settings,
+            com.scipath.scipathj.core.config.MainSettings mainSettings) {
 
         this.originalImage = originalImage;
         this.imageFileName = imageFileName != null ? imageFileName : "unknown";
@@ -104,12 +106,29 @@ public class FeatureExtraction {
         this.cytoplasmROIs = cytoplasmROIs != null ? cytoplasmROIs : Collections.emptyList();
         this.cellROIs = cellROIs != null ? cellROIs : Collections.emptyList();
         this.settings = settings != null ? settings : FeatureExtractionSettings.createDefault();
+        this.mainSettings = mainSettings != null ? mainSettings : com.scipath.scipathj.core.config.MainSettings.createDefault();
 
         LOGGER.info("Ultra-Fast FeatureExtraction initialized for image: {} ({} vessels, {} nuclei, {} cytoplasm, {} cells)",
                 this.imageFileName, this.vesselROIs.size(), this.nucleusROIs.size(), this.cytoplasmROIs.size(), this.cellROIs.size());
 
         // Initialize optimizations
         initializeOptimizations();
+    }
+
+    /**
+     * Backward-compatible constructor that uses default MainSettings.
+     */
+    public FeatureExtraction(
+            ImagePlus originalImage,
+            String imageFileName,
+            List<UserROI> vesselROIs,
+            List<UserROI> nucleusROIs,
+            List<UserROI> cytoplasmROIs,
+            List<UserROI> cellROIs,
+            FeatureExtractionSettings settings) {
+
+        this(originalImage, imageFileName, vesselROIs, nucleusROIs, cytoplasmROIs, cellROIs, settings,
+             com.scipath.scipathj.core.config.MainSettings.createDefault());
     }
 
     /**
@@ -287,8 +306,7 @@ public class FeatureExtraction {
             // 6. H&E channel features (if available)
             addHEFeaturesOptimized(roi, imageJRoi, features);
 
-            LOGGER.debug("Extracted {} optimized features for {} ROI: {}", 
-                        features.size(), roiType, roi.getName());
+            
 
         } catch (Exception e) {
             LOGGER.debug("Error in optimized feature extraction for {} {}: {}", roiType, roi.getName(), e.getMessage());
@@ -328,6 +346,7 @@ public class FeatureExtraction {
 
     /**
      * Add basic features using direct ImageJ data.
+     * Keep features in pixel units for classification compatibility.
      */
     private void addBasicFeaturesOptimized(UserROI roi, ImageStatistics stats, Map<String, Object> features) {
         features.put("area", stats.area);
@@ -345,7 +364,8 @@ public class FeatureExtraction {
         if (imageJRoi != null) {
             features.put("perim", imageJRoi.getLength());
         } else {
-            features.put("perim", 2.0 * (roi.getWidth() + roi.getHeight()));
+            double perimeter = 2.0 * (roi.getWidth() + roi.getHeight());
+            features.put("perim", perimeter);
         }
     }
 

@@ -21,11 +21,12 @@ import org.slf4j.LoggerFactory;
  */
 public class CytoplasmSegmentationSettingsDialog extends JDialog {
 
-  private static final Logger LOGGER =
-      LoggerFactory.getLogger(CytoplasmSegmentationSettingsDialog.class);
+   private static final Logger LOGGER =
+       LoggerFactory.getLogger(CytoplasmSegmentationSettingsDialog.class);
 
-  private CytoplasmSegmentationSettings settings;
-  private final ConfigurationManager configManager;
+   private CytoplasmSegmentationSettings settings;
+   private final ConfigurationManager configManager;
+   private final com.scipath.scipathj.core.config.MainSettings mainSettings;
 
   // UI Components
   private JSpinner voronoiExpansionSpinner;
@@ -48,6 +49,7 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
     super(parent, "Cytoplasm Segmentation Settings", true);
     this.configManager = configurationManager;
     this.settings = configManager.loadCytoplasmSegmentationSettings();
+    this.mainSettings = configManager.loadMainSettings();
     initializeDialog();
     loadCurrentSettings();
   }
@@ -132,40 +134,52 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
   }
 
   private void addSizeFilteringRows(JPanel panel, GridBagConstraints gbc) {
-    // Min Cell Size
+    // Min Cell Size - show in scaled units
+    String minCellLabel = "Min Cell Size (" + mainSettings.scaleUnit() + "²):";
+    double minCellScaled = CytoplasmSegmentationSettings.pixelsToScaledSize(
+        CytoplasmSegmentationSettings.DEFAULT_MIN_CELL_SIZE, mainSettings);
     addSpinnerRow(
         panel,
         gbc,
-        "Min Cell Size:",
-        new SpinnerNumberModel(100.0, 1.0, 10000.0, 10.0),
-        "Minimum cell area in pixels");
+        minCellLabel,
+        new SpinnerNumberModel(minCellScaled, 1.0, 10000.0, 10.0),
+        "Minimum cell area in " + mainSettings.scaleUnit() + "² (converted to pixels automatically)");
     minCellSizeSpinner = (JSpinner) panel.getComponent(panel.getComponentCount() - 1);
 
-    // Max Cell Size
+    // Max Cell Size - show in scaled units
+    String maxCellLabel = "Max Cell Size (" + mainSettings.scaleUnit() + "²):";
+    double maxCellScaled = CytoplasmSegmentationSettings.pixelsToScaledSize(
+        CytoplasmSegmentationSettings.DEFAULT_MAX_CELL_SIZE, mainSettings);
     addSpinnerRow(
         panel,
         gbc,
-        "Max Cell Size:",
-        new SpinnerNumberModel(5000.0, 1.0, 100000.0, 100.0),
-        "Maximum cell area in pixels");
+        maxCellLabel,
+        new SpinnerNumberModel(maxCellScaled, 1.0, 100000.0, 100.0),
+        "Maximum cell area in " + mainSettings.scaleUnit() + "² (converted to pixels automatically)");
     maxCellSizeSpinner = (JSpinner) panel.getComponent(panel.getComponentCount() - 1);
 
-    // Min Cytoplasm Area
+    // Min Cytoplasm Area - show in scaled units
+    String minCytoplasmLabel = "Min Cytoplasm Area (" + mainSettings.scaleUnit() + "²):";
+    double minCytoplasmScaled = CytoplasmSegmentationSettings.pixelsToScaledSize(
+        CytoplasmSegmentationSettings.DEFAULT_MIN_CYTOPLASM_SIZE, mainSettings);
     addSpinnerRow(
         panel,
         gbc,
-        "Min Cytoplasm Area:",
-        new SpinnerNumberModel(50.0, 1.0, 10000.0, 5.0),
-        "Minimum cytoplasm area in pixels");
+        minCytoplasmLabel,
+        new SpinnerNumberModel(minCytoplasmScaled, 1.0, 10000.0, 5.0),
+        "Minimum cytoplasm area in " + mainSettings.scaleUnit() + "² (converted to pixels automatically)");
     minCytoplasmAreaSpinner = (JSpinner) panel.getComponent(panel.getComponentCount() - 1);
 
-    // Max Cytoplasm Area
+    // Max Cytoplasm Area - show in scaled units
+    String maxCytoplasmLabel = "Max Cytoplasm Area (" + mainSettings.scaleUnit() + "²):";
+    double maxCytoplasmScaled = CytoplasmSegmentationSettings.pixelsToScaledSize(
+        CytoplasmSegmentationSettings.DEFAULT_MAX_CYTOPLASM_AREA, mainSettings);
     addSpinnerRow(
         panel,
         gbc,
-        "Max Cytoplasm Area:",
-        new SpinnerNumberModel(3000.0, 1.0, 100000.0, 50.0),
-        "Maximum cytoplasm area in pixels");
+        maxCytoplasmLabel,
+        new SpinnerNumberModel(maxCytoplasmScaled, 1.0, 100000.0, 50.0),
+        "Maximum cytoplasm area in " + mainSettings.scaleUnit() + "² (converted to pixels automatically)");
     maxCytoplasmAreaSpinner = (JSpinner) panel.getComponent(panel.getComponentCount() - 1);
   }
 
@@ -280,16 +294,27 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
     // Note: CytoplasmSegmentationSettings is now a record with different parameters
     // Using available parameters and defaults for missing ones
     useVesselExclusionCheck.setSelected(settings.useVesselExclusion());
-    minCellSizeSpinner.setValue(settings.minCellSize());
-    maxCellSizeSpinner.setValue(settings.maxCellSize());
-    minCytoplasmAreaSpinner.setValue(settings.minCytoplasmSize());
+
+    // Convert pixel values to scaled units for display
+    double minCellScaled = CytoplasmSegmentationSettings.pixelsToScaledSize(
+        settings.minCellSize(), mainSettings);
+    double maxCellScaled = CytoplasmSegmentationSettings.pixelsToScaledSize(
+        settings.maxCellSize(), mainSettings);
+    double minCytoplasmScaled = CytoplasmSegmentationSettings.pixelsToScaledSize(
+        settings.minCytoplasmSize(), mainSettings);
+    double maxCytoplasmScaled = CytoplasmSegmentationSettings.pixelsToScaledSize(
+        CytoplasmSegmentationSettings.DEFAULT_MAX_CYTOPLASM_AREA, mainSettings);
+
+    minCellSizeSpinner.setValue(minCellScaled);
+    maxCellSizeSpinner.setValue(maxCellScaled);
+    minCytoplasmAreaSpinner.setValue(minCytoplasmScaled);
+    maxCytoplasmAreaSpinner.setValue(maxCytoplasmScaled);
 
     // Set defaults for parameters not in the new record
     voronoiExpansionSpinner.setValue(5.0); // Default value
     gaussianBlurSigmaSpinner.setValue(1.5); // Default value
     morphClosingRadiusSpinner.setValue(2); // Default value
     watershedToleranceSpinner.setValue(10.0); // Default value
-    maxCytoplasmAreaSpinner.setValue(10000.0); // Default value
     fillHolesCheck.setSelected(true); // Default value
     smoothBoundariesCheck.setSelected(true); // Default value
     verboseCheck.setSelected(false); // Default value
@@ -440,6 +465,17 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
       }
 
       try {
+        // Convert scaled values back to pixels
+        double minCellScaled = ((Number) minCellSizeSpinner.getValue()).doubleValue();
+        double maxCellScaled = ((Number) maxCellSizeSpinner.getValue()).doubleValue();
+        double minCytoplasmScaled = ((Number) minCytoplasmAreaSpinner.getValue()).doubleValue();
+        double maxCytoplasmScaled = ((Number) maxCytoplasmAreaSpinner.getValue()).doubleValue();
+
+        double minCellPixels = CytoplasmSegmentationSettings.scaledSizeToPixels(minCellScaled, mainSettings);
+        double maxCellPixels = CytoplasmSegmentationSettings.scaledSizeToPixels(maxCellScaled, mainSettings);
+        double minCytoplasmPixels = CytoplasmSegmentationSettings.scaledSizeToPixels(minCytoplasmScaled, mainSettings);
+        double maxCytoplasmPixels = CytoplasmSegmentationSettings.scaledSizeToPixels(maxCytoplasmScaled, mainSettings);
+
         // Create new immutable settings instance with updated values
         // Note: CytoplasmSegmentationSettings record has specific parameters:
         // useVesselExclusion, addImageBorder, borderWidth, applyVoronoi,
@@ -451,9 +487,9 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
                 true, // addImageBorder - default
                 1, // borderWidth - default
                 true, // applyVoronoi - default
-                ((Number) minCellSizeSpinner.getValue()).doubleValue(),
-                ((Number) maxCellSizeSpinner.getValue()).doubleValue(),
-                ((Number) minCytoplasmAreaSpinner.getValue()).doubleValue(),
+                minCellPixels,
+                maxCellPixels,
+                minCytoplasmPixels,
                 true, // validateCellShape - default
                 5.0, // maxAspectRatio - default
                 true, // linkNucleusToCytoplasm - default

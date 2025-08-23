@@ -29,9 +29,9 @@ public class PipelineRegistry {
     // H&E Liver Pipeline - Currently available
     AVAILABLE_PIPELINES.add(
         new PipelineInfo(
-            "liver_he",
-            "H&E Liver",
-            "Histopathological analysis of liver tissue stained with Hematoxylin and Eosin",
+            "full_he",
+            "Full H&E Analysis",
+            "Histopathological analysis of parenchymatous tissues stained with H&E - batch or single image analysis",
             true,
             new String[] {
               "Vessel Segmentation",
@@ -45,9 +45,9 @@ public class PipelineRegistry {
     // H&E Kidney Pipeline - Coming soon
     AVAILABLE_PIPELINES.add(
         new PipelineInfo(
-            "kidney_he",
-            "H&E Kidney",
-            "Histopathological analysis of kidney tissue stained with Hematoxylin and Eosin",
+            "dataset_creator",
+            "Create Dataset",
+            "Select your cells and create a custom classification model",
             false,
             new String[] {
               "Vessel Segmentation",
@@ -61,9 +61,9 @@ public class PipelineRegistry {
     // H&E White Adipose Tissue Pipeline - Coming soon
     AVAILABLE_PIPELINES.add(
         new PipelineInfo(
-            "wat_he",
-            "H&E White Adipose Tissue",
-            "Histopathological analysis of white adipose tissue stained with Hematoxylin and Eosin",
+            "View_Results",
+            "View Results",
+            "Visualize the features and classes of your segmented cells",
             false,
             new String[] {
               "Vessel Segmentation",

@@ -21,11 +21,12 @@ import org.slf4j.LoggerFactory;
  */
 public class NuclearSegmentationSettingsDialog extends JDialog {
 
-  private static final Logger LOGGER =
-      LoggerFactory.getLogger(NuclearSegmentationSettingsDialog.class);
+   private static final Logger LOGGER =
+       LoggerFactory.getLogger(NuclearSegmentationSettingsDialog.class);
 
-  private NuclearSegmentationSettings settings;
-  private final ConfigurationManager configManager;
+   private NuclearSegmentationSettings settings;
+   private final ConfigurationManager configManager;
+   private final com.scipath.scipathj.core.config.MainSettings mainSettings;
 
   // UI Components
   private JComboBox<String> modelChoiceCombo;
@@ -49,6 +50,7 @@ public class NuclearSegmentationSettingsDialog extends JDialog {
     super(parent, "Nuclear Segmentation Settings", true);
     this.configManager = configurationManager;
     this.settings = configManager.loadNuclearSegmentationSettings();
+    this.mainSettings = configManager.loadMainSettings();
     initializeDialog();
     loadCurrentSettings();
   }
@@ -204,30 +206,36 @@ public class NuclearSegmentationSettingsDialog extends JDialog {
   }
 
   private void addSizeFilteringRows(JPanel panel, GridBagConstraints gbc) {
-    // Min Nucleus Size
+    // Min Nucleus Size - show in scaled units
+    String minNucleusLabel = "Min Nucleus Size (" + mainSettings.scaleUnit() + "):";
+    double minNucleusScaled = NuclearSegmentationSettings.pixelsToScaledSize(
+        NuclearSegmentationSettings.DEFAULT_MIN_NUCLEUS_SIZE, mainSettings);
     addSpinnerRow(
         panel,
         gbc,
-        "Min Nucleus Size:",
+        minNucleusLabel,
         new SpinnerNumberModel(
-            Double.valueOf(10.0),
-            Double.valueOf(1.0),
+            Double.valueOf(minNucleusScaled),
+            Double.valueOf(0.1),
             Double.valueOf(10000.0),
-            Double.valueOf(1.0)),
-        "Minimum nucleus area in pixels");
+            Double.valueOf(0.1)),
+        "Minimum nucleus area in " + mainSettings.scaleUnit() + " (converted to pixels automatically)");
     minNucleusSizeSpinner = (JSpinner) panel.getComponent(panel.getComponentCount() - 1);
 
-    // Max Nucleus Size
+    // Max Nucleus Size - show in scaled units
+    String maxNucleusLabel = "Max Nucleus Size (" + mainSettings.scaleUnit() + "):";
+    double maxNucleusScaled = NuclearSegmentationSettings.pixelsToScaledSize(
+        NuclearSegmentationSettings.DEFAULT_MAX_NUCLEUS_SIZE, mainSettings);
     addSpinnerRow(
         panel,
         gbc,
-        "Max Nucleus Size:",
+        maxNucleusLabel,
         new SpinnerNumberModel(
-            Double.valueOf(1000.0),
-            Double.valueOf(1.0),
+            Double.valueOf(maxNucleusScaled),
+            Double.valueOf(0.1),
             Double.valueOf(100000.0),
-            Double.valueOf(10.0)),
-        "Maximum nucleus area in pixels");
+            Double.valueOf(1.0)),
+        "Maximum nucleus area in " + mainSettings.scaleUnit() + " (converted to pixels automatically)");
     maxNucleusSizeSpinner = (JSpinner) panel.getComponent(panel.getComponentCount() - 1);
   }
 
@@ -379,8 +387,15 @@ public class NuclearSegmentationSettingsDialog extends JDialog {
     nmsThreshSlider.setValue(Math.round(settings.nmsThresh() * 100));
     nTilesSpinner.setValue(settings.nTiles());
     excludeBoundarySpinner.setValue(settings.excludeBoundary());
-    minNucleusSizeSpinner.setValue(settings.minNucleusSize());
-    maxNucleusSizeSpinner.setValue(settings.maxNucleusSize());
+
+    // Convert pixel values to scaled units for display
+    double minNucleusScaled = NuclearSegmentationSettings.pixelsToScaledSize(
+        settings.minNucleusSize(), mainSettings);
+    double maxNucleusScaled = NuclearSegmentationSettings.pixelsToScaledSize(
+        settings.maxNucleusSize(), mainSettings);
+    minNucleusSizeSpinner.setValue(minNucleusScaled);
+    maxNucleusSizeSpinner.setValue(maxNucleusScaled);
+
     verboseCheck.setSelected(settings.verbose());
     showProgressCheck.setSelected(settings.showCsbdeepProgress());
     showProbDistCheck.setSelected(settings.showProbAndDist());
@@ -520,6 +535,12 @@ public class NuclearSegmentationSettingsDialog extends JDialog {
       }
 
       try {
+        // Convert scaled values back to pixels
+        double minNucleusScaled = ((Number) minNucleusSizeSpinner.getValue()).doubleValue();
+        double maxNucleusScaled = ((Number) maxNucleusSizeSpinner.getValue()).doubleValue();
+        double minNucleusPixels = NuclearSegmentationSettings.scaledSizeToPixels(minNucleusScaled, mainSettings);
+        double maxNucleusPixels = NuclearSegmentationSettings.scaledSizeToPixels(maxNucleusScaled, mainSettings);
+
         // Create new immutable settings instance with updated values
         settings =
             new NuclearSegmentationSettings(
@@ -536,8 +557,8 @@ public class NuclearSegmentationSettingsDialog extends JDialog {
                 verboseCheck.isSelected(),
                 showProgressCheck.isSelected(),
                 showProbDistCheck.isSelected(),
-                ((Number) minNucleusSizeSpinner.getValue()).doubleValue(),
-                ((Number) maxNucleusSizeSpinner.getValue()).doubleValue());
+                minNucleusPixels,
+                maxNucleusPixels);
 
         // Save to file
         configManager.saveNuclearSegmentationSettings(settings);

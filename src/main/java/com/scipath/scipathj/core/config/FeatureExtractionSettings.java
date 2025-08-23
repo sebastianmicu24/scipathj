@@ -164,6 +164,140 @@ public record FeatureExtractionSettings(
   }
 
   /**
+   * Check if a feature is scale-dependent (i.e., represents a size measurement).
+   *
+   * @param featureName The name of the feature to check
+   * @return true if the feature represents a size measurement that should be scale-aware
+   */
+  public static boolean isScaleDependentFeature(String featureName) {
+    // Size-related features that should be converted to scaled units
+    String[] scaleDependentFeatures = {
+        "area", "perim", "width", "height", "major", "minor", "feret", "feretx", "ferety", "minferet",
+        "mean", "stddev", "min", "max", "median", "intden", "skew", "kurt",
+        "hema_mean", "hema_stddev", "hema_min", "hema_max", "hema_median", "hema_skew", "hema_kurt",
+        "eosin_mean", "eosin_stddev", "eosin_min", "eosin_max", "eosin_median", "eosin_skew", "eosin_kurt"
+    };
+
+    for (String scaleFeature : scaleDependentFeatures) {
+      if (scaleFeature.equals(featureName)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Check if a feature is area-dependent (i.e., represents an area measurement).
+   *
+   * @param featureName The name of the feature to check
+   * @return true if the feature represents an area measurement
+   */
+  public static boolean isAreaDependentFeature(String featureName) {
+    // Area-related features that should be converted to squared scaled units (μm², mm², etc.)
+    String[] areaFeatures = {"area", "intden"};
+
+    for (String areaFeature : areaFeatures) {
+      if (areaFeature.equals(featureName)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Convert a feature value to scaled units for display purposes only.
+   * This should NOT be used for classification since the model was trained on pixel values.
+   *
+   * @param featureName The name of the feature
+   * @param pixelValue The value in pixels
+   * @param mainSettings The main settings containing scale information
+   * @return The converted value in scaled units (for display only)
+   */
+  public static double convertFeatureToScaledUnitsForDisplay(String featureName, double pixelValue,
+                                                  com.scipath.scipathj.core.config.MainSettings mainSettings) {
+    String lowerFeatureName = featureName.toLowerCase();
+    double scaleFactor = mainSettings.pixelsPerMicrometer();
+
+    if (isNucleusAreaFeature(featureName) || isAreaFeature(featureName)) {
+      // Area features: pixels² → μm² (divide by scale²)
+      return pixelValue / (scaleFactor * scaleFactor);
+    } else if (isLinearSizeFeature(featureName) || isPositionFeature(featureName)) {
+      // Linear features: pixels → μm (divide by scale)
+      return pixelValue / scaleFactor;
+    } else {
+      // Non-scale dependent features remain unchanged
+      return pixelValue;
+    }
+  }
+
+  /**
+   * Check if feature is a nucleus area feature.
+   */
+  private static boolean isNucleusAreaFeature(String featureName) {
+    String lower = featureName.toLowerCase();
+    return lower.contains("nucleus") && (lower.contains("area") || lower.equals("area"));
+  }
+
+  /**
+   * Check if feature is a vessel area feature.
+   */
+  private static boolean isVesselAreaFeature(String featureName) {
+    String lower = featureName.toLowerCase();
+    return lower.contains("vessel") && lower.contains("area");
+  }
+
+  /**
+   * Check if feature is a linear size feature (perimeter, feret distances).
+   */
+  private static boolean isLinearSizeFeature(String featureName) {
+    String lower = featureName.toLowerCase();
+    return lower.contains("perim") || lower.contains("feret") ||
+           lower.contains("major") || lower.contains("minor") ||
+           lower.contains("width") || lower.contains("height") ||
+           lower.contains("mean") || lower.contains("stddev") ||
+           lower.contains("min") || lower.contains("max") ||
+           lower.contains("median") || lower.contains("skew") ||
+           lower.contains("kurt");
+  }
+
+  /**
+   * Check if feature is a position feature.
+   */
+  private static boolean isPositionFeature(String featureName) {
+    String lower = featureName.toLowerCase();
+    return lower.equals("x") || lower.equals("y") ||
+           lower.equals("xm") || lower.equals("ym") ||
+           lower.contains("distance") || lower.contains("radius");
+  }
+
+  /**
+   * Check if feature is an area feature.
+   */
+  private static boolean isAreaFeature(String featureName) {
+    String lower = featureName.toLowerCase();
+    return lower.equals("area") || lower.contains("area") ||
+           lower.equals("intden") || lower.equals("solidity");
+  }
+
+  /**
+   * Get the appropriate unit string for a feature based on its type.
+   *
+   * @param featureName The name of the feature
+   * @param mainSettings The main settings containing scale information
+   * @return The unit string (e.g., "μm", "μm²", "") for the feature
+   */
+  public static String getFeatureUnit(String featureName,
+                                     com.scipath.scipathj.core.config.MainSettings mainSettings) {
+    if (isAreaDependentFeature(featureName)) {
+      return mainSettings.scaleUnit() + "²";
+    } else if (isScaleDependentFeature(featureName)) {
+      return mainSettings.scaleUnit();
+    } else {
+      return ""; // Dimensionless or count features
+    }
+  }
+
+  /**
    * Count the total number of enabled features.
    */
   private int countEnabledFeatures() {

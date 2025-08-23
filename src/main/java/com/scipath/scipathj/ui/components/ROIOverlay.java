@@ -513,8 +513,6 @@ public class ROIOverlay extends JComponent {
     bufferValid = false;
     repaint();
 
-    LOGGER.debug("Set {} ROIs for image '{}' (all ROIs kept for filtering during render)",
-        displayedROIs.size(), imageFileName, rois != null ? rois.size() : 0);
   }
 
   public void setImageTransform(double scaleX, double scaleY, double offsetX, double offsetY) {
@@ -700,15 +698,39 @@ public class ROIOverlay extends JComponent {
       MainSettings.ROICategory category = determineROICategory(hoveredROI);
       String roiType = category.getDisplayName();
       String roiId = String.valueOf(hoveredROI.getName());
-      String cellType = ""; // Will be used for cell classification later
+
+      // Get classification result for this ROI
+      // Try multiple key formats to handle different classification result storage methods
+      String cellType = null;
+
+      // First try the format used by CellClassification: imageName_ROIType_ID
+      String primaryKey = currentImageFileName + "_" + hoveredROI.getName();
+      cellType = ROIManager.getInstance().getClassificationTooltipText(primaryKey);
+
+      // If not found, try the entity format: Entity_ID (for biological entities)
+      if (cellType == null || cellType.contains("not classified")) {
+          // Extract ID from ROI name (e.g., "Cell_123" -> "123")
+          String roiName = hoveredROI.getName();
+          if (roiName.contains("_")) {
+              String entityId = roiName.substring(roiName.lastIndexOf("_") + 1);
+              String entityKey = "Entity_" + entityId;
+              cellType = ROIManager.getInstance().getClassificationTooltipText(entityKey);
+          }
+      }
+
+      // If still not found, try the colon-separated format as fallback
+      if (cellType == null || cellType.contains("not classified")) {
+          String fallbackKey = currentImageFileName + ":" + hoveredROI.getName();
+          cellType = ROIManager.getInstance().getClassificationTooltipText(fallbackKey);
+      }
 
       // Create tooltip text
       String tooltipText = String.format(
           "<html><b>ROI Information</b><br/>" +
           "ROI Type: %s<br/>" +
           "ROI ID: %s<br/>" +
-          "Cell Type: %s</html>",
-          roiType, roiId, cellType.isEmpty() ? "(Not classified)" : cellType);
+          "%s</html>",
+          roiType, roiId, cellType);
 
       // Set tooltip on the overlay
       setToolTipText(tooltipText);

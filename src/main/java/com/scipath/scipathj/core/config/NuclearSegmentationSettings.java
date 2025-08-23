@@ -489,7 +489,7 @@ public record NuclearSegmentationSettings(
   /**
    * Creates a new instance with updated minimum nucleus size.
    *
-   * @param newMinNucleusSize The new minimum nucleus size (must be non-negative)
+   * @param newMinNucleusSize The new minimum nucleus size in pixels (must be non-negative)
    * @return A new instance with the updated minimum nucleus size
    * @throws IllegalArgumentException if minNucleusSize is invalid
    */
@@ -515,7 +515,7 @@ public record NuclearSegmentationSettings(
   /**
    * Creates a new instance with updated maximum nucleus size.
    *
-   * @param newMaxNucleusSize The new maximum nucleus size (must be non-negative)
+   * @param newMaxNucleusSize The new maximum nucleus size in pixels (must be non-negative)
    * @return A new instance with the updated maximum nucleus size
    * @throws IllegalArgumentException if maxNucleusSize is invalid
    */
@@ -536,6 +536,48 @@ public record NuclearSegmentationSettings(
         showProbAndDist,
         minNucleusSize,
         newMaxNucleusSize);
+  }
+
+  /**
+   * Get the minimum nucleus size formatted with scale unit.
+   *
+   * @param mainSettings The main settings containing scale information
+   * @return Formatted string with scale unit
+   */
+  public String getMinNucleusSizeWithUnit(com.scipath.scipathj.core.config.MainSettings mainSettings) {
+    return mainSettings.formatPixelsWithUnit(minNucleusSize);
+  }
+
+  /**
+   * Get the maximum nucleus size formatted with scale unit.
+   *
+   * @param mainSettings The main settings containing scale information
+   * @return Formatted string with scale unit
+   */
+  public String getMaxNucleusSizeWithUnit(com.scipath.scipathj.core.config.MainSettings mainSettings) {
+    return mainSettings.formatPixelsWithUnit(maxNucleusSize);
+  }
+
+  /**
+   * Convert a scaled size value to pixels using the provided scale settings.
+   *
+   * @param scaledSize The size in scaled units
+   * @param mainSettings The main settings containing scale information
+   * @return The size converted to pixels
+   */
+  public static double scaledSizeToPixels(double scaledSize, com.scipath.scipathj.core.config.MainSettings mainSettings) {
+    return mainSettings.micrometersToPixels(scaledSize);
+  }
+
+  /**
+   * Convert a pixel size to scaled units using the provided scale settings.
+   *
+   * @param pixelSize The size in pixels
+   * @param mainSettings The main settings containing scale information
+   * @return The size converted to scaled units
+   */
+  public static double pixelsToScaledSize(double pixelSize, com.scipath.scipathj.core.config.MainSettings mainSettings) {
+    return mainSettings.pixelsToMicrometers(pixelSize);
   }
 
   /**

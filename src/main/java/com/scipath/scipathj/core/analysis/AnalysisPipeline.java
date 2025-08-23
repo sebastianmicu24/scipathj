@@ -320,7 +320,7 @@ public class AnalysisPipeline {
       // Add ROIs to manager with proper colors
       addROIsToManager(vesselROIs, nucleusROIs, cellROIs, cytoplasmROIs);
 
-      // Step 4: Ultra-Fast Feature Extraction with H&E support
+      // Step 4: Ultra-Fast Feature Extraction with H&E support and scale conversion
       LOGGER.info("Starting ultra-fast feature extraction for image: {}", fileName);
       FeatureExtraction featureExtraction = new FeatureExtraction(
           imagePlus,
@@ -329,11 +329,26 @@ public class AnalysisPipeline {
           (java.util.List<UserROI>) (java.util.List<?>) nucleusROIs, // Cast NucleusROI to UserROI
           (java.util.List<UserROI>) (java.util.List<?>) cytoplasmROIs, // Cast CytoplasmROI to UserROI
           (java.util.List<UserROI>) (java.util.List<?>) cellROIs, // Cast CellROI to UserROI
-          featureExtractionSettings);
+          featureExtractionSettings,
+          mainSettings);
 
       java.util.Map<String, java.util.Map<String, Object>> extractedFeatures = featureExtraction.extractFeatures();
       LOGGER.info("Feature extraction completed for image: {} - extracted features for {} ROIs",
           fileName, extractedFeatures.size());
+
+      // Step 5: Cell Classification using XGBoost
+      LOGGER.info("Starting cell classification for image: {}", fileName);
+      CellClassification cellClassification = new CellClassification(fileName, extractedFeatures);
+      java.util.Map<String, CellClassification.ClassificationResult> classificationResults = cellClassification.classifyCells();
+
+      // Store classification results in the ROI manager for tooltip display
+      if (classificationResults != null && !classificationResults.isEmpty()) {
+          roiManager.setClassificationResults(classificationResults);
+          LOGGER.info("Cell classification completed for image: {} - classified {} ROIs",
+              fileName, classificationResults.size());
+      } else {
+          LOGGER.warn("No classification results generated for image: {}", fileName);
+      }
 
       // Log feature extraction statistics
       LOGGER.info("Feature extraction completed for {} with {} ROIs processed", fileName, extractedFeatures.size());
@@ -342,7 +357,7 @@ public class AnalysisPipeline {
       imagePlus.close();
 
       return ImageAnalysisResult.success(
-          fileName, vesselROIs.size(), nucleusROIs.size(), cellROIs.size(), extractedFeatures);
+          fileName, vesselROIs.size(), nucleusROIs.size(), cellROIs.size(), extractedFeatures, classificationResults);
 
     } catch (ImageProcessingException e) {
       // Re-throw ImageProcessingException as-is
@@ -509,29 +524,38 @@ public class AnalysisPipeline {
       int vesselCount,
       int nucleusCount,
       int cellCount,
-      java.util.Map<String, java.util.Map<String, Object>> extractedFeatures) {
+      java.util.Map<String, java.util.Map<String, Object>> extractedFeatures,
+      java.util.Map<String, CellClassification.ClassificationResult> classificationResults) {
+
+    public static ImageAnalysisResult success(
+        final String fileName, final int vesselCount, final int nucleusCount, final int cellCount,
+        final java.util.Map<String, java.util.Map<String, Object>> extractedFeatures,
+        final java.util.Map<String, CellClassification.ClassificationResult> classificationResults) {
+      return new ImageAnalysisResult(fileName, true, null, vesselCount, nucleusCount, cellCount, extractedFeatures, classificationResults);
+    }
 
     public static ImageAnalysisResult success(
         final String fileName, final int vesselCount, final int nucleusCount, final int cellCount,
         final java.util.Map<String, java.util.Map<String, Object>> extractedFeatures) {
-      return new ImageAnalysisResult(fileName, true, null, vesselCount, nucleusCount, cellCount, extractedFeatures);
+      return new ImageAnalysisResult(fileName, true, null, vesselCount, nucleusCount, cellCount, extractedFeatures, java.util.Map.of());
     }
 
     public static ImageAnalysisResult success(
         final String fileName, final int vesselCount, final int nucleusCount, final int cellCount) {
-      return new ImageAnalysisResult(fileName, true, null, vesselCount, nucleusCount, cellCount, java.util.Map.of());
+      return new ImageAnalysisResult(fileName, true, null, vesselCount, nucleusCount, cellCount, java.util.Map.of(), java.util.Map.of());
     }
 
     public static ImageAnalysisResult failure(final String fileName, final String errorMessage) {
-      return new ImageAnalysisResult(fileName, false, errorMessage, 0, 0, 0, java.util.Map.of());
+      return new ImageAnalysisResult(fileName, false, errorMessage, 0, 0, 0, java.util.Map.of(), java.util.Map.of());
     }
 
     @Override
     public String toString() {
       return success
           ? String.format(
-              "ImageAnalysisResult[%s: vessels=%d, nuclei=%d, cells=%d, features=%d ROIs]",
-              fileName, vesselCount, nucleusCount, cellCount, extractedFeatures.size())
+              "ImageAnalysisResult[%s: vessels=%d, nuclei=%d, cells=%d, features=%d ROIs, classifications=%d ROIs]",
+              fileName, vesselCount, nucleusCount, cellCount, extractedFeatures.size(),
+              classificationResults != null ? classificationResults.size() : 0)
           : String.format("ImageAnalysisResult[%s: FAILED - %s]", fileName, errorMessage);
     }
   }

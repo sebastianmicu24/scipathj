@@ -14,7 +14,7 @@ import ij.gui.Roi;
 import ij.gui.ShapeRoi;
 import ij.plugin.ImageCalculator;
 import ij.process.ByteProcessor;
-import java.awt.*;
+import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
@@ -23,9 +23,16 @@ import org.slf4j.LoggerFactory;
 /**
  * Step 3 of the analysis pipeline: Cytoplasm Segmentation.
  *
- * Implements Voronoi tessellation-based cytoplasm segmentation using nucleus centers as seeds.
- * Creates cell ROIs using Voronoi tessellation, then creates cytoplasm ROIs by subtracting
- * the nucleus from each cell. Links nuclei to their corresponding cytoplasm regions.
+ * Implements Voronoi tessellation-based cytoplasm segmentation using nucleus centers as point seeds.
+ * This approach creates separate Voronoi regions for each nucleus by using individual center points
+ * rather than filled regions, ensuring proper separation even for touching nuclei.
+ *
+ * Process:
+ * 1. Extract nucleus center coordinates as individual point seeds
+ * 2. Apply Voronoi tessellation using point seeds for proper separation
+ * 3. Create cell ROIs from Voronoi regions
+ * 4. Generate cytoplasm ROIs by subtracting nucleus from cell
+ * 5. Link nuclei to their corresponding cytoplasm regions
  *
  * Based on the SCHELI plugin approach for robust cell segmentation.
  *
@@ -207,24 +214,36 @@ public class CytoplasmSegmentation {
   }
 
   /**
-   * Creates Voronoi tessellation from the nuclei mask.
+   * Creates Voronoi tessellation using nucleus centers as point seeds.
+   * This is the correct approach - Voronoi should work with seed points, not filled regions.
    */
   private ImagePlus createVoronoiTessellation(ImagePlus nucleiMask) {
-    // Create duplicate for Voronoi processing
-    ImagePlus voronoiImage = nucleiMask.duplicate();
-    voronoiImage.setTitle("Voronoi_" + System.currentTimeMillis());
-    voronoiImage.show();
-    hideImageWindow(voronoiImage);
+    int width = nucleiMask.getWidth();
+    int height = nucleiMask.getHeight();
 
-    // Ensure binary format
-    IJ.setThreshold(voronoiImage, 1, 255);
-    IJ.run(voronoiImage, "Convert to Mask", "");
+    // Create a blank image for point seeds
+    ByteProcessor seedProcessor = new ByteProcessor(width, height);
+    seedProcessor.setValue(0);
+    seedProcessor.fill();
 
-    // Apply Voronoi tessellation
+    // Draw nucleus centers as single pixels (the correct way for Voronoi)
+    seedProcessor.setValue(255);
+    for (NucleusROI nucleusROI : nucleusROIs) {
+      int[] center = nucleusROI.getNucleusCenter();
+      if (center != null && center.length >= 2) {
+        int x = Math.max(1, Math.min(width - 2, center[0]));
+        int y = Math.max(1, Math.min(height - 2, center[1]));
+        seedProcessor.putPixel(x, y, 255);
+      }
+    }
+
+    ImagePlus voronoiImage = new ImagePlus("Voronoi_Seeds", seedProcessor);
+
+    // Apply Voronoi tessellation using point seeds
     if (settings.applyVoronoi()) {
       IJ.run(voronoiImage, "Voronoi", "");
 
-      // Threshold to make borders black
+      // Ensure proper binary format
       if (voronoiImage.getBitDepth() != 8) {
         IJ.run(voronoiImage, "8-bit", "");
       }
