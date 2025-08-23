@@ -1021,16 +1021,22 @@ public class CellClassification {
           roiName = roiKey.substring(lastUnderscore + 1);
       }
 
-      // Determine type based on prefix
-      if (roiName.toLowerCase().startsWith("cell_")) {
+      String lowerName = roiName.toLowerCase();
+
+      // Determine type based on flexible pattern matching
+      if (lowerName.startsWith("cell_") || lowerName.contains("cell") || lowerName.endsWith("_cell")) {
           return "Cell ROIs";
-      } else if (roiName.toLowerCase().startsWith("nucleus_")) {
+      } else if (lowerName.startsWith("nucleus_") || lowerName.contains("nucleus") || lowerName.endsWith("_nucleus")) {
           return "Nucleus ROIs";
-      } else if (roiName.toLowerCase().startsWith("cytoplasm_")) {
+      } else if (lowerName.startsWith("cytoplasm_") || lowerName.contains("cytoplasm") ||
+                 lowerName.contains("cyto") || lowerName.endsWith("_cytoplasm") ||
+                 lowerName.startsWith("cyto_") || lowerName.endsWith("_cyto")) {
           return "Cytoplasm ROIs";
-      } else if (roiName.toLowerCase().startsWith("vessel_")) {
+      } else if (lowerName.startsWith("vessel_") || lowerName.contains("vessel") || lowerName.endsWith("_vessel")) {
           return "Vessel ROIs";
       } else {
+          // Debug: Log unknown ROI names to help identify the issue
+          System.out.println("CellClassification: Unknown ROI type for name: '" + roiName + "' (full key: '" + roiKey + "')");
           return "Other ROIs";
       }
   }

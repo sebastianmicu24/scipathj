@@ -299,13 +299,36 @@ public class FeatureDisplayDialog extends JDialog {
 
   private String extractCellType(String roiName) {
     // Extract cell type based on ROI name pattern
-    if (roiName.toLowerCase().contains("vessel")) {
+    String lowerName = roiName.toLowerCase();
+
+    // Check for vessel patterns
+    if (lowerName.contains("vessel") || lowerName.startsWith("vessel_") || lowerName.endsWith("_vessel")) {
       return "Vessel";
-    } else if (roiName.toLowerCase().contains("nucleus")) {
+    }
+    // Check for nucleus patterns
+    else if (lowerName.contains("nucleus") || lowerName.startsWith("nucleus_") || lowerName.endsWith("_nucleus")) {
       return "Nucleus";
-    } else if (roiName.toLowerCase().contains("cytoplasm")) {
+    }
+    // Check for cytoplasm patterns
+    else if (lowerName.contains("cytoplasm") || lowerName.contains("cyto") ||
+             lowerName.startsWith("cytoplasm_") || lowerName.endsWith("_cytoplasm") ||
+             lowerName.startsWith("cyto_") || lowerName.endsWith("_cyto")) {
       return "Cytoplasm";
-    } else {
+    }
+    // Check for cell patterns
+    else if (lowerName.contains("cell") || lowerName.startsWith("cell_") || lowerName.endsWith("_cell")) {
+      return "Cell";
+    }
+    // Additional fallback patterns that might be created during fusion
+    else if (lowerName.contains("biological") || lowerName.contains("entity") || lowerName.contains("combined")) {
+      return "Cell"; // Assume fused biological entities are cells
+    }
+    else if (lowerName.matches("\\d+.*") && lowerName.length() < 10) {
+      return "Unknown"; // Likely an ID number, don't log as it might be normal
+    }
+    else {
+      // Debug: Log unknown ROI names to help identify the issue
+      System.out.println("FeatureDisplayDialog: Unknown ROI type for name: '" + roiName + "'");
       return "Unknown";
     }
   }
