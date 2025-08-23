@@ -84,6 +84,11 @@
         <spotbugs-maven-plugin.version>4.8.6.4</spotbugs-maven-plugin.version>
         <maven-checkstyle-plugin.version>3.5.0</maven-checkstyle-plugin.version>
 
+        <!-- SciPath Performance Configuration -->
+        <scipath.fastMode>false</scipath.fastMode>
+        <scipath.batchSize>50</scipath.batchSize>
+        <scipath.disableHE>false</scipath.disableHE>
+
         <!-- SpotBugs configuration -->
         <spotbugs.threshold>Low</spotbugs.threshold>
     </properties>
@@ -101,6 +106,13 @@
             <groupId>net.imagej</groupId>
             <artifactId>ij</artifactId>
             <version>1.54k</version>
+        </dependency>
+
+        <!-- Colour Deconvolution Plugin -->
+        <dependency>
+            <groupId>sc.fiji</groupId>
+            <artifactId>Colour_Deconvolution</artifactId>
+            <version>3.0.3</version>
         </dependency>
 
         <!-- ImageJ-ImgLib2 Bridge -->
@@ -213,11 +225,11 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${maven-compiler-plugin.version}</version>
                 <configuration>
-                    <release>${maven.compiler.release}</release>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
                     <compilerArgs>
                         <arg>-Xlint:all</arg>
                         <arg>-Xlint:-processing</arg>
-                        <arg>-Xlint:-preview</arg>
                     </compilerArgs>
                     <showWarnings>true</showWarnings>
                     <showDeprecation>true</showDeprecation>
@@ -332,6 +344,20 @@
                 <version>${exec-maven-plugin.version}</version>
                 <configuration>
                     <mainClass>com.scipath.scipathj.SciPathJApplication</mainClass>
+                    <systemProperties>
+                        <systemProperty>
+                            <key>scipath.fastMode</key>
+                            <value>${scipath.fastMode}</value>
+                        </systemProperty>
+                        <systemProperty>
+                            <key>scipath.batchSize</key>
+                            <value>${scipath.batchSize}</value>
+                        </systemProperty>
+                        <systemProperty>
+                            <key>scipath.disableHE</key>
+                            <value>${scipath.disableHE}</value>
+                        </systemProperty>
+                    </systemProperties>
                     <options>
                         <option>--add-opens=java.base/java.lang=ALL-UNNAMED</option>
                         <option>--add-opens=java.base/java.lang.reflect=ALL-UNNAMED</option>

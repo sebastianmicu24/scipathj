@@ -305,5 +305,6 @@ public class StatusPanel extends JPanel {
   public JButton getStopButton() {
     return stopButton;
   }
+
 }
 

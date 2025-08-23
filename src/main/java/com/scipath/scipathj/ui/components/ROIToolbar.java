@@ -29,6 +29,7 @@ public class ROIToolbar extends JPanel {
   private JButton saveROIsButton;
   private JButton saveAllROIsButton;
   private JButton clearAllButton;
+  private JButton featuresButton;
   private JLabel roiCountLabel;
 
   // ROI type filter buttons with checkboxes
@@ -68,6 +69,8 @@ public class ROIToolbar extends JPanel {
      void onShowROIStatistics();
 
      void onChangeROIType(String imageFileName, UserROI.ROIType newType);
+ 
+     void onShowFeatures();
    }
 
   public ROIToolbar() {
@@ -133,6 +136,13 @@ public class ROIToolbar extends JPanel {
     clearAllButton.setForeground(UIConstants.ERROR_COLOR);
     clearAllButton.setPreferredSize(new Dimension(140, 30)); // Slightly less tall
     add(clearAllButton);
+
+    // Features button
+    featuresButton = UIUtils.createButton("Features", UIConstants.SMALL_FONT_SIZE, e -> handleShowFeatures());
+    featuresButton.setIcon(UIUtils.createIcon(FontAwesomeSolid.TABLE, UIConstants.ICON_SIZE_SMALL));
+    featuresButton.setToolTipText("View extracted features");
+    featuresButton.setPreferredSize(new Dimension(140, 30)); // Slightly less tall
+    add(featuresButton);
   }
 
   private void createStatusLabel() {
@@ -576,6 +586,19 @@ public class ROIToolbar extends JPanel {
     });
 
     LOGGER.debug("Requested ROI statistics display");
+  }
+
+  private void handleShowFeatures() {
+    // Notify listeners to show features dialog
+    listeners.forEach(listener -> {
+      try {
+        listener.onShowFeatures();
+      } catch (Exception e) {
+        LOGGER.error("Error notifying ROI features request", e);
+      }
+    });
+
+    LOGGER.debug("Requested features display");
   }
 
 

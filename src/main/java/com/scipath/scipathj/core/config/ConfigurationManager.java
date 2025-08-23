@@ -30,6 +30,7 @@ public class ConfigurationManager {
   private static final String VESSEL_SETTINGS_FILE = "vessel_segmentation.properties";
   private static final String NUCLEAR_SETTINGS_FILE = "nuclear_segmentation.properties";
   private static final String CYTOPLASM_SETTINGS_FILE = "cytoplasm_segmentation.properties";
+  private static final String FEATURE_EXTRACTION_SETTINGS_FILE = "feature_extraction.properties";
   private static final String MAIN_SETTINGS_FILE = "main_settings.properties";
 
   /**
@@ -239,6 +240,41 @@ public class ConfigurationManager {
   public void saveMainSettings(MainSettings settings) {
     saveSettings(
         MAIN_SETTINGS_FILE, "SciPathJ Main Settings", this::createMainProperties, settings);
+  }
+
+  /**
+   * Loads feature extraction settings from the configuration file.
+   *
+   * @return The loaded feature extraction settings, or default settings if file doesn't exist
+   */
+  public FeatureExtractionSettings loadFeatureExtractionSettings() {
+    Path settingsFile = Paths.get(CONFIG_DIR, FEATURE_EXTRACTION_SETTINGS_FILE);
+
+    if (!Files.exists(settingsFile)) {
+      return FeatureExtractionSettings.createDefault();
+    }
+
+    try (InputStream input = Files.newInputStream(settingsFile)) {
+      Properties properties = new Properties();
+      properties.load(input);
+      return loadFeatureExtractionProperties(properties);
+    } catch (IOException e) {
+      LOGGER.error("Error loading feature extraction settings: {}", e.getMessage());
+      return FeatureExtractionSettings.createDefault();
+    }
+  }
+
+  /**
+   * Save feature extraction settings to the properties file.
+   *
+   * @param settings The settings object to save
+   */
+  public void saveFeatureExtractionSettings(FeatureExtractionSettings settings) {
+    saveSettings(
+        FEATURE_EXTRACTION_SETTINGS_FILE,
+        "SciPathJ Feature Extraction Settings",
+        this::createFeatureExtractionProperties,
+        settings);
   }
 
   /**
@@ -729,5 +765,74 @@ public class ConfigurationManager {
    */
   private String colorToString(Color color) {
     return color.getRed() + "," + color.getGreen() + "," + color.getBlue();
+  }
+
+  // === FEATURE EXTRACTION SETTINGS PROPERTY HANDLERS ===
+
+  private FeatureExtractionSettings loadFeatureExtractionProperties(Properties properties) {
+    // Load performance settings
+    boolean enablePerformanceOptimizations = getBooleanProperty(
+        properties, "enablePerformanceOptimizations", FeatureExtractionSettings.DEFAULT_ENABLE_PERFORMANCE_OPTIMIZATIONS);
+    int spatialGridSize = getIntProperty(
+        properties, "spatialGridSize", FeatureExtractionSettings.DEFAULT_SPATIAL_GRID_SIZE);
+    int batchSize = getIntProperty(
+        properties, "batchSize", FeatureExtractionSettings.DEFAULT_BATCH_SIZE);
+    boolean sortROIs = getBooleanProperty(
+        properties, "sortROIs", FeatureExtractionSettings.DEFAULT_SORT_ROIS);
+
+    // Load feature maps for each region type
+    java.util.Map<String, Boolean> cellFeatures = loadFeatureMapFromProperties(
+        properties, "cell", FeatureExtractionSettings.createDefault().cellFeatures());
+    java.util.Map<String, Boolean> nucleusFeatures = loadFeatureMapFromProperties(
+        properties, "nucleus", FeatureExtractionSettings.createDefault().nucleusFeatures());
+    java.util.Map<String, Boolean> cytoplasmFeatures = loadFeatureMapFromProperties(
+        properties, "cytoplasm", FeatureExtractionSettings.createDefault().cytoplasmFeatures());
+    java.util.Map<String, Boolean> vesselFeatures = loadFeatureMapFromProperties(
+        properties, "vessel", FeatureExtractionSettings.createDefault().vesselFeatures());
+
+    return new FeatureExtractionSettings(
+        cellFeatures, nucleusFeatures, cytoplasmFeatures, vesselFeatures,
+        enablePerformanceOptimizations, spatialGridSize, batchSize, sortROIs);
+  }
+
+  private java.util.Map<String, Boolean> loadFeatureMapFromProperties(
+      Properties properties, String regionType, java.util.Map<String, Boolean> defaults) {
+    java.util.Map<String, Boolean> features = new java.util.HashMap<>(defaults);
+
+    // Load each feature from properties
+    for (String featureName : defaults.keySet()) {
+      String propertyKey = regionType + "." + featureName;
+      boolean value = getBooleanProperty(properties, propertyKey, defaults.get(featureName));
+      features.put(featureName, value);
+    }
+
+    return features;
+  }
+
+  private Properties createFeatureExtractionProperties(FeatureExtractionSettings settings) {
+    Properties properties = new Properties();
+
+    // Save performance settings
+    properties.setProperty("enablePerformanceOptimizations",
+        String.valueOf(settings.enablePerformanceOptimizations()));
+    properties.setProperty("spatialGridSize", String.valueOf(settings.spatialGridSize()));
+    properties.setProperty("batchSize", String.valueOf(settings.batchSize()));
+    properties.setProperty("sortROIs", String.valueOf(settings.sortROIs()));
+
+    // Save feature maps for each region type
+    saveFeatureMapToProperties(properties, "cell", settings.cellFeatures());
+    saveFeatureMapToProperties(properties, "nucleus", settings.nucleusFeatures());
+    saveFeatureMapToProperties(properties, "cytoplasm", settings.cytoplasmFeatures());
+    saveFeatureMapToProperties(properties, "vessel", settings.vesselFeatures());
+
+    return properties;
+  }
+
+  private void saveFeatureMapToProperties(
+      Properties properties, String regionType, java.util.Map<String, Boolean> features) {
+    for (java.util.Map.Entry<String, Boolean> entry : features.entrySet()) {
+      String propertyKey = regionType + "." + entry.getKey();
+      properties.setProperty(propertyKey, String.valueOf(entry.getValue()));
+    }
   }
 }

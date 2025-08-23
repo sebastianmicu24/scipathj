@@ -29,7 +29,7 @@ public class StatisticalAnalysis {
   private final List<UserROI> vesselROIs;
   private final List<UserROI> nucleusROIs;
   private final List<UserROI> cytoplasmROIs;
-  private final Map<String, Map<String, Double>> features;
+  private final Map<String, Map<String, Object>> features;
   private final Map<String, ClassificationResult> classifications;
 
   /**
@@ -47,7 +47,7 @@ public class StatisticalAnalysis {
       List<UserROI> vesselROIs,
       List<UserROI> nucleusROIs,
       List<UserROI> cytoplasmROIs,
-      Map<String, Map<String, Double>> features,
+      Map<String, Map<String, Object>> features,
       Map<String, ClassificationResult> classifications) {
     this.imageFileName = imageFileName;
     this.vesselROIs = vesselROIs;

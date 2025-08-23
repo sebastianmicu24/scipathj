@@ -182,7 +182,7 @@ public class UserROI {
   }
 
   public boolean hasComplexShape() {
-    return imageJRoi != null;
+    return imageJRoi != null || type == ROIType.VESSEL;
   }
 
   // Setters for mutable properties

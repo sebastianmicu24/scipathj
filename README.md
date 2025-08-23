@@ -47,6 +47,7 @@ SciPathJ is a professional desktop application for histopathological image analy
 - **Nuclear Segmentation**: Integration with StarDist for state-of-the-art nucleus detection.
 - **Vascular Segmentation**: Thresholding algorithms for vessel detection.
 - **Cytoplasm Segmentation**: Advanced algorithms like Voronoi for cytoplasm analysis.
+- **H&E Color Deconvolution**: Separates H&E stained images into Hematoxylin, Eosin, and Background channels using Ruifrok & Johnston method.
 - Configurable parameters for different tissue types.
 - Automatic image pre-processing.
 
@@ -276,6 +277,52 @@ var nuclearSettings = new NuclearSegmentationSettings(
 - Percentile-based normalization.
 - Management of RGB images with separate channels.
 - Fallback to traditional methods in case of errors.
+
+## H&E Color Deconvolution
+
+SciPathJ includes a high-performance implementation of H&E color deconvolution based on the Ruifrok & Johnston method, identical to Fiji's Color Deconvolution plugin.
+
+### Features
+- **Ultra-fast Processing**: Optimized matrix operations with pre-computed inverse matrices
+- **Standard Stain Vectors**: Uses identical vectors as Fiji for guaranteed compatibility
+- **Three Channel Output**: Hematoxylin, Eosin, and Background channels
+- **Direct Pixel Access**: Bypasses ImageJ overhead for maximum performance
+
+### Algorithm
+The deconvolution process follows these steps:
+1. **RGB to Optical Density**: Convert RGB values to optical density using `OD = -log10(RGB/255.0)`
+2. **Matrix Multiplication**: Apply the inverse stain matrix to separate stains
+3. **Back to RGB**: Convert optical densities back to transmittance values
+
+### Stain Matrix
+```
+Hematoxylin: [0.650, 0.704, 0.286] (Red, Green, Blue)
+Eosin:       [0.072, 0.990, 0.105] (Red, Green, Blue)
+Background:  [0.000, 0.000, 0.000] (computed as cross product)
+```
+
+### Usage Example
+```java
+// Create deconvolution instance
+HEDeconvolution deconvolution = new HEDeconvolution(image);
+
+// Perform deconvolution
+deconvolution.performDeconvolution();
+
+// Get individual channels
+ImagePlus hematoxylin = deconvolution.getHematoxylinImage();
+ImagePlus eosin = deconvolution.getEosinImage();
+ImagePlus background = deconvolution.getBackgroundImage();
+```
+
+### Testing
+Run the test to verify deconvolution works correctly:
+```bash
+mvn exec:java -Dexec.mainClass=com.scipath.scipathj.core.analysis.HEDeconvolutionTest
+```
+
+### Documentation
+For detailed technical information, see [`HE_DECONVOLUTION.md`](HE_DECONVOLUTION.md).
 
 ## Development
 

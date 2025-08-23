@@ -7,6 +7,7 @@ import com.scipath.scipathj.core.config.SegmentationConstants;
 import com.scipath.scipathj.core.config.VesselSegmentationSettings;
 import com.scipath.scipathj.core.engine.SciPathJEngine;
 import com.scipath.scipathj.ui.components.StatusPanel;
+import com.scipath.scipathj.ui.dialogs.FeatureDisplayDialog;
 import com.scipath.scipathj.ui.model.PipelineInfo;
 import java.awt.*;
 import java.io.File;
@@ -40,6 +41,7 @@ public class AnalysisController {
   private PipelineInfo currentPipeline;
   private File currentFolder;
   private int currentImageCount;
+  private java.util.Map<String, java.util.Map<String, Object>> currentFeatures;
 
   /**
    * Creates a new AnalysisController instance.
@@ -186,12 +188,17 @@ public class AnalysisController {
               // Execute the pipeline
               AnalysisPipeline.AnalysisResults results = pipeline.processBatch(imageFiles);
 
+              // Store extracted features for later display
+              if (results.allExtractedFeatures() != null && !results.allExtractedFeatures().isEmpty()) {
+                storeFeatures(results.allExtractedFeatures());
+              }
+
               // Final update
               statusPanel.setProgress(100);
               publish(
                   String.format(
-                      "Analysis completed! Found %d vessels and %d nuclei across %d images.",
-                      results.totalVessels(), results.totalNuclei(), results.processedImages()));
+                      "Analysis completed! Found %d vessels, %d nuclei, and %d cells across %d images.",
+                      results.totalVessels(), results.totalNuclei(), results.totalCells(), results.processedImages()));
 
             } catch (Exception e) {
               LOGGER.error("Error during analysis pipeline execution", e);
@@ -316,5 +323,52 @@ public class AnalysisController {
    */
   public JButton getStopButton() {
     return stopButton;
+  }
+
+  /**
+   * Shows the extracted features in a table dialog.
+   */
+  public void showFeaturesDialog() {
+    if (currentFeatures == null || currentFeatures.isEmpty()) {
+      JOptionPane.showMessageDialog(parentComponent,
+          "No features available. Please run analysis first.",
+          "No Features", JOptionPane.INFORMATION_MESSAGE);
+      return;
+    }
+
+    try {
+      FeatureDisplayDialog dialog = new FeatureDisplayDialog(
+          (java.awt.Frame) SwingUtilities.getWindowAncestor(parentComponent),
+          currentFeatures);
+      dialog.setVisible(true);
+    } catch (Exception e) {
+      LOGGER.error("Error showing features dialog", e);
+      JOptionPane.showMessageDialog(parentComponent,
+          "Error displaying features: " + e.getMessage(),
+          "Display Error", JOptionPane.ERROR_MESSAGE);
+    }
+  }
+
+  /**
+   * Stores the extracted features from analysis results.
+   */
+  public void storeFeatures(java.util.Map<String, java.util.Map<String, Object>> features) {
+    this.currentFeatures = features;
+    LOGGER.debug("Stored {} ROI features from analysis", features.size());
+  }
+
+  /**
+   * Gets the current extracted features.
+   */
+  @SuppressWarnings("unchecked")
+  public java.util.Map<String, java.util.Map<String, Object>> getCurrentFeatures() {
+    return currentFeatures;
+  }
+
+  /**
+   * Checks if features are available.
+   */
+  public boolean hasFeatures() {
+    return currentFeatures != null && !currentFeatures.isEmpty();
   }
 }

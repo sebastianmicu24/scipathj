@@ -20,7 +20,7 @@ public class CellClassification {
   private static final Logger LOGGER = LoggerFactory.getLogger(CellClassification.class);
 
   private final String imageFileName;
-  private final Map<String, Map<String, Double>> features;
+  private final Map<String, Map<String, Object>> features;
 
   /**
    * Constructor for CellClassification.
@@ -29,7 +29,7 @@ public class CellClassification {
    * @param features Previously extracted features for all ROIs
    */
   public CellClassification(
-      final String imageFileName, final Map<String, Map<String, Double>> features) {
+      final String imageFileName, final Map<String, Map<String, Object>> features) {
     this.imageFileName = imageFileName;
     this.features = features != null ? features : new HashMap<>();
 
@@ -93,7 +93,7 @@ public class CellClassification {
    * @param rawFeatures raw extracted features
    * @return preprocessed features ready for classification
    */
-  public Map<String, Double> preprocessFeatures(final Map<String, Double> rawFeatures) {
+  public Map<String, Object> preprocessFeatures(final Map<String, Object> rawFeatures) {
     LOGGER.debug("Preprocessing features (TODO: not implemented)");
 
     // TODO: Implement feature preprocessing:

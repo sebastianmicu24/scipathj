@@ -465,6 +465,13 @@ public class MainWindow extends JFrame {
           }
 
           @Override
+          public void onShowFeatures() {
+            // Show the features dialog through the analysis controller
+            analysisController.showFeaturesDialog();
+            LOGGER.debug("Features dialog requested from ROI toolbar");
+          }
+
+          @Override
           public void onChangeROIType(String imageFileName, UserROI.ROIType newType) {
             LOGGER.debug("ROI type change requested for image {} to type {}", imageFileName, newType);
             // This method is called when ROI types need to be changed

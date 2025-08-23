@@ -2,6 +2,7 @@ package com.scipath.scipathj.core.analysis;
 
 import com.scipath.scipathj.core.config.ConfigurationManager;
 import com.scipath.scipathj.core.config.CytoplasmSegmentationSettings;
+import com.scipath.scipathj.core.config.FeatureExtractionSettings;
 import com.scipath.scipathj.core.config.MainSettings;
 import com.scipath.scipathj.core.config.NuclearSegmentationSettings;
 import com.scipath.scipathj.core.config.SegmentationConstants;
@@ -44,6 +45,7 @@ public class AnalysisPipeline {
   private final VesselSegmentationSettings vesselSettings;
   private final NuclearSegmentationSettings nuclearSettings;
   private final CytoplasmSegmentationSettings cytoplasmSettings;
+  private final FeatureExtractionSettings featureExtractionSettings;
   private final MainSettings mainSettings;
   private final ROIManager roiManager;
 
@@ -69,17 +71,18 @@ public class AnalysisPipeline {
    * @param roiManager the ROI manager instance
    */
   public AnalysisPipeline(
-      final ConfigurationManager configurationManager,
-      final MainSettings mainSettings,
-      final ROIManager roiManager) {
-    this(
-        configurationManager,
-        configurationManager.loadVesselSegmentationSettings(),
-        configurationManager.loadNuclearSegmentationSettings(),
-        configurationManager.loadCytoplasmSegmentationSettings(),
-        mainSettings,
-        roiManager);
-  }
+       final ConfigurationManager configurationManager,
+       final MainSettings mainSettings,
+       final ROIManager roiManager) {
+     this(
+         configurationManager,
+         configurationManager.loadVesselSegmentationSettings(),
+         configurationManager.loadNuclearSegmentationSettings(),
+         configurationManager.loadCytoplasmSegmentationSettings(),
+         configurationManager.loadFeatureExtractionSettings(),
+         mainSettings,
+         roiManager);
+   }
 
   /**
    * Creates a new AnalysisPipeline with custom settings for all segmentation steps.
@@ -89,6 +92,7 @@ public class AnalysisPipeline {
    * @param vesselSettings custom vessel segmentation settings
    * @param nuclearSettings custom nuclear segmentation settings
    * @param cytoplasmSettings custom cytoplasm segmentation settings
+   * @param featureExtractionSettings custom feature extraction settings
    * @param mainSettings the main settings instance
    * @param roiManager the ROI manager instance
    */
@@ -97,6 +101,7 @@ public class AnalysisPipeline {
       final VesselSegmentationSettings vesselSettings,
       final NuclearSegmentationSettings nuclearSettings,
       final CytoplasmSegmentationSettings cytoplasmSettings,
+      final FeatureExtractionSettings featureExtractionSettings,
       final MainSettings mainSettings,
       final ROIManager roiManager) {
     // Defensive copying to prevent exposure of internal representation
@@ -104,6 +109,7 @@ public class AnalysisPipeline {
     this.vesselSettings = vesselSettings; // Settings objects are immutable by design
     this.nuclearSettings = nuclearSettings;
     this.cytoplasmSettings = cytoplasmSettings;
+    this.featureExtractionSettings = featureExtractionSettings; // Settings objects are immutable by design
     this.mainSettings = mainSettings; // MainSettings is immutable by design
     this.roiManager = roiManager; // ROIManager is a service object, not data
   }
@@ -137,7 +143,7 @@ public class AnalysisPipeline {
   public AnalysisResults processBatch(final File[] imageFiles) {
     if (imageFiles == null || imageFiles.length == 0) {
       LOGGER.warn("No image files provided for batch processing");
-      return new AnalysisResults(0, 0, 0, 0);
+      return new AnalysisResults(0, 0, 0, 0, java.util.Map.of());
     }
 
     if (isProcessing.get()) {
@@ -155,6 +161,7 @@ public class AnalysisPipeline {
     int totalNuclei = 0;
     int totalCells = 0;
     int successfulImages = 0;
+    java.util.Map<String, java.util.Map<String, Object>> allFeatures = new java.util.HashMap<>();
 
     try {
       for (int i = 0; i < imageFiles.length; i++) {
@@ -175,6 +182,11 @@ public class AnalysisPipeline {
             totalNuclei += result.nucleusCount();
             totalCells += result.cellCount();
             successfulImages++;
+
+            // Collect features from this image
+            if (result.extractedFeatures() != null && !result.extractedFeatures().isEmpty()) {
+              allFeatures.putAll(result.extractedFeatures());
+            }
           } else {
             LOGGER.warn("Analysis failed for image: {}", fileName);
           }
@@ -215,7 +227,7 @@ public class AnalysisPipeline {
       totalImages = 0;
     }
 
-    return new AnalysisResults(successfulImages, totalVessels, totalNuclei, totalCells);
+    return new AnalysisResults(successfulImages, totalVessels, totalNuclei, totalCells, allFeatures);
   }
 
   /**
@@ -308,11 +320,29 @@ public class AnalysisPipeline {
       // Add ROIs to manager with proper colors
       addROIsToManager(vesselROIs, nucleusROIs, cellROIs, cytoplasmROIs);
 
+      // Step 4: Ultra-Fast Feature Extraction with H&E support
+      LOGGER.info("Starting ultra-fast feature extraction for image: {}", fileName);
+      FeatureExtraction featureExtraction = new FeatureExtraction(
+          imagePlus,
+          fileName,
+          vesselROIs,
+          (java.util.List<UserROI>) (java.util.List<?>) nucleusROIs, // Cast NucleusROI to UserROI
+          (java.util.List<UserROI>) (java.util.List<?>) cytoplasmROIs, // Cast CytoplasmROI to UserROI
+          (java.util.List<UserROI>) (java.util.List<?>) cellROIs, // Cast CellROI to UserROI
+          featureExtractionSettings);
+
+      java.util.Map<String, java.util.Map<String, Object>> extractedFeatures = featureExtraction.extractFeatures();
+      LOGGER.info("Feature extraction completed for image: {} - extracted features for {} ROIs",
+          fileName, extractedFeatures.size());
+
+      // Log feature extraction statistics
+      LOGGER.info("Feature extraction completed for {} with {} ROIs processed", fileName, extractedFeatures.size());
+
       // Clean up
       imagePlus.close();
 
       return ImageAnalysisResult.success(
-          fileName, vesselROIs.size(), nucleusROIs.size(), cellROIs.size());
+          fileName, vesselROIs.size(), nucleusROIs.size(), cellROIs.size(), extractedFeatures);
 
     } catch (ImageProcessingException e) {
       // Re-throw ImageProcessingException as-is
@@ -455,12 +485,17 @@ public class AnalysisPipeline {
    * Result record for batch analysis operations using Java 16+ record syntax.
    */
   public record AnalysisResults(
-      int processedImages, int totalVessels, int totalNuclei, int totalCells) {
+      int processedImages,
+      int totalVessels,
+      int totalNuclei,
+      int totalCells,
+      java.util.Map<String, java.util.Map<String, Object>> allExtractedFeatures) {
     @Override
     public String toString() {
       return String.format(
-          "AnalysisResults[images=%d, vessels=%d, nuclei=%d, cells=%d]",
-          processedImages, totalVessels, totalNuclei, totalCells);
+          "AnalysisResults[images=%d, vessels=%d, nuclei=%d, cells=%d, features=%d ROIs]",
+          processedImages, totalVessels, totalNuclei, totalCells,
+          allExtractedFeatures != null ? allExtractedFeatures.size() : 0);
     }
   }
 
@@ -473,23 +508,30 @@ public class AnalysisPipeline {
       String errorMessage,
       int vesselCount,
       int nucleusCount,
-      int cellCount) {
+      int cellCount,
+      java.util.Map<String, java.util.Map<String, Object>> extractedFeatures) {
+
+    public static ImageAnalysisResult success(
+        final String fileName, final int vesselCount, final int nucleusCount, final int cellCount,
+        final java.util.Map<String, java.util.Map<String, Object>> extractedFeatures) {
+      return new ImageAnalysisResult(fileName, true, null, vesselCount, nucleusCount, cellCount, extractedFeatures);
+    }
 
     public static ImageAnalysisResult success(
         final String fileName, final int vesselCount, final int nucleusCount, final int cellCount) {
-      return new ImageAnalysisResult(fileName, true, null, vesselCount, nucleusCount, cellCount);
+      return new ImageAnalysisResult(fileName, true, null, vesselCount, nucleusCount, cellCount, java.util.Map.of());
     }
 
     public static ImageAnalysisResult failure(final String fileName, final String errorMessage) {
-      return new ImageAnalysisResult(fileName, false, errorMessage, 0, 0, 0);
+      return new ImageAnalysisResult(fileName, false, errorMessage, 0, 0, 0, java.util.Map.of());
     }
 
     @Override
     public String toString() {
       return success
           ? String.format(
-              "ImageAnalysisResult[%s: vessels=%d, nuclei=%d, cells=%d]",
-              fileName, vesselCount, nucleusCount, cellCount)
+              "ImageAnalysisResult[%s: vessels=%d, nuclei=%d, cells=%d, features=%d ROIs]",
+              fileName, vesselCount, nucleusCount, cellCount, extractedFeatures.size())
           : String.format("ImageAnalysisResult[%s: FAILED - %s]", fileName, errorMessage);
     }
   }
