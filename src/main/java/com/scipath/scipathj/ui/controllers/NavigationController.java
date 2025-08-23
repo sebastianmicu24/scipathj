@@ -31,9 +31,11 @@ public class NavigationController {
    * UI State enumeration.
    */
   public enum UIState {
-    PIPELINE_SELECTION,
+    MAIN_MENU,
     FOLDER_SELECTION,
-    IMAGE_GALLERY
+    IMAGE_GALLERY,
+    DATASET_CREATION,
+    RESULTS_VISUALIZATION
   }
 
   private final CardLayout cardLayout;
@@ -44,9 +46,10 @@ public class NavigationController {
   private final SimpleImageGallery imageGallery;
   private final MainImageViewer mainImageViewer;
 
-  private UIState currentState = UIState.PIPELINE_SELECTION;
+  private UIState currentState = UIState.MAIN_MENU;
   private PipelineInfo selectedPipeline;
   private File selectedFolder;
+  private File selectedFile;
 
   // Callback for updating start button state
   private Runnable startButtonStateUpdater;
@@ -121,15 +124,23 @@ public class NavigationController {
   /**
    * Switches to the image gallery view.
    *
-   * @param folder the selected folder
+   * @param folder the selected folder (or parent folder if a single file was selected)
+   * @param selectedFile optional specific file to highlight (if single file was selected)
    */
-  public void switchToImageGallery(File folder) {
+  public void switchToImageGallery(File folder, File selectedFile) {
     this.selectedFolder = folder;
+    this.selectedFile = selectedFile;
     currentState = UIState.IMAGE_GALLERY;
     cardLayout.show(mainContentPanel, UIState.IMAGE_GALLERY.name());
 
-    // Load images into gallery
-    imageGallery.loadImagesFromFolder(selectedFolder);
+    // Load images into gallery - if single file selected, show only that file
+    if (selectedFile != null) {
+      // For single file selection, create an array with just that file
+      imageGallery.loadImagesFromFolder(selectedFolder, selectedFile);
+    } else {
+      // For folder selection, show all images in folder
+      imageGallery.loadImagesFromFolder(selectedFolder);
+    }
 
     // Show analysis buttons in status panel
     statusPanel.showAnalysisButtons();
@@ -141,6 +152,15 @@ public class NavigationController {
     updateStartButtonState();
 
     LOGGER.info("Switched to image gallery view with folder: {}", selectedFolder.getAbsolutePath());
+  }
+
+  /**
+   * Switches to the image gallery view with a folder.
+   *
+   * @param folder the selected folder
+   */
+  public void switchToImageGallery(File folder) {
+    switchToImageGallery(folder, null);
   }
 
   /**
@@ -166,11 +186,11 @@ public class NavigationController {
   }
 
   /**
-   * Switches back to the pipeline selection screen.
+   * Switches to the main menu from folder selection.
    */
-  public void switchToPipelineSelection() {
-    currentState = UIState.PIPELINE_SELECTION;
-    cardLayout.show(mainContentPanel, UIState.PIPELINE_SELECTION.name());
+  public void switchToMainMenuFromFolder() {
+    currentState = UIState.MAIN_MENU;
+    cardLayout.show(mainContentPanel, UIState.MAIN_MENU.name());
 
     // Hide back button
     statusPanel.hideBackButton();
@@ -179,7 +199,78 @@ public class NavigationController {
     statusPanel.hideAnalysisButtons();
 
     // Update status
-    statusPanel.setStatus("Select a pipeline to begin");
+    statusPanel.setStatus("Select an option to begin");
+
+    // Clear selections
+    selectedPipeline = null;
+    selectedFolder = null;
+    folderSelectionPanel.clearSelection();
+
+    // Update start button state
+    updateStartButtonState();
+
+    LOGGER.info("Switched to main menu from folder selection");
+  }
+
+  /**
+   * Switches to the dataset creation panel.
+   */
+  public void switchToDatasetCreation() {
+    currentState = UIState.DATASET_CREATION;
+    cardLayout.show(mainContentPanel, UIState.DATASET_CREATION.name());
+
+    // Show back button
+    statusPanel.showBackButton();
+
+    // Hide analysis buttons (not available in dataset creation)
+    statusPanel.hideAnalysisButtons();
+
+    // Update status
+    statusPanel.setStatus("Dataset creation tools");
+
+    // Update start button state
+    updateStartButtonState();
+
+    LOGGER.info("Switched to dataset creation panel");
+  }
+
+  /**
+   * Switches to the results visualization panel.
+   */
+  public void switchToResultsVisualization() {
+    currentState = UIState.RESULTS_VISUALIZATION;
+    cardLayout.show(mainContentPanel, UIState.RESULTS_VISUALIZATION.name());
+
+    // Show back button
+    statusPanel.showBackButton();
+
+    // Hide analysis buttons (not available in results visualization)
+    statusPanel.hideAnalysisButtons();
+
+    // Update status
+    statusPanel.setStatus("Results visualization tools");
+
+    // Update start button state
+    updateStartButtonState();
+
+    LOGGER.info("Switched to results visualization panel");
+  }
+
+  /**
+   * Switches back to the main menu screen.
+   */
+  public void switchToMainMenu() {
+    currentState = UIState.MAIN_MENU;
+    cardLayout.show(mainContentPanel, UIState.MAIN_MENU.name());
+
+    // Hide back button
+    statusPanel.hideBackButton();
+
+    // Hide analysis buttons
+    statusPanel.hideAnalysisButtons();
+
+    // Update status
+    statusPanel.setStatus("Select an option to begin");
 
     // Clear selections
     selectedPipeline = null;
@@ -190,7 +281,7 @@ public class NavigationController {
     // Update start button state
     updateStartButtonState();
 
-    LOGGER.info("Switched back to pipeline selection");
+    LOGGER.info("Switched back to main menu");
   }
 
   /**

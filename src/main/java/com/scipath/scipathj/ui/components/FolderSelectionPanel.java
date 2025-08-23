@@ -14,17 +14,21 @@ import javax.swing.filechooser.FileSystemView;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 
 /**
- * Panel for selecting input folder containing images to analyze.
- * Supports both button-based selection and drag-and-drop functionality.
+ * Panel for selecting input containing images to analyze.
+ * Supports both folder and single file selection with drag-and-drop functionality.
  */
 public class FolderSelectionPanel extends JPanel {
 
   private File selectedFolder;
-  private JLabel folderPathLabel;
+  private File selectedFile;
+  private boolean isFolderMode = true; // true for folder, false for single file
+  private JLabel pathLabel;
   private JButton clearButton;
-  private JPanel dropArea;
+  private JPanel folderDropArea;
+  private JPanel fileDropArea;
   private ActionListener folderChangeListener;
-  private boolean dragOver = false;
+  private boolean folderDragOver = false;
+  private boolean fileDragOver = false;
 
   public FolderSelectionPanel() {
     initializeComponents();
@@ -36,66 +40,50 @@ public class FolderSelectionPanel extends JPanel {
     setBorder(UIUtils.createPadding(UIConstants.MEDIUM_SPACING, UIConstants.LARGE_SPACING));
     setOpaque(false);
 
-    add(UIUtils.createTitleLabel("Select Input Folder"), BorderLayout.NORTH);
-    add(dropArea = createDropArea(), BorderLayout.CENTER);
-    add(createFolderInfoPanel(), BorderLayout.SOUTH);
+    add(UIUtils.createTitleLabel("Select Input"), BorderLayout.NORTH);
+    add(createDualDropArea(), BorderLayout.CENTER);
+    add(createPathInfoPanel(), BorderLayout.SOUTH);
   }
 
-  private JPanel createDropArea() {
-    JPanel panel =
-        new JPanel() {
-          @Override
-          protected void paintComponent(Graphics g) {
-            super.paintComponent(g);
-            paintDropAreaBackground(g);
-          }
-        };
+  private JPanel createDualDropArea() {
+    JPanel container = UIUtils.createPanel(new GridLayout(1, 2, UIConstants.LARGE_SPACING, 0));
 
-    panel.setLayout(new GridBagLayout());
-    panel.setPreferredSize(new Dimension(600, 280));
-    panel.setOpaque(false);
+    // Folder drop area
+    folderDropArea = createDropArea(true);
+    container.add(folderDropArea);
 
-    addDropAreaContent(panel);
+    // File drop area
+    fileDropArea = createDropArea(false);
+    container.add(fileDropArea);
+
+    return container;
+  }
+
+  private JPanel createDropArea(boolean isFolder) {
+    JPanel panel = new JPanel(new BorderLayout());
+    panel.setPreferredSize(new Dimension(280, 200));
+    panel.setBorder(BorderFactory.createDashedBorder(UIConstants.BORDER_COLOR, 2, 5, 3, true));
+
+    // Content panel
+    JPanel contentPanel = new JPanel(new GridBagLayout());
+    contentPanel.setOpaque(false);
+    panel.add(contentPanel, BorderLayout.CENTER);
+
+    addDropAreaContent(contentPanel, isFolder);
     return panel;
   }
 
-  private void paintDropAreaBackground(Graphics g) {
-    Graphics2D g2d = (Graphics2D) g.create();
-    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-    int width = getWidth();
-    int height = getHeight();
-
-    Color backgroundColor =
-        dragOver
-            ? UIUtils.withAlpha(UIConstants.ACCENT_COLOR, ThemeManager.isDarkTheme() ? 30 : 20)
-            : (ThemeManager.isDarkTheme() ? new Color(255, 255, 255, 5) : new Color(0, 0, 0, 3));
-
-    Color borderColor = dragOver ? UIConstants.ACCENT_COLOR : UIConstants.BORDER_COLOR;
-
-    g2d.setColor(backgroundColor);
-    g2d.fillRoundRect(0, 0, width, height, UIConstants.BORDER_RADIUS, UIConstants.BORDER_RADIUS);
-
-    g2d.setColor(borderColor);
-    g2d.setStroke(
-        new BasicStroke(
-            2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10f, new float[] {10f, 10f}, 0f));
-    g2d.drawRoundRect(
-        1, 1, width - 2, height - 2, UIConstants.BORDER_RADIUS, UIConstants.BORDER_RADIUS);
-
-    g2d.dispose();
-  }
-
-  private void addDropAreaContent(JPanel panel) {
+  private void addDropAreaContent(JPanel panel, boolean isFolder) {
     GridBagConstraints gbc = new GridBagConstraints();
 
-    // Folder icon
+    // Icon
     gbc.gridx = 0;
     gbc.gridy = 0;
     gbc.insets = new Insets(0, 0, UIConstants.LARGE_SPACING, 0);
     panel.add(
         UIUtils.createIconLabel(
-            FontAwesomeSolid.FOLDER_OPEN, 64, UIManager.getColor("Label.disabledForeground")),
+            isFolder ? FontAwesomeSolid.FOLDER_OPEN : FontAwesomeSolid.FILE_IMAGE,
+            48, UIManager.getColor("Label.disabledForeground")),
         gbc);
 
     // Instructions
@@ -103,8 +91,8 @@ public class FolderSelectionPanel extends JPanel {
     gbc.insets = new Insets(0, 0, UIConstants.TINY_SPACING, 0);
     panel.add(
         UIUtils.createLabel(
-            "Drag and drop a folder here",
-            UIConstants.MEDIUM_FONT_SIZE,
+            isFolder ? "Drag and drop a folder here" : "Drag and drop a file here",
+            UIConstants.SMALL_FONT_SIZE,
             UIManager.getColor("Label.disabledForeground")),
         gbc);
 
@@ -113,7 +101,7 @@ public class FolderSelectionPanel extends JPanel {
     panel.add(
         UIUtils.createLabel(
             "or click the button below to browse",
-            UIConstants.MEDIUM_FONT_SIZE,
+            UIConstants.SMALL_FONT_SIZE,
             UIManager.getColor("Label.disabledForeground")),
         gbc);
 
@@ -121,24 +109,27 @@ public class FolderSelectionPanel extends JPanel {
     gbc.gridy++;
     gbc.insets = new Insets(0, 0, 0, 0);
     JButton browseButton =
-        UIUtils.createButton("Browse for Folder", FontAwesomeSolid.SEARCH, e -> browseForFolder());
-    browseButton.setPreferredSize(new Dimension(190, 45));
+        UIUtils.createButton(
+            isFolder ? "Browse for Folder" : "Browse for File",
+            FontAwesomeSolid.SEARCH,
+            isFolder ? e -> browseForFolder() : e -> browseForFile());
+    browseButton.setPreferredSize(new Dimension(160, 40));
     panel.add(browseButton, gbc);
   }
 
-  private JPanel createFolderInfoPanel() {
+  private JPanel createPathInfoPanel() {
     JPanel panel = UIUtils.createPanel(new BorderLayout(UIConstants.MEDIUM_SPACING, 0));
 
     panel.add(
-        UIUtils.createBoldLabel("Selected Folder:", UIConstants.SMALL_FONT_SIZE),
+        UIUtils.createBoldLabel("Selected Path:", UIConstants.SMALL_FONT_SIZE),
         BorderLayout.WEST);
 
-    folderPathLabel =
+    pathLabel =
         UIUtils.createLabel(
-            "No folder selected",
+            "No path selected",
             UIConstants.SMALL_FONT_SIZE,
             UIManager.getColor("Label.disabledForeground"));
-    panel.add(folderPathLabel, BorderLayout.CENTER);
+    panel.add(pathLabel, BorderLayout.CENTER);
 
     clearButton = UIUtils.createButton("Clear", FontAwesomeSolid.TIMES, e -> clearSelection());
     clearButton.setPreferredSize(new Dimension(90, 30));
@@ -149,13 +140,14 @@ public class FolderSelectionPanel extends JPanel {
   }
 
   private void setupDragAndDrop() {
+    // Folder drop area
     new DropTarget(
-        dropArea,
+        folderDropArea,
         new DropTargetListener() {
           @Override
           public void dragEnter(DropTargetDragEvent dtde) {
             if (dtde.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
-              setDragOver(true);
+              setDragOver(true, true);
               dtde.acceptDrag(DnDConstants.ACTION_COPY);
             } else {
               dtde.rejectDrag();
@@ -170,12 +162,12 @@ public class FolderSelectionPanel extends JPanel {
 
           @Override
           public void dragExit(DropTargetEvent dte) {
-            setDragOver(false);
+            setDragOver(false, true);
           }
 
           @Override
           public void drop(DropTargetDropEvent dtde) {
-            setDragOver(false);
+            setDragOver(false, true);
 
             if (dtde.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
               dtde.acceptDrop(DnDConstants.ACTION_COPY);
@@ -198,13 +190,79 @@ public class FolderSelectionPanel extends JPanel {
             dtde.dropComplete(false);
           }
         });
+
+    // File drop area
+    new DropTarget(
+        fileDropArea,
+        new DropTargetListener() {
+          @Override
+          public void dragEnter(DropTargetDragEvent dtde) {
+            if (dtde.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+              setDragOver(true, false);
+              dtde.acceptDrag(DnDConstants.ACTION_COPY);
+            } else {
+              dtde.rejectDrag();
+            }
+          }
+
+          @Override
+          public void dragOver(DropTargetDragEvent dtde) {}
+
+          @Override
+          public void dropActionChanged(DropTargetDragEvent dtde) {}
+
+          @Override
+          public void dragExit(DropTargetEvent dte) {
+            setDragOver(false, false);
+          }
+
+          @Override
+          public void drop(DropTargetDropEvent dtde) {
+            setDragOver(false, false);
+
+            if (dtde.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+              dtde.acceptDrop(DnDConstants.ACTION_COPY);
+
+              try {
+                @SuppressWarnings("unchecked")
+                List<File> files =
+                    (List<File>)
+                        dtde.getTransferable().getTransferData(DataFlavor.javaFileListFlavor);
+
+                if (!files.isEmpty() && files.get(0).isFile()) {
+                  setSelectedFile(files.get(0));
+                  dtde.dropComplete(true);
+                  return;
+                }
+              } catch (Exception ignored) {
+              }
+            }
+
+            dtde.dropComplete(false);
+          }
+        });
   }
 
-  private void setDragOver(boolean dragOver) {
-    if (this.dragOver != dragOver) {
-      this.dragOver = dragOver;
-      dropArea.repaint();
+  private void setDragOver(boolean dragOver, boolean isFolder) {
+    if (isFolder) {
+      if (this.folderDragOver != dragOver) {
+        this.folderDragOver = dragOver;
+        updateDropAreaBorder(true);
+      }
+    } else {
+      if (this.fileDragOver != dragOver) {
+        this.fileDragOver = dragOver;
+        updateDropAreaBorder(false);
+      }
     }
+  }
+
+  private void updateDropAreaBorder(boolean isFolder) {
+    JPanel targetArea = isFolder ? folderDropArea : fileDropArea;
+    boolean dragOver = isFolder ? folderDragOver : fileDragOver;
+
+    Color borderColor = dragOver ? UIConstants.SELECTION_COLOR : UIConstants.BORDER_COLOR;
+    targetArea.setBorder(BorderFactory.createDashedBorder(borderColor, 2, 5, 3, true));
   }
 
   private void browseForFolder() {
@@ -218,12 +276,40 @@ public class FolderSelectionPanel extends JPanel {
     }
   }
 
+  private void browseForFile() {
+    JFileChooser fileChooser = new JFileChooser();
+    fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+    fileChooser.setDialogTitle("Select Image File");
+    fileChooser.setCurrentDirectory(FileSystemView.getFileSystemView().getDefaultDirectory());
+
+    if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+      setSelectedFile(fileChooser.getSelectedFile());
+    }
+  }
+
   public void setSelectedFolder(File folder) {
     this.selectedFolder = folder;
+    this.selectedFile = null;
+    this.isFolderMode = true;
 
     if (folder != null && folder.isDirectory()) {
-      folderPathLabel.setText(folder.getAbsolutePath());
-      folderPathLabel.setForeground(UIManager.getColor("Label.foreground"));
+      pathLabel.setText(folder.getAbsolutePath());
+      pathLabel.setForeground(UIManager.getColor("Label.foreground"));
+      clearButton.setEnabled(true);
+      notifyFolderChange();
+    } else {
+      clearSelection();
+    }
+  }
+
+  public void setSelectedFile(File file) {
+    this.selectedFile = file;
+    this.selectedFolder = file != null ? file.getParentFile() : null;
+    this.isFolderMode = false;
+
+    if (file != null && file.isFile()) {
+      pathLabel.setText(file.getAbsolutePath());
+      pathLabel.setForeground(UIManager.getColor("Label.foreground"));
       clearButton.setEnabled(true);
       notifyFolderChange();
     } else {
@@ -233,8 +319,9 @@ public class FolderSelectionPanel extends JPanel {
 
   public void clearSelection() {
     this.selectedFolder = null;
-    folderPathLabel.setText("No folder selected");
-    folderPathLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+    this.selectedFile = null;
+    pathLabel.setText("No path selected");
+    pathLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
     clearButton.setEnabled(false);
     notifyFolderChange();
   }
@@ -249,8 +336,17 @@ public class FolderSelectionPanel extends JPanel {
     return selectedFolder;
   }
 
+  public File getSelectedFile() {
+    return selectedFile;
+  }
+
   public boolean hasSelection() {
-    return selectedFolder != null && selectedFolder.isDirectory();
+    return (selectedFolder != null && selectedFolder.isDirectory()) ||
+           (selectedFile != null && selectedFile.isFile());
+  }
+
+  public boolean isFolderMode() {
+    return isFolderMode;
   }
 
   public void setFolderChangeListener(ActionListener listener) {

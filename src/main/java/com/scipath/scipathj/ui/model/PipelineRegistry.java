@@ -42,36 +42,32 @@ public class PipelineRegistry {
               "Final Analysis"
             }));
 
-    // H&E Kidney Pipeline - Coming soon
+    // Dataset Creation Pipeline - Now available
     AVAILABLE_PIPELINES.add(
         new PipelineInfo(
             "dataset_creator",
             "Create Dataset",
             "Select your cells and create a custom classification model",
-            false,
+            true,
             new String[] {
-              "Vessel Segmentation",
-              "Nuclear Segmentation",
-              "Cell Creation",
+              "Cell Selection",
+              "ROI Annotation",
               "Feature Extraction",
-              "Cell Classification",
-              "Final Analysis"
+              "Dataset Export"
             }));
 
-    // H&E White Adipose Tissue Pipeline - Coming soon
+    // Results Visualization Pipeline - Now available
     AVAILABLE_PIPELINES.add(
         new PipelineInfo(
             "View_Results",
             "View Results",
             "Visualize the features and classes of your segmented cells",
-            false,
+            true,
             new String[] {
-              "Vessel Segmentation",
-              "Nuclear Segmentation",
-              "Cell Creation",
-              "Feature Extraction",
-              "Cell Classification",
-              "Final Analysis"
+              "Load Results",
+              "Data Visualization",
+              "Statistical Analysis",
+              "Export Reports"
             }));
   }
 

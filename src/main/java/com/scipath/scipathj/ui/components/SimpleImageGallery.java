@@ -143,13 +143,23 @@ public class SimpleImageGallery extends JPanel {
    * @param folder the folder containing images
    */
   public void loadImagesFromFolder(File folder) {
+    loadImagesFromFolder(folder, null);
+  }
+
+  /**
+   * Loads images from the specified folder, optionally highlighting a specific file.
+   *
+   * @param folder the folder containing images
+   * @param highlightFile optional specific file to highlight (if null, loads all images)
+   */
+  public void loadImagesFromFolder(File folder, File highlightFile) {
     if (folder == null || !folder.exists() || !folder.isDirectory()) {
       LOGGER.warn("Invalid folder provided: {}", folder);
       showEmptyState();
       return;
     }
 
-    if (folder.equals(currentFolder) && !thumbnails.isEmpty()) {
+    if (folder.equals(currentFolder) && !thumbnails.isEmpty() && highlightFile == null) {
       LOGGER.debug("Folder already loaded: {}", folder.getAbsolutePath());
       return;
     }
@@ -172,9 +182,17 @@ public class SimpleImageGallery extends JPanel {
               }
 
               File[] imageFiles = ImageLoader.filterImageFiles(files);
-              Arrays.sort(imageFiles, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
 
-              return imageFiles;
+              if (highlightFile != null) {
+                // If a specific file is to be highlighted, put it first in the list
+                File[] filteredImages = Arrays.stream(imageFiles)
+                    .filter(file -> file.equals(highlightFile))
+                    .toArray(File[]::new);
+                return filteredImages.length > 0 ? filteredImages : imageFiles;
+              } else {
+                Arrays.sort(imageFiles, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+                return imageFiles;
+              }
             })
         .thenAccept(
             imageFiles -> {
@@ -404,6 +422,22 @@ public class SimpleImageGallery extends JPanel {
   private void notifySelectionChange() {
     if (selectionChangeListener != null) {
       selectionChangeListener.actionPerformed(null);
+    }
+  }
+
+  /**
+   * Selects an image by its file.
+   *
+   * @param imageFile the image file to select
+   */
+  public void selectImageByFile(File imageFile) {
+    if (imageFile != null && thumbnails != null) {
+      for (SimpleImageThumbnail thumbnail : thumbnails) {
+        if (thumbnail.getImageFile().equals(imageFile)) {
+          selectThumbnail(thumbnail);
+          break;
+        }
+      }
     }
   }
 

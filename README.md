@@ -14,7 +14,7 @@ SciPathJ is a modern, professional-grade Java software for histopathological ima
 - [Technologies Used](#technologies-used)
 - [Installation](#installation)
 - [Usage](#usage)
-- [Analysis Pipelines](#analysis-pipelines)
+- [Main Functions](#main-functions)
 - [ROI Management](#roi-management)
 - [StarDist Integration](#stardist-integration)
 - [Development](#development)
@@ -194,51 +194,64 @@ The executable will be located at `target/scipathj-1.0.0.jar`.
     ```bash
     java -jar target/scipathj-1.0.0.jar
     ```
-2.  Select an analysis pipeline from the main screen.
-3.  Choose a folder containing the images to be analyzed.
-4.  Navigate the gallery and select the images of interest.
+2.  Choose from three main options on the main menu:
+   - **Perform Analysis**: Run segmentation and classification on tissue images
+   - **Create Dataset**: Select cells and create custom classification models
+   - **Visualize Results**: View and analyze previously processed data
 
 ### Main Workflow
 
-1.  **Pipeline Selection**: Choose from available pipelines and configure their specific parameters.
-2.  **Image Selection**: Select a folder via drag-and-drop or file chooser, then browse the thumbnail gallery.
-3.  **Analysis**: Start the analysis. Monitor progress in the status bar and view results upon completion.
-4.  **ROI Management**: Manually create, edit, or import ROIs. Export ROIs for external analysis.
+1.  **Option Selection**: Choose one of the three main functions from the main menu.
+2.  **Perform Analysis Workflow**:
+   - Select a folder containing images to be analyzed
+   - Browse the thumbnail gallery and select images of interest
+   - Configure analysis parameters and start the analysis
+   - Monitor progress and view results
+   - Manage ROIs and export results
+3.  **Create Dataset Workflow**: Interactive tools for cell selection and dataset creation (coming soon)
+4.  **Visualize Results Workflow**: Tools for viewing and analyzing processed data (coming soon)
 
-## Analysis Pipelines
+## Main Functions
 
-### Available Pipelines
+SciPathJ provides three main functions accessible from the main menu:
 
-#### 1. H&E Liver Analysis
-- Nuclear segmentation with StarDist for accurate nucleus detection.
-- Vascular segmentation using adaptive thresholding.
-- Cytoplasm segmentation with improved Voronoi tessellation using nucleus center points as seeds, ensuring proper separation of touching nuclei with perpendicular bisector boundaries.
-- Morphological feature extraction from segmented regions.
-- Tissue classification based on extracted features.
+### 1. Perform Analysis
+**Status: Available**
 
-#### 2. Nuclear Segmentation
-- High-performance nucleus detection with StarDist.
-- Filtering by size and shape.
-- Export of nuclear statistics and ROIs.
+Run comprehensive segmentation and classification on tissue images using advanced algorithms:
 
-#### 3. Vascular Analysis
-- Blood vessel segmentation using adaptive thresholding.
-- Vascular density analysis and morphological measurements.
+- **Nuclear Segmentation**: StarDist deep learning for accurate nucleus detection
+- **Vascular Segmentation**: Adaptive thresholding for blood vessel identification
+- **Cytoplasm Segmentation**: Advanced Voronoi tessellation using nucleus center points as seeds
+- **Feature Extraction**: Morphological analysis of segmented regions
+- **Tissue Classification**: Automated classification based on extracted features
 
-### Pipeline Configuration
+**Configuration Options**:
+- StarDist model selection (e.g., "Versatile (H&E)")
+- Probability and NMS thresholds for nucleus detection
+- Input normalization and percentile adjustments
+- Tiling parameters for large images
+- Vascular segmentation thresholds and morphological operations
 
-Each pipeline offers specific, type-safe configurations:
+### 2. Create Dataset
+**Status: Coming Soon**
 
-#### Nuclear Segmentation Settings
-- StarDist model selection (e.g., "Versatile (H&E)").
-- Probability and NMS thresholds.
-- Input normalization and percentile adjustments.
-- Tiling parameters for large images.
+Interactive tools for creating custom classification datasets:
 
-#### Vascular Segmentation Settings
-- Intensity threshold and Gaussian blur sigma.
-- Morphological closing operations.
-- Minimum/maximum ROI sizes.
+- Cell selection and annotation tools
+- ROI creation for training data
+- Feature extraction for selected cells
+- Dataset export in standard formats
+
+### 3. Visualize Results
+**Status: Coming Soon**
+
+Tools for analyzing and visualizing previously processed data:
+
+- Load and display analysis results
+- Interactive data visualization
+- Statistical analysis tools
+- Report generation and export
 
 ## ROI Management
 

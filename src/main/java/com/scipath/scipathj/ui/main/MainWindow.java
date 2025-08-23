@@ -4,11 +4,13 @@ import com.scipath.scipathj.core.config.ConfigurationManager;
 import com.scipath.scipathj.core.config.MainSettings;
 import com.scipath.scipathj.core.engine.SciPathJEngine;
 import com.scipath.scipathj.data.model.UserROI;
+import com.scipath.scipathj.ui.components.DatasetCreationPanel;
 import com.scipath.scipathj.ui.components.FolderSelectionPanel;
 import com.scipath.scipathj.ui.components.MainImageViewer;
+import com.scipath.scipathj.ui.components.MainMenuPanel;
 import com.scipath.scipathj.ui.components.MenuBarManager;
 import com.scipath.scipathj.ui.components.PipelineRecapPanel;
-import com.scipath.scipathj.ui.components.PipelineSelectionPanel;
+import com.scipath.scipathj.ui.components.ResultsVisualizationPanel;
 import com.scipath.scipathj.ui.components.ROIManager;
 import com.scipath.scipathj.ui.components.ROIToolbar;
 import com.scipath.scipathj.ui.components.SimpleImageGallery;
@@ -49,7 +51,9 @@ public class MainWindow extends JFrame {
   // UI Components
   private CardLayout cardLayout;
   private JPanel mainContentPanel;
-  private PipelineSelectionPanel pipelineSelectionPanel;
+  private MainMenuPanel mainMenuPanel;
+  private DatasetCreationPanel datasetCreationPanel;
+  private ResultsVisualizationPanel resultsVisualizationPanel;
   private JPanel analysisSetupPanel;
   private PipelineRecapPanel pipelineRecapPanel;
   private FolderSelectionPanel folderSelectionPanel;
@@ -141,12 +145,18 @@ public class MainWindow extends JFrame {
    * Creates the main panels and adds them to the card layout.
    */
   private void createMainPanels() {
-    pipelineSelectionPanel = new PipelineSelectionPanel();
+    mainMenuPanel = new MainMenuPanel();
+    datasetCreationPanel = new DatasetCreationPanel();
+    resultsVisualizationPanel = new ResultsVisualizationPanel();
     analysisSetupPanel = createAnalysisSetupPanel();
     imageViewPanel = createImageViewPanel();
 
     mainContentPanel.add(
-        pipelineSelectionPanel, NavigationController.UIState.PIPELINE_SELECTION.name());
+        mainMenuPanel, NavigationController.UIState.MAIN_MENU.name());
+    mainContentPanel.add(
+        datasetCreationPanel, NavigationController.UIState.DATASET_CREATION.name());
+    mainContentPanel.add(
+        resultsVisualizationPanel, NavigationController.UIState.RESULTS_VISUALIZATION.name());
     mainContentPanel.add(analysisSetupPanel, NavigationController.UIState.FOLDER_SELECTION.name());
     mainContentPanel.add(imageViewPanel, NavigationController.UIState.IMAGE_GALLERY.name());
   }
@@ -303,7 +313,7 @@ public class MainWindow extends JFrame {
     navigationController.setStartButtonStateUpdater(this::updateStartButtonState);
 
     // Set up status panel back button
-    statusPanel.setBackButtonListener(e -> navigationController.switchToPipelineSelection());
+    statusPanel.setBackButtonListener(e -> navigationController.switchToMainMenu());
   }
 
   /**
@@ -326,12 +336,30 @@ public class MainWindow extends JFrame {
    * Sets up event handlers for UI components.
    */
   private void setupEventHandlers() {
-    // Pipeline selection handler
-    pipelineSelectionPanel.setSelectionListener(
+    // Main menu selection handler
+    mainMenuPanel.setOptionSelectedListener(
         e -> {
-          PipelineInfo selectedPipeline = pipelineSelectionPanel.getSelectedPipeline();
+          PipelineInfo selectedPipeline = mainMenuPanel.getSelectedPipeline();
           if (selectedPipeline != null) {
-            navigationController.switchToAnalysisSetup(selectedPipeline);
+            String pipelineId = selectedPipeline.getId();
+
+            switch (pipelineId) {
+              case "full_he":
+                // Analysis workflow - go to folder selection
+                navigationController.switchToAnalysisSetup(selectedPipeline);
+                break;
+              case "dataset_creator":
+                // Dataset creation - go directly to dataset creation panel
+                navigationController.switchToDatasetCreation();
+                break;
+              case "View_Results":
+                // Results visualization - go directly to visualization panel
+                navigationController.switchToResultsVisualization();
+                break;
+              default:
+                LOGGER.warn("Unknown pipeline selected: {}", pipelineId);
+                break;
+            }
           }
         });
 
@@ -339,11 +367,18 @@ public class MainWindow extends JFrame {
     folderSelectionPanel.setFolderChangeListener(
         e -> {
           File selectedFolder = folderSelectionPanel.getSelectedFolder();
+          File selectedFile = folderSelectionPanel.getSelectedFile();
 
           if (selectedFolder != null && selectedFolder.isDirectory()) {
             navigationController.setSelectedFolder(selectedFolder);
             // Switch to image gallery view
-            navigationController.switchToImageGallery(selectedFolder);
+            if (selectedFile != null && selectedFile.isFile()) {
+              // Single file was selected - use parent folder but highlight the specific file
+              navigationController.switchToImageGallery(selectedFolder, selectedFile);
+            } else {
+              // Folder was selected
+              navigationController.switchToImageGallery(selectedFolder);
+            }
           }
 
           updateStartButtonState();
