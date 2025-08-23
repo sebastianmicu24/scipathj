@@ -46,7 +46,7 @@ SciPathJ is a professional desktop application for histopathological image analy
 ### 🔍 Intelligent Segmentation
 - **Nuclear Segmentation**: Integration with StarDist for state-of-the-art nucleus detection.
 - **Vascular Segmentation**: Thresholding algorithms for vessel detection.
-- **Cytoplasm Segmentation**: Advanced algorithms like Voronoi for cytoplasm analysis.
+- **Cytoplasm Segmentation**: Advanced Voronoi tessellation using nucleus center points as seeds for accurate cell boundary detection, including proper handling of touching nuclei with perpendicular bisector separation.
 - **H&E Color Deconvolution**: Separates H&E stained images into Hematoxylin, Eosin, and Background channels using Ruifrok & Johnston method.
 - Configurable parameters for different tissue types.
 - Automatic image pre-processing.
@@ -74,6 +74,17 @@ SciPathJ is a professional desktop application for histopathological image analy
 ## System Architecture
 
 The architecture of SciPathJ is built on modern software engineering principles, emphasizing modularity, testability, and maintainability. The system avoids Singleton patterns in favor of a centralized **Application Context** that manages object lifecycles and handles **Dependency Injection (DI)**.
+
+### Advanced Voronoi Tessellation Implementation
+
+SciPathJ features an advanced Voronoi tessellation implementation specifically designed for accurate cytoplasm segmentation in histopathological images:
+
+- **Point-Based Seeds**: Uses individual nucleus center coordinates as Voronoi seeds rather than filled regions, ensuring each nucleus gets its own distinct seed point.
+- **Touching Nuclei Handling**: Properly separates touching nuclei with perpendicular bisector boundaries, eliminating overlapping ROI regions.
+- **Performance Optimized**: Streamlined algorithm that processes 1992+ nuclei efficiently without complex distance calculations.
+- **Mathematically Correct**: Implements the fundamental Voronoi principle where each seed point generates its own Voronoi cell with proper geometric boundaries.
+
+This approach ensures accurate cell segmentation even in dense tissue regions where nuclei frequently touch or overlap, providing reliable cytoplasm ROI generation for downstream analysis.
 
 ### Project Structure
 
@@ -199,10 +210,11 @@ The executable will be located at `target/scipathj-1.0.0.jar`.
 ### Available Pipelines
 
 #### 1. H&E Liver Analysis
-- Nuclear segmentation with StarDist.
-- Vascular and cytoplasm segmentation.
-- Morphological feature extraction.
-- Tissue classification.
+- Nuclear segmentation with StarDist for accurate nucleus detection.
+- Vascular segmentation using adaptive thresholding.
+- Cytoplasm segmentation with improved Voronoi tessellation using nucleus center points as seeds, ensuring proper separation of touching nuclei with perpendicular bisector boundaries.
+- Morphological feature extraction from segmented regions.
+- Tissue classification based on extracted features.
 
 #### 2. Nuclear Segmentation
 - High-performance nucleus detection with StarDist.

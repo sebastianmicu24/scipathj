@@ -27,15 +27,21 @@ public class FeatureDisplayDialog extends JDialog {
   private DefaultTableModel tableModel;
   private Map<String, Map<String, Object>> featuresData;
   private String imageName;
+  private com.scipath.scipathj.core.config.MainSettings mainSettings;
 
   public FeatureDisplayDialog(Frame parent, Map<String, Map<String, Object>> features) {
-    this(parent, features, null);
+    this(parent, features, null, null);
   }
 
   public FeatureDisplayDialog(Frame parent, Map<String, Map<String, Object>> features, String imageName) {
+    this(parent, features, imageName, null);
+  }
+
+  public FeatureDisplayDialog(Frame parent, Map<String, Map<String, Object>> features, String imageName, com.scipath.scipathj.core.config.MainSettings mainSettings) {
     super(parent, "Extracted Features", true);
     this.featuresData = features;
     this.imageName = imageName;
+    this.mainSettings = mainSettings;
     initializeDialog();
   }
 
@@ -106,49 +112,70 @@ public class FeatureDisplayDialog extends JDialog {
       }
     };
 
-    // Populate table data
+    // Populate table data, filtering based on ignore setting
+    int filteredOutCount = 0;
     for (Map.Entry<String, Map<String, Object>> entry : featuresData.entrySet()) {
       String roiName = entry.getKey();
       Map<String, Object> roiFeatures = entry.getValue();
 
-      // Parse ROI name to extract components
-      String currentImageName;
-      if (this.imageName != null && !this.imageName.trim().isEmpty()) {
-        // Use provided image name if available
-        currentImageName = this.imageName.trim();
-      } else {
-        // Extract from ROI name
-        currentImageName = extractImageName(roiName);
-        // If extraction returns "Unknown", try to use the ROI name itself as fallback
-        if ("Unknown".equals(currentImageName)) {
-          currentImageName = roiName;
+      // Check if we should filter out this ROI based on ignore setting
+      boolean shouldIncludeROI = true;
+      if (mainSettings != null && !mainSettings.includeIgnoredInCsv()) {
+        Object ignoreValue = roiFeatures.get("ignore");
+        if (ignoreValue != null) {
+          String ignoreStr = ignoreValue.toString().toLowerCase().trim();
+          if ("true".equals(ignoreStr) || "1".equals(ignoreStr) || "yes".equals(ignoreStr) || Boolean.parseBoolean(ignoreStr)) {
+            shouldIncludeROI = false;
+            filteredOutCount++;
+          }
         }
       }
-      String cellType = extractCellType(roiName);
-      String roiId = extractROIId(roiName);
 
-      // Create row data
-      List<Object> rowData = new ArrayList<>();
-      rowData.add(currentImageName);
-      rowData.add(cellType);
-      rowData.add(roiId);
-
-      // Add feature values in the same order as column names
-      for (int i = 3; i < columnNames.size(); i++) {
-        String featureName = columnNames.get(i);
-        Object value = roiFeatures.get(featureName);
-        if (value == null) {
-          rowData.add(""); // Use empty string for null values
-        } else if (value instanceof String) {
-          rowData.add(value); // Keep strings as strings
-        } else if (value instanceof Number) {
-          rowData.add(((Number) value).doubleValue()); // Convert numbers to double
+      if (shouldIncludeROI) {
+        // Parse ROI name to extract components
+        String currentImageName;
+        if (this.imageName != null && !this.imageName.trim().isEmpty()) {
+          // Use provided image name if available
+          currentImageName = this.imageName.trim();
         } else {
-          rowData.add(value.toString()); // Convert other types to string
+          // Extract from ROI name
+          currentImageName = extractImageName(roiName);
+          // If extraction returns "Unknown", try to use the ROI name itself as fallback
+          if ("Unknown".equals(currentImageName)) {
+            currentImageName = roiName;
+          }
         }
-      }
+        String cellType = extractCellType(roiName);
+        String roiId = extractROIId(roiName);
 
-      tableModel.addRow(rowData.toArray());
+        // Create row data
+        List<Object> rowData = new ArrayList<>();
+        rowData.add(currentImageName);
+        rowData.add(cellType);
+        rowData.add(roiId);
+
+        // Add feature values in the same order as column names
+        for (int i = 3; i < columnNames.size(); i++) {
+          String featureName = columnNames.get(i);
+          Object value = roiFeatures.get(featureName);
+          if (value == null) {
+            rowData.add(""); // Use empty string for null values
+          } else if (value instanceof String) {
+            rowData.add(value); // Keep strings as strings
+          } else if (value instanceof Number) {
+            rowData.add(((Number) value).doubleValue()); // Convert numbers to double
+          } else {
+            rowData.add(value.toString()); // Convert other types to string
+          }
+        }
+
+        tableModel.addRow(rowData.toArray());
+      }
+    }
+
+    // Log filtering information if any ROIs were filtered out
+    if (filteredOutCount > 0) {
+      System.out.println("FeatureDisplayDialog: Filtered out " + filteredOutCount + " ignored ROI(s) from table display");
     }
 
     // Create table
@@ -177,12 +204,18 @@ public class FeatureDisplayDialog extends JDialog {
   private JPanel createStatisticsPanel() {
     JPanel statsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
 
-    int totalROIs = featuresData.size();
+    int originalTotalROIs = featuresData.size();
+    int displayedROIs = tableModel.getRowCount();
     int totalFeatures = tableModel.getColumnCount() - 3; // Subtract non-feature columns
+    int filteredOutROIs = originalTotalROIs - displayedROIs;
 
-    JLabel statsLabel = UIUtils.createLabel(
-        String.format("Total ROIs: %d | Total Features per ROI: %d",
-            totalROIs, totalFeatures), UIConstants.NORMAL_FONT_SIZE, null);
+    String statsText = String.format("Total ROIs: %d | Total Features per ROI: %d",
+        displayedROIs, totalFeatures);
+    if (filteredOutROIs > 0) {
+      statsText += String.format(" | Filtered out: %d ignored", filteredOutROIs);
+    }
+
+    JLabel statsLabel = UIUtils.createLabel(statsText, UIConstants.NORMAL_FONT_SIZE, null);
 
     JButton exportButton = UIUtils.createStandardButton("Export to CSV", null);
     exportButton.addActionListener(e -> exportToCSV());
@@ -306,32 +339,68 @@ public class FeatureDisplayDialog extends JDialog {
       }
 
       try (FileWriter writer = new FileWriter(selectedFile)) {
+        // Determine CSV format settings
+        String delimiter;
+        String decimalSeparator;
+
+        if (mainSettings != null && mainSettings.useEuCsvFormat()) {
+          // EU format: semicolon delimiter, comma decimal separator
+          delimiter = ";";
+          decimalSeparator = ",";
+        } else {
+          // US format: comma delimiter, period decimal separator
+          delimiter = ",";
+          decimalSeparator = ".";
+        }
+
         // Write headers
         for (int i = 0; i < tableModel.getColumnCount(); i++) {
           writer.write(tableModel.getColumnName(i));
           if (i < tableModel.getColumnCount() - 1) {
-            writer.write(",");
+            writer.write(delimiter);
           }
         }
         writer.write("\n");
 
-        // Write data
-        for (int row = 0; row < tableModel.getRowCount(); row++) {
+        // Write all data from table (filtering already done during table creation)
+        int exportedRows = tableModel.getRowCount();
+        for (int row = 0; row < exportedRows; row++) {
           for (int col = 0; col < tableModel.getColumnCount(); col++) {
             Object value = tableModel.getValueAt(row, col);
-            writer.write(value != null ? value.toString() : "");
+            if (value != null) {
+              String stringValue = value.toString();
+              // If using EU format and this is a numeric column, replace decimal separator
+              if (mainSettings != null && mainSettings.useEuCsvFormat() && value instanceof Number) {
+                stringValue = stringValue.replace(".", decimalSeparator);
+              }
+              writer.write(stringValue);
+            } else {
+              writer.write("");
+            }
             if (col < tableModel.getColumnCount() - 1) {
-              writer.write(",");
+              writer.write(delimiter);
             }
           }
           writer.write("\n");
         }
 
-        JOptionPane.showMessageDialog(this, "CSV export successful!\nSaved to: " + selectedFile.getAbsolutePath(),
-                                      "Export Success", JOptionPane.INFORMATION_MESSAGE);
+        String formatType = (mainSettings != null && mainSettings.useEuCsvFormat()) ? "EU" : "US";
+        String inclusionInfo = "";
+        if (mainSettings != null && !mainSettings.includeIgnoredInCsv()) {
+          int originalTotal = featuresData.size();
+          int filteredOut = originalTotal - exportedRows;
+          if (filteredOut > 0) {
+            inclusionInfo = String.format("\nFiltered out %d ignored ROI%s", filteredOut, filteredOut == 1 ? "" : "s");
+          }
+        }
+
+        JOptionPane.showMessageDialog(this,
+            String.format("CSV export successful!\nFormat: %s\nRows exported: %d%s\nSaved to: %s",
+                formatType + " format", exportedRows, inclusionInfo, selectedFile.getAbsolutePath()),
+            "Export Success", JOptionPane.INFORMATION_MESSAGE);
       } catch (IOException e) {
         JOptionPane.showMessageDialog(this, "Error exporting to CSV: " + e.getMessage(),
-                                      "Export Error", JOptionPane.ERROR_MESSAGE);
+                                       "Export Error", JOptionPane.ERROR_MESSAGE);
       }
     }
   }

@@ -44,6 +44,15 @@ public class MainSettingsDialog extends JDialog {
   private ROICategoryPanel cellPanel;
   private IgnoreROIPanel ignorePanel;
 
+  // UI Components for CSV settings
+  private CsvFormatToggleSwitch csvFormatToggleSwitch;
+
+  // UI Components for ignore functionality
+  private JCheckBox enableIgnoreFunctionalityCheckBox;
+
+  // UI Components for CSV inclusion
+  private JCheckBox includeIgnoredInCsvCheckBox;
+
   // Result tracking
   private boolean settingsChanged = false;
 
@@ -97,6 +106,20 @@ public class MainSettingsDialog extends JDialog {
     cytoplasmPanel = new ROICategoryPanel(MainSettings.ROICategory.CYTOPLASM);
     cellPanel = new ROICategoryPanel(MainSettings.ROICategory.CELL);
     ignorePanel = new IgnoreROIPanel();
+
+    // CSV format toggle switch
+    csvFormatToggleSwitch = new CsvFormatToggleSwitch();
+    csvFormatToggleSwitch.setToolTipText("Toggle between US and EU CSV format");
+
+    // Ignore functionality checkbox
+    enableIgnoreFunctionalityCheckBox = new JCheckBox("Ignore Cells near the borders");
+    enableIgnoreFunctionalityCheckBox.setToolTipText("Enable/disable the ignore functionality for cells near image borders");
+    enableIgnoreFunctionalityCheckBox.setSelected(MainSettings.DEFAULT_ENABLE_IGNORE_FUNCTIONALITY);
+
+    // CSV inclusion checkbox
+    includeIgnoredInCsvCheckBox = new JCheckBox("Extract Ignore data to csv");
+    includeIgnoredInCsvCheckBox.setToolTipText("Include ROIs with ignore=true in CSV exports");
+    includeIgnoredInCsvCheckBox.setSelected(MainSettings.DEFAULT_INCLUDE_IGNORED_IN_CSV);
   }
 
   /**
@@ -114,6 +137,7 @@ public class MainSettingsDialog extends JDialog {
     // Main content with tabs
     JTabbedPane tabbedPane = new JTabbedPane();
     tabbedPane.addTab("Scale & Units", createScalePanel());
+    tabbedPane.addTab("CSV Export", createCsvPanel());
     tabbedPane.addTab("Ignore Distance", createIgnoreDistancePanel());
 
     // Button panel
@@ -179,6 +203,69 @@ public class MainSettingsDialog extends JDialog {
   }
 
   /**
+   * Create the CSV settings panel.
+   */
+  private JPanel createCsvPanel() {
+    JPanel panel = new JPanel(new GridBagLayout());
+    panel.setBorder(UIUtils.createPadding(UIConstants.LARGE_SPACING));
+
+    GridBagConstraints gbc = new GridBagConstraints();
+    gbc.insets = new Insets(UIConstants.MEDIUM_SPACING, UIConstants.MEDIUM_SPACING,
+                            UIConstants.MEDIUM_SPACING, UIConstants.MEDIUM_SPACING);
+    gbc.anchor = GridBagConstraints.WEST;
+
+    // CSV format selection
+    gbc.gridx = 0;
+    gbc.gridy = 0;
+    gbc.gridwidth = 2;
+    gbc.fill = GridBagConstraints.HORIZONTAL;
+    gbc.weightx = 1.0;
+
+    // Title label
+    JLabel formatLabel = UIUtils.createBoldLabel("CSV Export Format", UIConstants.NORMAL_FONT_SIZE);
+    panel.add(formatLabel, gbc);
+
+    // CSV format toggle switch
+    gbc.gridy = 1;
+    gbc.gridwidth = 1;
+    gbc.fill = GridBagConstraints.NONE;
+    gbc.weightx = 0.0;
+    panel.add(csvFormatToggleSwitch, gbc);
+
+    // Add description labels
+    gbc.gridy = 2;
+    gbc.gridwidth = 2;
+    gbc.fill = GridBagConstraints.HORIZONTAL;
+    gbc.weightx = 1.0;
+
+    // Description panel
+    JPanel descriptionPanel = new JPanel(new GridLayout(2, 1, 0, 2));
+    descriptionPanel.setBorder(UIUtils.createPadding(UIConstants.SMALL_SPACING));
+    descriptionPanel.setOpaque(false);
+
+    // US format description
+    String usDesc = "US Format: comma (,) delimiter, period (.) decimal separator";
+    JLabel usLabel = UIUtils.createLabel(usDesc, UIConstants.SMALL_FONT_SIZE, UIManager.getColor("Label.foreground"));
+    usLabel.setFont(usLabel.getFont().deriveFont(Font.ITALIC));
+    descriptionPanel.add(usLabel);
+
+    // EU format description
+    String euDesc = "EU Format: semicolon (;) delimiter, comma (,) decimal separator";
+    JLabel euLabel = UIUtils.createLabel(euDesc, UIConstants.SMALL_FONT_SIZE, UIManager.getColor("Label.foreground"));
+    euLabel.setFont(euLabel.getFont().deriveFont(Font.ITALIC));
+    descriptionPanel.add(euLabel);
+
+    panel.add(descriptionPanel, gbc);
+
+    // Add some spacing
+    gbc.gridy = 3;
+    gbc.weighty = 1.0;
+    panel.add(new JPanel(), gbc); // Empty panel for spacing
+
+    return panel;
+  }
+
+  /**
    * Create the ignore distance settings panel.
    */
   private JPanel createIgnoreDistancePanel() {
@@ -187,12 +274,23 @@ public class MainSettingsDialog extends JDialog {
 
     GridBagConstraints gbc = new GridBagConstraints();
     gbc.insets = new Insets(UIConstants.MEDIUM_SPACING, UIConstants.MEDIUM_SPACING,
-                           UIConstants.MEDIUM_SPACING, UIConstants.MEDIUM_SPACING);
+                            UIConstants.MEDIUM_SPACING, UIConstants.MEDIUM_SPACING);
     gbc.anchor = GridBagConstraints.WEST;
+
+    // Enable ignore functionality checkbox
+    gbc.gridx = 0;
+    gbc.gridy = 0;
+    gbc.gridwidth = 2;
+    gbc.fill = GridBagConstraints.HORIZONTAL;
+    gbc.weightx = 1.0;
+    panel.add(enableIgnoreFunctionalityCheckBox, gbc);
 
     // Border distance
     gbc.gridx = 0;
-    gbc.gridy = 0;
+    gbc.gridy = 1;
+    gbc.gridwidth = 1;
+    gbc.fill = GridBagConstraints.NONE;
+    gbc.weightx = 0.0;
     JLabel borderDistanceLabel = UIUtils.createLabel("Border Distance (pixels):", UIConstants.NORMAL_FONT_SIZE, null);
     panel.add(borderDistanceLabel, gbc);
 
@@ -202,6 +300,14 @@ public class MainSettingsDialog extends JDialog {
     borderDistanceSpinner = new JSpinner(new SpinnerNumberModel(MainSettings.DEFAULT_BORDER_DISTANCE, 0, 1000, 1));
     borderDistanceSpinner.setToolTipText("Distance from image borders to consider ROIs as ignore");
     panel.add(borderDistanceSpinner, gbc);
+
+    // CSV inclusion checkbox (at the bottom)
+    gbc.gridx = 0;
+    gbc.gridy = 2;
+    gbc.gridwidth = 2;
+    gbc.fill = GridBagConstraints.HORIZONTAL;
+    gbc.weightx = 1.0;
+    panel.add(includeIgnoredInCsvCheckBox, gbc);
 
     return panel;
   }
@@ -255,6 +361,28 @@ public class MainSettingsDialog extends JDialog {
                 updateScalePreview();
               }
             });
+
+    // Update border distance spinner state and CSV inclusion checkbox when ignore functionality checkbox changes
+    enableIgnoreFunctionalityCheckBox.addActionListener(e -> {
+        updateBorderDistanceSpinnerState();
+        updateCsvInclusionCheckboxState();
+    });
+  }
+
+  /**
+   * Update the enabled state of the border distance spinner based on the ignore functionality checkbox.
+   */
+  private void updateBorderDistanceSpinnerState() {
+    boolean enabled = enableIgnoreFunctionalityCheckBox.isSelected();
+    borderDistanceSpinner.setEnabled(enabled);
+  }
+
+  /**
+   * Update the enabled state of the CSV inclusion checkbox based on the ignore functionality checkbox.
+   */
+  private void updateCsvInclusionCheckboxState() {
+    boolean enabled = enableIgnoreFunctionalityCheckBox.isSelected();
+    includeIgnoredInCsvCheckBox.setEnabled(enabled);
   }
 
   /**
@@ -264,6 +392,17 @@ public class MainSettingsDialog extends JDialog {
     pixelsPerMicrometerSpinner.setValue(currentSettings.pixelsPerMicrometer());
     scaleUnitField.setText(currentSettings.scaleUnit());
     borderDistanceSpinner.setValue(currentSettings.ignoreSettings().borderDistance());
+
+    // Load CSV format setting
+    csvFormatToggleSwitch.setSelected(currentSettings.useEuCsvFormat());
+
+    // Load ignore functionality setting
+    enableIgnoreFunctionalityCheckBox.setSelected(currentSettings.enableIgnoreFunctionality());
+    updateBorderDistanceSpinnerState();
+
+    // Load CSV inclusion setting
+    includeIgnoredInCsvCheckBox.setSelected(currentSettings.includeIgnoredInCsv());
+    updateCsvInclusionCheckboxState();
 
     updateScalePreview();
     LOGGER.debug("Loaded current settings into dialog components");
@@ -331,14 +470,26 @@ public class MainSettingsDialog extends JDialog {
     MainSettings.IgnoreROIAppearanceSettings updatedIgnoreSettings =
         currentSettings.ignoreSettings().withBorderDistance(borderDistance);
 
+    // Get CSV format setting from toggle switch
+    boolean useEuCsvFormat = csvFormatToggleSwitch.isSelected();
+
+    // Get ignore functionality setting from checkbox
+    boolean enableIgnoreFunctionality = enableIgnoreFunctionalityCheckBox.isSelected();
+
+    // Get CSV inclusion setting from checkbox
+    boolean includeIgnoredInCsv = includeIgnoredInCsvCheckBox.isSelected();
+
     return new MainSettings(
-        pixelsPerMicrometer,
-        scaleUnit,
-        currentSettings.vesselSettings(),
-        currentSettings.nucleusSettings(),
-        currentSettings.cytoplasmSettings(),
-        currentSettings.cellSettings(),
-        updatedIgnoreSettings);
+         pixelsPerMicrometer,
+         scaleUnit,
+         currentSettings.vesselSettings(),
+         currentSettings.nucleusSettings(),
+         currentSettings.cytoplasmSettings(),
+         currentSettings.cellSettings(),
+         updatedIgnoreSettings,
+         useEuCsvFormat,
+         enableIgnoreFunctionality,
+         includeIgnoredInCsv);
   }
 
   /**
@@ -693,5 +844,124 @@ public class MainSettingsDialog extends JDialog {
     MainSettingsDialog dialog =
         new MainSettingsDialog(parent, configurationManager, onSettingsChanged);
     dialog.setVisible(true);
+  }
+
+  /**
+   * Custom toggle switch component for CSV format selection.
+   */
+  private static class CsvFormatToggleSwitch extends JPanel {
+
+    private boolean selected = false;
+    private final int SWITCH_WIDTH = 60;
+    private final int SWITCH_HEIGHT = 30;
+    private final int CIRCLE_DIAMETER = 24;
+    private final int ANIMATION_DURATION = 200; // milliseconds
+
+    private Timer animationTimer;
+    private long animationStartTime;
+    private double currentPosition = 0.0; // 0.0 = left (US), 1.0 = right (EU)
+
+    public CsvFormatToggleSwitch() {
+      super();
+      setPreferredSize(new Dimension(SWITCH_WIDTH + 80, SWITCH_HEIGHT)); // Extra space for labels
+      setOpaque(false);
+      setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+      addMouseListener(new java.awt.event.MouseAdapter() {
+        @Override
+        public void mouseClicked(java.awt.event.MouseEvent e) {
+          toggleSelection();
+        }
+      });
+    }
+
+    public boolean isSelected() {
+      return selected;
+    }
+
+    public void setSelected(boolean selected) {
+      if (this.selected != selected) {
+        this.selected = selected;
+        startAnimation();
+      }
+    }
+
+    private void toggleSelection() {
+      setSelected(!selected);
+    }
+
+    private void startAnimation() {
+      if (animationTimer != null) {
+        animationTimer.stop();
+      }
+
+      animationStartTime = System.currentTimeMillis();
+      currentPosition = selected ? 0.0 : 1.0; // Start from opposite of target
+
+      animationTimer = new Timer(16, e -> { // ~60 FPS
+        long elapsed = System.currentTimeMillis() - animationStartTime;
+        double progress = Math.min(1.0, (double) elapsed / ANIMATION_DURATION);
+
+        // Easing function for smooth animation
+        progress = easeInOutCubic(progress);
+
+        // Update position based on target
+        double targetPosition = selected ? 1.0 : 0.0;
+        currentPosition = currentPosition + (targetPosition - currentPosition) * progress;
+
+        repaint();
+
+        if (progress >= 1.0) {
+          animationTimer.stop();
+          animationTimer = null;
+          currentPosition = targetPosition; // Ensure exact final position
+        }
+      });
+      animationTimer.start();
+    }
+
+    private double easeInOutCubic(double t) {
+      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    @Override
+    protected void paintComponent(java.awt.Graphics g) {
+      super.paintComponent(g);
+      Graphics2D g2d = (Graphics2D) g.create();
+      g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+      int centerY = getHeight() / 2;
+      int switchY = centerY - SWITCH_HEIGHT / 2;
+
+      // Draw background track
+      g2d.setColor(selected ? new Color(76, 175, 80) : new Color(189, 189, 189));
+      g2d.fillRoundRect(40, switchY, SWITCH_WIDTH, SWITCH_HEIGHT, SWITCH_HEIGHT, SWITCH_HEIGHT);
+
+      // Draw circle
+      int circleX = 40 + (int) (currentPosition * (SWITCH_WIDTH - CIRCLE_DIAMETER));
+      int circleY = centerY - CIRCLE_DIAMETER / 2;
+      g2d.setColor(Color.WHITE);
+      g2d.fillOval(circleX, circleY, CIRCLE_DIAMETER, CIRCLE_DIAMETER);
+
+      // Draw labels
+      g2d.setColor(UIManager.getColor("Label.foreground"));
+      g2d.setFont(g2d.getFont().deriveFont(Font.BOLD, 12f));
+
+      // US label (left)
+      FontMetrics fm = g2d.getFontMetrics();
+      g2d.setColor(selected ? Color.GRAY : UIManager.getColor("Label.foreground"));
+      g2d.drawString("US", 10, centerY + fm.getAscent() / 2);
+
+      // EU label (right)
+      g2d.setColor(selected ? UIManager.getColor("Label.foreground") : Color.GRAY);
+      g2d.drawString("EU", 40 + SWITCH_WIDTH + 10, centerY + fm.getAscent() / 2);
+
+      g2d.dispose();
+    }
+
+    @Override
+    public Dimension getPreferredSize() {
+      return new Dimension(SWITCH_WIDTH + 80, SWITCH_HEIGHT);
+    }
   }
 }

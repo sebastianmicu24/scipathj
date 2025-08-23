@@ -268,9 +268,11 @@ public class ROIStatisticsDialog extends JDialog {
 
       try {
         exportTableToCSV(outputFile);
+        String formatType = (mainSettings != null && mainSettings.useEuCsvFormat()) ? "EU" : "US";
         JOptionPane.showMessageDialog(
             this,
-            "ROI statistics exported successfully to:\n" + outputFile.getAbsolutePath(),
+            String.format("ROI statistics exported successfully!\nFormat: %s format\nSaved to: %s",
+                formatType, outputFile.getAbsolutePath()),
             "Export Successful",
             JOptionPane.INFORMATION_MESSAGE);
       } catch (Exception ex) {
@@ -286,20 +288,63 @@ public class ROIStatisticsDialog extends JDialog {
 
   private void exportTableToCSV(java.io.File outputFile) throws java.io.IOException {
     try (java.io.FileWriter writer = new java.io.FileWriter(outputFile)) {
+      // Determine CSV format settings
+      String delimiter;
+      String decimalSeparator;
+
+      if (mainSettings != null && mainSettings.useEuCsvFormat()) {
+        // EU format: semicolon delimiter, comma decimal separator
+        delimiter = ";";
+        decimalSeparator = ",";
+      } else {
+        // US format: comma delimiter, period decimal separator
+        delimiter = ",";
+        decimalSeparator = ".";
+      }
+
       // Write CSV header
-      writer.write("Image,Total ROIs,Vessels,Nuclei,Cytoplasms,Cells,Ignored\n");
+      writer.write("Image" + delimiter + "Total ROIs" + delimiter + "Vessels" + delimiter +
+                  "Nuclei" + delimiter + "Cytoplasms" + delimiter + "Cells" + delimiter + "Ignored\n");
 
       // Write table data
       for (int i = 0; i < tableModel.getRowCount(); i++) {
         for (int j = 0; j < tableModel.getColumnCount(); j++) {
           String value = tableModel.getValueAt(i, j).toString();
-          // Escape commas and quotes in CSV
-          if (value.contains(",") || value.contains("\"")) {
+
+          // Handle ignore column filtering
+          if (j == 6 && mainSettings != null && !mainSettings.includeIgnoredInCsv()) { // Ignored column
+            value = "0"; // Set ignored count to 0 when inclusion is disabled
+          }
+
+          // Handle total ROIs column filtering
+          if (j == 1 && mainSettings != null && !mainSettings.includeIgnoredInCsv()) { // Total ROIs column
+            // Subtract ignored count from total
+            try {
+              int totalROIs = Integer.parseInt(value);
+              int ignoredCount = Integer.parseInt(tableModel.getValueAt(i, 6).toString());
+              value = String.valueOf(totalROIs - ignoredCount);
+            } catch (NumberFormatException e) {
+              // Keep original value if parsing fails
+            }
+          }
+
+          // Handle decimal separators for numeric values in EU format
+          if (mainSettings != null && mainSettings.useEuCsvFormat() && j > 0) { // Skip first column (Image name)
+            try {
+              double numericValue = Double.parseDouble(value);
+              value = String.format("%.1f", numericValue).replace(".", decimalSeparator);
+            } catch (NumberFormatException e) {
+              // Not a number, keep as is
+            }
+          }
+
+          // Escape delimiters and quotes in CSV if using comma delimiter
+          if (delimiter.equals(",") && (value.contains(",") || value.contains("\""))) {
             value = "\"" + value.replace("\"", "\"\"") + "\"";
           }
           writer.write(value);
           if (j < tableModel.getColumnCount() - 1) {
-            writer.write(",");
+            writer.write(delimiter);
           }
         }
         writer.write("\n");
@@ -308,13 +353,31 @@ public class ROIStatisticsDialog extends JDialog {
       // Write summary information
       writer.write("\n");
       writer.write("Summary:\n");
-      writer.write("Total Images," + roiData.size() + "\n");
-      int totalROIs = roiData.values().stream().mapToInt(List::size).sum();
-      writer.write("Total ROIs," + totalROIs + "\n");
-      double avgROIs = roiData.isEmpty() ? 0.0 : (double) totalROIs / roiData.size();
-      writer.write("Average ROIs per Image," + String.format("%.1f", avgROIs) + "\n");
+      writer.write("Total Images" + delimiter + roiData.size() + "\n");
 
-      LOGGER.info("Successfully exported ROI statistics to: {}", outputFile.getAbsolutePath());
+      int totalROIs = roiData.values().stream().mapToInt(List::size).sum();
+      int totalIgnored = 0;
+      if (mainSettings != null && !mainSettings.includeIgnoredInCsv()) {
+        // Calculate total ignored ROIs
+        totalIgnored = roiData.values().stream()
+            .mapToInt(rois -> (int) rois.stream().filter(UserROI::isIgnored).count())
+            .sum();
+        totalROIs -= totalIgnored; // Subtract ignored ROIs from total
+      }
+      writer.write("Total ROIs" + delimiter + totalROIs + "\n");
+
+      double avgROIs = roiData.isEmpty() ? 0.0 : (double) totalROIs / roiData.size();
+      String avgValue = mainSettings != null && mainSettings.useEuCsvFormat()
+          ? String.format("%.1f", avgROIs).replace(".", decimalSeparator)
+          : String.format("%.1f", avgROIs);
+      writer.write("Average ROIs per Image" + delimiter + avgValue + "\n");
+
+      String inclusionInfo = "";
+      if (mainSettings != null && !mainSettings.includeIgnoredInCsv()) {
+        inclusionInfo = " (ignored ROIs excluded: " + totalIgnored + ")";
+      }
+
+      LOGGER.info("Successfully exported ROI statistics to: {}{}", outputFile.getAbsolutePath(), inclusionInfo);
     }
   }
 

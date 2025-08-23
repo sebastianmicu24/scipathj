@@ -135,7 +135,10 @@ public class DisplaySettingsDialog extends JDialog {
         nucleusPanel.createSettings(),
         cytoplasmPanel.createSettings(),
         cellPanel.createSettings(),
-        ignorePanel.createSettings());
+        ignorePanel.createSettings(),
+        mainSettings.useEuCsvFormat(),
+        mainSettings.enableIgnoreFunctionality(),
+        mainSettings.includeIgnoredInCsv());
   }
 
   private void handleOK(ActionEvent e) {

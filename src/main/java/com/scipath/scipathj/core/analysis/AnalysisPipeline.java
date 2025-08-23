@@ -384,34 +384,61 @@ public class AnalysisPipeline {
     int imageHeight = currentImage.getHeight();
     int borderDistance = mainSettings.ignoreSettings().borderDistance();
 
-    // First pass: mark ROIs as ignored based on border distance
-    vesselROIs.forEach(
-        roi -> {
-          roi.setDisplayColor(mainSettings.getVesselSettings().borderColor());
-          // Mark as ignored if too close to borders
-          roi.setIgnored(roi.shouldBeIgnored(imageWidth, imageHeight, borderDistance));
-        });
+    // First pass: mark ROIs as ignored based on border distance (only if ignore functionality is enabled)
+    if (mainSettings.enableIgnoreFunctionality()) {
+      vesselROIs.forEach(
+          roi -> {
+            roi.setDisplayColor(mainSettings.getVesselSettings().borderColor());
+            // Mark as ignored if too close to borders
+            roi.setIgnored(roi.shouldBeIgnored(imageWidth, imageHeight, borderDistance));
+          });
 
-    nucleusROIs.forEach(
-        roi -> {
-          roi.setDisplayColor(mainSettings.getNucleusSettings().borderColor());
-          // Mark as ignored if too close to borders
-          roi.setIgnored(roi.shouldBeIgnored(imageWidth, imageHeight, borderDistance));
-        });
+      nucleusROIs.forEach(
+          roi -> {
+            roi.setDisplayColor(mainSettings.getNucleusSettings().borderColor());
+            // Mark as ignored if too close to borders
+            roi.setIgnored(roi.shouldBeIgnored(imageWidth, imageHeight, borderDistance));
+          });
 
-    cellROIs.forEach(
-        roi -> {
-          roi.setDisplayColor(mainSettings.getCellSettings().borderColor());
-          // Mark as ignored if too close to borders
-          roi.setIgnored(roi.shouldBeIgnored(imageWidth, imageHeight, borderDistance));
-        });
+      cellROIs.forEach(
+          roi -> {
+            roi.setDisplayColor(mainSettings.getCellSettings().borderColor());
+            // Mark as ignored if too close to borders
+            roi.setIgnored(roi.shouldBeIgnored(imageWidth, imageHeight, borderDistance));
+          });
 
-    cytoplasmROIs.forEach(
-        roi -> {
-          roi.setDisplayColor(mainSettings.getCytoplasmSettings().borderColor());
-          // Mark as ignored if too close to borders
-          roi.setIgnored(roi.shouldBeIgnored(imageWidth, imageHeight, borderDistance));
-        });
+      cytoplasmROIs.forEach(
+          roi -> {
+            roi.setDisplayColor(mainSettings.getCytoplasmSettings().borderColor());
+            // Mark as ignored if too close to borders
+            roi.setIgnored(roi.shouldBeIgnored(imageWidth, imageHeight, borderDistance));
+          });
+    } else {
+      // Ignore functionality is disabled, set all ROIs as not ignored
+      vesselROIs.forEach(
+          roi -> {
+            roi.setDisplayColor(mainSettings.getVesselSettings().borderColor());
+            roi.setIgnored(false);
+          });
+
+      nucleusROIs.forEach(
+          roi -> {
+            roi.setDisplayColor(mainSettings.getNucleusSettings().borderColor());
+            roi.setIgnored(false);
+          });
+
+      cellROIs.forEach(
+          roi -> {
+            roi.setDisplayColor(mainSettings.getCellSettings().borderColor());
+            roi.setIgnored(false);
+          });
+
+      cytoplasmROIs.forEach(
+          roi -> {
+            roi.setDisplayColor(mainSettings.getCytoplasmSettings().borderColor());
+            roi.setIgnored(false);
+          });
+    }
 
     // Second pass: ensure consistency - if cell or cytoplasm is ignored, nucleus should be too
     cellROIs.forEach(cell -> {

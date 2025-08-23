@@ -337,9 +337,14 @@ public class AnalysisController {
     }
 
     try {
+      // Load current settings for CSV format
+      com.scipath.scipathj.core.config.MainSettings mainSettings = configurationManager.loadMainSettings();
+
       FeatureDisplayDialog dialog = new FeatureDisplayDialog(
           (java.awt.Frame) SwingUtilities.getWindowAncestor(parentComponent),
-          currentFeatures);
+          currentFeatures,
+          null, // imageName
+          mainSettings);
       dialog.setVisible(true);
     } catch (Exception e) {
       LOGGER.error("Error showing features dialog", e);

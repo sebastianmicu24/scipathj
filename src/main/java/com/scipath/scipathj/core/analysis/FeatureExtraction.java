@@ -306,7 +306,8 @@ public class FeatureExtraction {
             // 6. H&E channel features (if available)
             addHEFeaturesOptimized(roi, imageJRoi, features);
 
-            
+            // 7. Add ignore status
+            features.put("ignore", roi.isIgnored());
 
         } catch (Exception e) {
             LOGGER.debug("Error in optimized feature extraction for {} {}: {}", roiType, roi.getName(), e.getMessage());

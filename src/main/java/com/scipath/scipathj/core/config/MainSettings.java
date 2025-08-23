@@ -19,13 +19,16 @@ import java.awt.*;
  * @since 1.0.0
  */
 public record MainSettings(
-     double pixelsPerMicrometer,
-     String scaleUnit,
-     ROIAppearanceSettings vesselSettings,
-     ROIAppearanceSettings nucleusSettings,
-     ROIAppearanceSettings cytoplasmSettings,
-     ROIAppearanceSettings cellSettings,
-     IgnoreROIAppearanceSettings ignoreSettings) {
+      double pixelsPerMicrometer,
+      String scaleUnit,
+      ROIAppearanceSettings vesselSettings,
+      ROIAppearanceSettings nucleusSettings,
+      ROIAppearanceSettings cytoplasmSettings,
+      ROIAppearanceSettings cellSettings,
+      IgnoreROIAppearanceSettings ignoreSettings,
+      boolean useEuCsvFormat,
+      boolean enableIgnoreFunctionality,
+      boolean includeIgnoredInCsv) {
 
   // Default values for scale conversion
   public static final double DEFAULT_PIXELS_PER_MICROMETER = 1.0;
@@ -43,6 +46,13 @@ public record MainSettings(
   public static final int DEFAULT_BORDER_DISTANCE = 10; // pixels
   public static final Color DEFAULT_IGNORE_COLOR = new Color(128, 128, 128); // Gray
   public static final boolean DEFAULT_SHOW_IGNORE_ROIS = true;
+
+  // Default constants for CSV export settings
+  public static final boolean DEFAULT_USE_EU_CSV_FORMAT = false; // false = US format (comma delimiter, period decimal), true = EU format (semicolon delimiter, comma decimal)
+
+  // Default constants for ignore functionality settings
+  public static final boolean DEFAULT_ENABLE_IGNORE_FUNCTIONALITY = true; // Whether to perform ignore functionality at all
+  public static final boolean DEFAULT_INCLUDE_IGNORED_IN_CSV = true; // Whether to include ignored ROIs in CSV exports
 
   /**
    * Enum for different ROI categories that can have different appearance settings.
@@ -308,7 +318,10 @@ public record MainSettings(
         ROIAppearanceSettings.fromCategory(ROICategory.NUCLEUS),
         ROIAppearanceSettings.fromCategory(ROICategory.CYTOPLASM),
         ROIAppearanceSettings.fromCategory(ROICategory.CELL),
-        IgnoreROIAppearanceSettings.createDefault());
+        IgnoreROIAppearanceSettings.createDefault(),
+        DEFAULT_USE_EU_CSV_FORMAT,
+        DEFAULT_ENABLE_IGNORE_FUNCTIONALITY,
+        DEFAULT_INCLUDE_IGNORED_IN_CSV);
   }
 
   /**
@@ -340,7 +353,10 @@ public record MainSettings(
         nucleusSettings,
         cytoplasmSettings,
         cellSettings,
-        ignoreSettings);
+        ignoreSettings,
+        useEuCsvFormat,
+        enableIgnoreFunctionality,
+        includeIgnoredInCsv);
   }
 
   /**
@@ -357,7 +373,10 @@ public record MainSettings(
         nucleusSettings,
         cytoplasmSettings,
         cellSettings,
-        ignoreSettings);
+        ignoreSettings,
+        useEuCsvFormat,
+        enableIgnoreFunctionality,
+        includeIgnoredInCsv);
   }
 
   /**
@@ -374,7 +393,10 @@ public record MainSettings(
         nucleusSettings,
         cytoplasmSettings,
         cellSettings,
-        ignoreSettings);
+        ignoreSettings,
+        useEuCsvFormat,
+        enableIgnoreFunctionality,
+        includeIgnoredInCsv);
   }
 
   /**
@@ -391,7 +413,10 @@ public record MainSettings(
         newNucleusSettings,
         cytoplasmSettings,
         cellSettings,
-        ignoreSettings);
+        ignoreSettings,
+        useEuCsvFormat,
+        enableIgnoreFunctionality,
+        includeIgnoredInCsv);
   }
 
   /**
@@ -408,7 +433,10 @@ public record MainSettings(
         nucleusSettings,
         newCytoplasmSettings,
         cellSettings,
-        ignoreSettings);
+        ignoreSettings,
+        useEuCsvFormat,
+        enableIgnoreFunctionality,
+        includeIgnoredInCsv);
   }
 
   /**
@@ -425,7 +453,10 @@ public record MainSettings(
         nucleusSettings,
         cytoplasmSettings,
         newCellSettings,
-        ignoreSettings);
+        ignoreSettings,
+        useEuCsvFormat,
+        enableIgnoreFunctionality,
+        includeIgnoredInCsv);
   }
 
   /**
@@ -459,7 +490,70 @@ public record MainSettings(
         nucleusSettings,
         cytoplasmSettings,
         cellSettings,
-        newIgnoreSettings);
+        newIgnoreSettings,
+        useEuCsvFormat,
+        enableIgnoreFunctionality,
+        includeIgnoredInCsv);
+  }
+
+  /**
+   * Creates a new MainSettings instance with updated CSV format setting.
+   *
+   * @param newUseEuCsvFormat Whether to use EU CSV format (true) or US format (false)
+   * @return A new MainSettings instance with updated CSV format setting
+   */
+  public MainSettings withUseEuCsvFormat(boolean newUseEuCsvFormat) {
+    return new MainSettings(
+        pixelsPerMicrometer,
+        scaleUnit,
+        vesselSettings,
+        nucleusSettings,
+        cytoplasmSettings,
+        cellSettings,
+        ignoreSettings,
+        newUseEuCsvFormat,
+        enableIgnoreFunctionality,
+        includeIgnoredInCsv);
+  }
+
+  /**
+   * Creates a new MainSettings instance with updated ignore functionality setting.
+   *
+   * @param newEnableIgnoreFunctionality Whether to enable ignore functionality
+   * @return A new MainSettings instance with updated ignore functionality setting
+   */
+  public MainSettings withEnableIgnoreFunctionality(boolean newEnableIgnoreFunctionality) {
+    return new MainSettings(
+        pixelsPerMicrometer,
+        scaleUnit,
+        vesselSettings,
+        nucleusSettings,
+        cytoplasmSettings,
+        cellSettings,
+        ignoreSettings,
+        useEuCsvFormat,
+        newEnableIgnoreFunctionality,
+        includeIgnoredInCsv);
+  }
+
+  /**
+   * Creates a new MainSettings instance with updated CSV inclusion setting for ignored ROIs.
+   *
+   * @param newIncludeIgnoredInCsv Whether to include ignored ROIs in CSV exports
+   * @return A new MainSettings instance with updated CSV inclusion setting
+   */
+  public MainSettings withIncludeIgnoredInCsv(boolean newIncludeIgnoredInCsv) {
+    return new MainSettings(
+        pixelsPerMicrometer,
+        scaleUnit,
+        vesselSettings,
+        nucleusSettings,
+        cytoplasmSettings,
+        cellSettings,
+        ignoreSettings,
+        useEuCsvFormat,
+        enableIgnoreFunctionality,
+        newIncludeIgnoredInCsv);
   }
 
   /**

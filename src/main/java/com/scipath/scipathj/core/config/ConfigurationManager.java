@@ -520,6 +520,18 @@ public class ConfigurationManager {
     MainSettings.IgnoreROIAppearanceSettings ignoreSettings =
         loadIgnoreROIAppearanceSettings(properties);
 
+    // Load CSV format setting
+    boolean useEuCsvFormat = getBooleanProperty(
+        properties, "useEuCsvFormat", MainSettings.DEFAULT_USE_EU_CSV_FORMAT);
+
+    // Load ignore functionality setting
+    boolean enableIgnoreFunctionality = getBooleanProperty(
+        properties, "enableIgnoreFunctionality", MainSettings.DEFAULT_ENABLE_IGNORE_FUNCTIONALITY);
+
+    // Load CSV inclusion setting for ignored ROIs
+    boolean includeIgnoredInCsv = getBooleanProperty(
+        properties, "includeIgnoredInCsv", MainSettings.DEFAULT_INCLUDE_IGNORED_IN_CSV);
+
     return new MainSettings(
         pixelsPerMicrometer,
         scaleUnit,
@@ -527,7 +539,10 @@ public class ConfigurationManager {
         nucleusSettings,
         cytoplasmSettings,
         cellSettings,
-        ignoreSettings);
+        ignoreSettings,
+        useEuCsvFormat,
+        enableIgnoreFunctionality,
+        includeIgnoredInCsv);
   }
 
   private MainSettings.ROIAppearanceSettings loadROIAppearanceSettings(
@@ -577,6 +592,15 @@ public class ConfigurationManager {
 
     // Save ignore ROI settings
     saveIgnoreROIAppearanceSettings(properties, settings.getIgnoreSettings());
+
+    // Save CSV format setting
+    properties.setProperty("useEuCsvFormat", String.valueOf(settings.useEuCsvFormat()));
+
+    // Save ignore functionality setting
+    properties.setProperty("enableIgnoreFunctionality", String.valueOf(settings.enableIgnoreFunctionality()));
+
+    // Save CSV inclusion setting for ignored ROIs
+    properties.setProperty("includeIgnoredInCsv", String.valueOf(settings.includeIgnoredInCsv()));
 
     // For backward compatibility, also save vessel ROI settings as legacy properties
     properties.setProperty(

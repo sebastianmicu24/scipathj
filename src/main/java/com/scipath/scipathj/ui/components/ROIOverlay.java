@@ -50,6 +50,7 @@ public class ROIOverlay extends JComponent {
   private boolean nucleusFilterEnabled = true;
   private boolean cytoplasmFilterEnabled = true;
   private boolean cellFilterEnabled = true;
+  private boolean ignoreFilterEnabled = true;
 
   // Single-calculation shape cache - calculated once, never recalculated
   private final Map<Integer, java.awt.Shape> originalShapes = new ConcurrentHashMap<>();
@@ -561,19 +562,25 @@ public class ROIOverlay extends JComponent {
    * Update filter state for ROI types
    */
   public void setFilterState(MainSettings.ROICategory category, boolean enabled) {
-    switch (category) {
-      case VESSEL:
-        vesselFilterEnabled = enabled;
-        break;
-      case NUCLEUS:
-        nucleusFilterEnabled = enabled;
-        break;
-      case CYTOPLASM:
-        cytoplasmFilterEnabled = enabled;
-        break;
-      case CELL:
-        cellFilterEnabled = enabled;
-        break;
+    if (category == null) {
+      // Handle ignore filter (null category)
+      ignoreFilterEnabled = enabled;
+    } else {
+      // Handle regular ROI category filters
+      switch (category) {
+        case VESSEL:
+          vesselFilterEnabled = enabled;
+          break;
+        case NUCLEUS:
+          nucleusFilterEnabled = enabled;
+          break;
+        case CYTOPLASM:
+          cytoplasmFilterEnabled = enabled;
+          break;
+        case CELL:
+          cellFilterEnabled = enabled;
+          break;
+      }
     }
     // Trigger re-render with new filter state
     bufferValid = false;
@@ -810,6 +817,12 @@ public class ROIOverlay extends JComponent {
   * Check if an ROI should be displayed based on current filter state
   */
  private boolean shouldDisplayROI(UserROI roi) {
+   // First check if it's an ignored ROI and if the ignore filter is enabled
+   if (roi.isIgnored()) {
+     return ignoreFilterEnabled;
+   }
+
+   // Then check the category filter
    MainSettings.ROICategory category = determineROICategory(roi);
 
    switch (category) {
