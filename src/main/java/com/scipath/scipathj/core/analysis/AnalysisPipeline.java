@@ -11,7 +11,7 @@ import com.scipath.scipathj.data.model.CellROI;
 import com.scipath.scipathj.data.model.CytoplasmROI;
 import com.scipath.scipathj.data.model.NucleusROI;
 import com.scipath.scipathj.data.model.UserROI;
-import com.scipath.scipathj.ui.components.ROIManager;
+import com.scipath.scipathj.ui.common.ROIManager;
 import com.scipath.scipathj.ui.utils.ImageLoader;
 import ij.ImagePlus;
 import java.io.File;

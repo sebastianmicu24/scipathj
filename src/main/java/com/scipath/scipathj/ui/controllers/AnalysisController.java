@@ -1,25 +1,23 @@
 package com.scipath.scipathj.ui.controllers;
 
-import com.scipath.scipathj.core.analysis.AnalysisPipeline;
 import com.scipath.scipathj.core.config.ConfigurationManager;
-import com.scipath.scipathj.core.config.NuclearSegmentationSettings;
-import com.scipath.scipathj.core.config.SegmentationConstants;
-import com.scipath.scipathj.core.config.VesselSegmentationSettings;
 import com.scipath.scipathj.core.engine.SciPathJEngine;
-import com.scipath.scipathj.ui.components.StatusPanel;
-import com.scipath.scipathj.ui.dialogs.FeatureDisplayDialog;
+import com.scipath.scipathj.ui.common.StatusPanel;
+import com.scipath.scipathj.ui.analysis.dialogs.FeatureDisplayDialog;
 import com.scipath.scipathj.ui.model.PipelineInfo;
 import java.awt.*;
 import java.io.File;
+import java.util.Map;
 import javax.swing.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Controller for managing analysis operations.
+ * Controller for coordinating analysis operations.
  *
- * <p>This class handles the start/stop analysis functionality, progress tracking,
- * and coordination between the UI and the analysis engine.</p>
+ * <p>This controller coordinates between the UI components and the analysis execution
+ * controller. It handles UI updates, feature management, and user interactions while
+ * delegating the actual analysis execution to the AnalysisExecutionController.</p>
  *
  * @author Sebastian Micu
  * @version 1.0.0
@@ -28,20 +26,20 @@ import org.slf4j.LoggerFactory;
 public class AnalysisController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(AnalysisController.class);
-  private final SciPathJEngine engine;
+
+  private final AnalysisExecutionController executionController;
   private final ConfigurationManager configurationManager;
   private final StatusPanel statusPanel;
   private final Component parentComponent;
 
   private JButton startButton;
   private JButton stopButton;
-  private SwingWorker<Void, String> currentAnalysisWorker;
 
-  // Analysis parameters
+  // Analysis state
   private PipelineInfo currentPipeline;
   private File currentFolder;
   private int currentImageCount;
-  private java.util.Map<String, java.util.Map<String, Object>> currentFeatures;
+  private Map<String, Map<String, Object>> currentFeatures;
 
   /**
    * Creates a new AnalysisController instance.
@@ -52,14 +50,17 @@ public class AnalysisController {
    * @param parentComponent the parent component for dialogs
    */
   public AnalysisController(
-      SciPathJEngine engine,
-      ConfigurationManager configurationManager,
-      StatusPanel statusPanel,
-      Component parentComponent) {
-    this.engine = engine;
+       SciPathJEngine engine,
+       ConfigurationManager configurationManager,
+       StatusPanel statusPanel,
+       Component parentComponent) {
     this.configurationManager = configurationManager;
     this.statusPanel = statusPanel;
     this.parentComponent = parentComponent;
+
+    // Create the execution controller
+    this.executionController = new AnalysisExecutionController(engine, configurationManager, statusPanel, parentComponent);
+    this.executionController.setAnalysisCompleteCallback(this::handleAnalysisComplete);
 
     LOGGER.debug("Analysis controller created");
   }
@@ -76,7 +77,7 @@ public class AnalysisController {
 
     // Set up event handlers
     startButton.addActionListener(e -> startAnalysis());
-    stopButton.addActionListener(e -> stopAnalysis());
+    stopButton.addActionListener(e -> executionController.stopAnalysis());
 
     LOGGER.debug("Control buttons configured");
   }
@@ -100,11 +101,16 @@ public class AnalysisController {
     this.currentFolder = selectedFolder;
     this.currentImageCount = imageCount;
 
-    // Show progress bar
-    statusPanel.showProgress(0, "Starting analysis...");
+    // Update button states
+    if (startButton != null) {
+      startButton.setEnabled(false);
+    }
+    if (stopButton != null) {
+      stopButton.setEnabled(true);
+    }
 
-    // Start combined vessel and nucleus segmentation analysis
-    performCombinedSegmentationAnalysis();
+    // Start analysis via execution controller
+    executionController.startAnalysis(selectedFolder, imageCount, this::handleAnalysisCompletion);
   }
 
   /**
@@ -120,11 +126,7 @@ public class AnalysisController {
    * Stops the analysis process.
    */
   public void stopAnalysis() {
-    LOGGER.info("Analysis stop requested");
-
-    if (currentAnalysisWorker != null && !currentAnalysisWorker.isDone()) {
-      currentAnalysisWorker.cancel(true);
-    }
+    executionController.stopAnalysis();
 
     if (startButton != null) {
       startButton.setEnabled(true);
@@ -132,159 +134,48 @@ public class AnalysisController {
     if (stopButton != null) {
       stopButton.setEnabled(false);
     }
-
-    statusPanel.setProgress(0);
-    statusPanel.setProgressMessage("Stopped");
-    statusPanel.hideProgress();
-    statusPanel.setStatus("Analysis stopped");
   }
 
   /**
-   * Performs analysis using the new AnalysisPipeline.
-   * Currently implements steps 1-2 (vessel and nuclear segmentation).
+   * Handles analysis completion from the execution controller.
    */
-  private void performCombinedSegmentationAnalysis() {
+  private void handleAnalysisCompletion() {
     if (startButton != null) {
-      startButton.setEnabled(false);
+      startButton.setEnabled(true);
     }
     if (stopButton != null) {
-      stopButton.setEnabled(true);
+      stopButton.setEnabled(false);
     }
 
-    currentAnalysisWorker =
-        new SwingWorker<Void, String>() {
-          @Override
-          protected Void doInBackground() throws Exception {
-            try {
-              // Get all image files from the folder
-              File[] imageFiles = getImageFiles(currentFolder);
+    // Show completion dialog
+    JOptionPane.showMessageDialog(
+        parentComponent,
+        "Analysis pipeline completed!\n\n"
+            + "Pipeline: "
+            + currentPipeline.getDisplayName()
+            + "\n"
+            + "Images processed: "
+            + currentImageCount
+            + "\n"
+            + "Steps completed: Vessel Segmentation, Nuclear Segmentation\n"
+            + "Remaining steps: Cytoplasm, Features, Classification, Statistics"
+            + " (TODO)\n\n"
+            + "Check the ROI toolbar to see detected vessels and nuclei.",
+        "Analysis Complete",
+        JOptionPane.INFORMATION_MESSAGE);
 
-              if (imageFiles.length == 0) {
-                publish("No supported image files found in the selected folder.");
-                return null;
-              }
-
-              LOGGER.info("Starting analysis pipeline for {} images", imageFiles.length);
-
-              // Create analysis pipeline with current settings
-              VesselSegmentationSettings vesselSettings =
-                  configurationManager.loadVesselSegmentationSettings();
-              NuclearSegmentationSettings nuclearSettings =
-                  configurationManager.loadNuclearSegmentationSettings();
-
-              // Create required dependencies for AnalysisPipeline
-              com.scipath.scipathj.core.config.MainSettings mainSettings =
-                  configurationManager.loadMainSettings();
-              com.scipath.scipathj.ui.components.ROIManager roiManager =
-                  com.scipath.scipathj.ui.components.ROIManager.getInstance();
-
-              AnalysisPipeline pipeline =
-                  new AnalysisPipeline(configurationManager, mainSettings, roiManager);
-
-              // Set up progress callbacks
-              pipeline.setProgressMessageCallback(message -> publish(message));
-              pipeline.setProgressPercentCallback(percent -> statusPanel.setProgress(percent));
-
-              // Execute the pipeline
-              AnalysisPipeline.AnalysisResults results = pipeline.processBatch(imageFiles);
-
-              // Store extracted features for later display
-              if (results.allExtractedFeatures() != null && !results.allExtractedFeatures().isEmpty()) {
-                storeFeatures(results.allExtractedFeatures());
-              }
-
-              // Final update
-              statusPanel.setProgress(100);
-              publish(
-                  String.format(
-                      "Analysis completed! Found %d vessels, %d nuclei, and %d cells across %d images.",
-                      results.totalVessels(), results.totalNuclei(), results.totalCells(), results.processedImages()));
-
-            } catch (Exception e) {
-              LOGGER.error("Error during analysis pipeline execution", e);
-              publish("Analysis failed: " + e.getMessage());
-            }
-
-            return null;
-          }
-
-          @Override
-          protected void process(java.util.List<String> chunks) {
-            String latestMessage = chunks.get(chunks.size() - 1);
-            statusPanel.setProgressMessage(latestMessage);
-            statusPanel.setStatus("Combined Segmentation: " + latestMessage);
-          }
-
-          @Override
-          protected void done() {
-            if (startButton != null) {
-              startButton.setEnabled(true);
-            }
-            if (stopButton != null) {
-              stopButton.setEnabled(false);
-            }
-
-            try {
-              get(); // Check for exceptions
-              statusPanel.setProgress(100);
-              statusPanel.setProgressMessage("Analysis Complete");
-              statusPanel.setStatus("Combined segmentation analysis completed successfully");
-
-              // Show completion dialog
-              JOptionPane.showMessageDialog(
-                  parentComponent,
-                  "Analysis pipeline completed!\n\n"
-                      + "Pipeline: "
-                      + currentPipeline.getDisplayName()
-                      + "\n"
-                      + "Images processed: "
-                      + currentImageCount
-                      + "\n"
-                      + "Steps completed: Vessel Segmentation, Nuclear Segmentation\n"
-                      + "Remaining steps: Cytoplasm, Features, Classification, Statistics"
-                      + " (TODO)\n\n"
-                      + "Check the ROI toolbar to see detected vessels and nuclei.",
-                  "Analysis Complete",
-                  JOptionPane.INFORMATION_MESSAGE);
-
-            } catch (Exception e) {
-              LOGGER.error("Analysis failed", e);
-              statusPanel.setProgressMessage("Analysis Failed");
-              statusPanel.setStatus("Analysis failed: " + e.getMessage());
-
-              JOptionPane.showMessageDialog(
-                  parentComponent,
-                  "Analysis failed:\n" + e.getMessage(),
-                  "Analysis Error",
-                  JOptionPane.ERROR_MESSAGE);
-            }
-
-            // Hide progress after a delay
-            Timer timer = new Timer(3000, e -> statusPanel.hideProgress());
-            timer.setRepeats(false);
-            timer.start();
-
-            LOGGER.info("Analysis pipeline execution completed");
-          }
-        };
-
-    currentAnalysisWorker.execute();
+    LOGGER.info("Analysis pipeline execution completed");
   }
 
   /**
-   * Gets all supported image files from the specified folder.
+   * Handles extracted features from analysis completion.
+   *
+   * @param imageName the image name (may be null)
+   * @param features the extracted features
    */
-  private File[] getImageFiles(File folder) {
-    return folder.listFiles(
-        (dir, name) -> {
-          String lowerName = name.toLowerCase();
-          for (String extension : SegmentationConstants.SUPPORTED_IMAGE_EXTENSIONS) {
-            if (lowerName.endsWith(extension)) {
-              return true;
-            }
-          }
-          return false;
-        });
+  private void handleAnalysisComplete(String imageName, Map<String, Map<String, Object>> features) {
+    storeFeatures(features);
+    LOGGER.debug("Received features from analysis completion");
   }
 
   /**
@@ -304,7 +195,7 @@ public class AnalysisController {
    * @return true if analysis is running, false otherwise
    */
   public boolean isAnalysisRunning() {
-    return currentAnalysisWorker != null && !currentAnalysisWorker.isDone();
+    return executionController.isAnalysisRunning();
   }
 
   /**

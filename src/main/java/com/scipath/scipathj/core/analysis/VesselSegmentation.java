@@ -4,7 +4,7 @@ import com.scipath.scipathj.core.config.ConfigurationManager;
 import com.scipath.scipathj.core.config.SegmentationConstants;
 import com.scipath.scipathj.core.config.VesselSegmentationSettings;
 import com.scipath.scipathj.data.model.UserROI;
-import com.scipath.scipathj.ui.components.ROIManager;
+import com.scipath.scipathj.ui.common.ROIManager;
 import com.scipath.scipathj.ui.utils.UIConstants;
 import ij.IJ;
 import ij.ImagePlus;

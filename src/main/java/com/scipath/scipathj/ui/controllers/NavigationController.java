@@ -1,10 +1,10 @@
 package com.scipath.scipathj.ui.controllers;
 
-import com.scipath.scipathj.ui.components.FolderSelectionPanel;
-import com.scipath.scipathj.ui.components.MainImageViewer;
-import com.scipath.scipathj.ui.components.PipelineRecapPanel;
-import com.scipath.scipathj.ui.components.SimpleImageGallery;
-import com.scipath.scipathj.ui.components.StatusPanel;
+import com.scipath.scipathj.ui.analysis.components.FolderSelectionPanel;
+import com.scipath.scipathj.ui.common.MainImageViewer;
+import com.scipath.scipathj.ui.analysis.components.PipelineRecapPanel;
+import com.scipath.scipathj.ui.common.SimpleImageGallery;
+import com.scipath.scipathj.ui.common.StatusPanel;
 import com.scipath.scipathj.ui.model.PipelineInfo;
 import java.awt.*;
 import java.io.File;

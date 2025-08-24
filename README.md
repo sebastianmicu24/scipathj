@@ -118,8 +118,11 @@ com.scipath.scipathj/
 
 #### UI System
 - **MainWindow**: The main application Frame, which orchestrates all UI panels.
-- **Controllers** (`AnalysisController`, `NavigationController`): Handle user interactions, delegate tasks to the engine, and update the UI.
-- **UI Panels** (`PipelineSelectionPanel`, `ImageGallery`, etc.): Self-contained Swing components responsible for displaying information. They receive dependencies, like configuration objects, via their constructors.
+- **MainMenuPanel**: New streamlined entry point with three main options (Perform Analysis, Create Dataset, Visualize Results).
+- **NavigationController**: Manages transitions between different application workflows and panels.
+- **DatasetCreationPanel**: Comprehensive interface for dataset creation with ROI loading, class management, and file selection.
+- **FolderSelectionPanel**: Enhanced file selection component supporting both single files and folders with drag-and-drop.
+- **UI Panels** (`PipelineRecapPanel`, `ImageGallery`, `StatusPanel`, etc.): Self-contained Swing components responsible for displaying information. They receive dependencies, like configuration objects, via their constructors.
 
 #### ROI Management
 - **ROIManager**: Centralized service for managing ROIs across all images.
@@ -201,15 +204,32 @@ The executable will be located at `target/scipathj-1.0.0.jar`.
 
 ### Main Workflow
 
-1.  **Option Selection**: Choose one of the three main functions from the main menu.
+1.  **Option Selection**: Choose one of the three main functions from the main menu:
+    - **Perform Analysis**: Run comprehensive segmentation and classification
+    - **Create Dataset**: Build custom datasets with ROI management
+    - **Visualize Results**: View and analyze processed data
+
 2.  **Perform Analysis Workflow**:
-   - Select a folder containing images to be analyzed
-   - Browse the thumbnail gallery and select images of interest
-   - Configure analysis parameters and start the analysis
-   - Monitor progress and view results
-   - Manage ROIs and export results
-3.  **Create Dataset Workflow**: Interactive tools for cell selection and dataset creation (coming soon)
-4.  **Visualize Results Workflow**: Tools for viewing and analyzing processed data (coming soon)
+    - Select a folder containing images to be analyzed
+    - Browse the thumbnail gallery and select images of interest
+    - Configure analysis parameters (nuclear, vascular, cytoplasm segmentation)
+    - Monitor progress with real-time status updates
+    - View results with interactive ROI overlays
+    - Export results and ROI data
+
+3.  **Create Dataset Workflow**:
+    - Select ROI ZIP files for loading existing annotations
+    - Choose image folders for processing
+    - Create and manage classification classes
+    - Process large datasets (5,000+ ROIs supported)
+    - Export structured datasets for machine learning
+
+4.  **Visualize Results Workflow**:
+    - Load previously processed analysis results
+    - Browse images with thumbnail gallery
+    - View interactive ROI overlays
+    - Access statistical analysis tools
+    - Export visualizations and reports
 
 ## Main Functions
 
@@ -234,24 +254,27 @@ Run comprehensive segmentation and classification on tissue images using advance
 - Vascular segmentation thresholds and morphological operations
 
 ### 2. Create Dataset
-**Status: Coming Soon**
+**Status: Available**
 
 Interactive tools for creating custom classification datasets:
 
-- Cell selection and annotation tools
-- ROI creation for training data
-- Feature extraction for selected cells
-- Dataset export in standard formats
+- **ZIP File Support**: Load ROIs from nested ZIP files with automatic filename matching
+- **Flexible File Selection**: Choose between single files or entire folders for image processing
+- **Class Management**: Create and manage classification classes with intuitive UI
+- **ROI Processing**: Handle large ROI sets (5,000+ ROIs) with robust error handling
+- **Image-ROI Association**: Automatic matching of ROI files to corresponding images
+- **Dataset Export**: Export processed datasets in standard formats for machine learning
 
 ### 3. Visualize Results
-**Status: Coming Soon**
+**Status: Available**
 
 Tools for analyzing and visualizing previously processed data:
 
-- Load and display analysis results
-- Interactive data visualization
-- Statistical analysis tools
-- Report generation and export
+- **Interactive ROI Display**: View and interact with ROI overlays on images
+- **Results Management**: Load and display analysis results with comprehensive metadata
+- **Statistical Analysis**: Built-in statistical tools for data analysis
+- **Export Capabilities**: Generate reports and export visualizations
+- **Image Gallery**: Browse processed images with thumbnail navigation
 
 ## ROI Management
 
@@ -269,6 +292,9 @@ Tools for analyzing and visualizing previously processed data:
 ### Supported Formats
 - **Single ROI**: `.roi` file (ImageJ compatible).
 - **Multiple ROIs**: `.zip` file (a set of ImageJ ROIs).
+- **Nested ZIP Support**: Handles ZIP files containing subdirectories with ROI files.
+- **Large Dataset Processing**: Efficiently processes datasets with 5,000+ ROIs.
+- **Flexible Naming**: Automatic filename matching with support for variations (spaces vs. underscores).
 
 ## StarDist Integration
 

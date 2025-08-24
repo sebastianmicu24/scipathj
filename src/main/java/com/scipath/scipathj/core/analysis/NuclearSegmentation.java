@@ -3,7 +3,7 @@ package com.scipath.scipathj.core.analysis;
 import com.scipath.scipathj.core.config.ConfigurationManager;
 import com.scipath.scipathj.core.config.NuclearSegmentationSettings;
 import com.scipath.scipathj.data.model.NucleusROI;
-import com.scipath.scipathj.ui.components.ROIManager;
+import com.scipath.scipathj.ui.common.ROIManager;
 import de.csbdresden.stardist.StarDist2D;
 import ij.ImagePlus;
 import ij.gui.Roi;
