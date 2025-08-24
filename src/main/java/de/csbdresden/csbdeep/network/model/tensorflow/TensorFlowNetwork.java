@@ -32,6 +32,8 @@ package de.csbdresden.csbdeep.network.model.tensorflow;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.scipath.scipathj.infrastructure.engine.TensorFlowLibraryLoader;
+import com.scipath.scipathj.infrastructure.utils.DirectFileLogger;
 import de.csbdresden.csbdeep.network.DefaultInputMapper;
 import de.csbdresden.csbdeep.network.model.DefaultNetwork;
 import de.csbdresden.csbdeep.network.model.NetworkSettings;
@@ -96,7 +98,7 @@ public class TensorFlowNetwork<T extends RealType<T>> extends DefaultNetwork<T> 
   @Override
   public void loadLibrary() {
     // Check if TensorFlow library is already loaded by our optimized loader
-    if (com.scipath.scipathj.core.engine.TensorFlowLibraryLoader.isLibraryLoaded()) {
+    if (TensorFlowLibraryLoader.isLibraryLoaded()) {
       log("TensorFlow library already loaded by optimized loader");
       tensorFlowLoaded = true;
       return;
@@ -123,7 +125,7 @@ public class TensorFlowNetwork<T extends RealType<T>> extends DefaultNetwork<T> 
       log("TensorFlowService.loadLibrary() failed: " + e.getMessage());
       // Try to load with our optimized loader as fallback
       try {
-        if (com.scipath.scipathj.core.engine.TensorFlowLibraryLoader.loadTensorFlowLibrary()) {
+        if (TensorFlowLibraryLoader.loadTensorFlowLibrary()) {
           log("TensorFlow library loaded successfully using optimized loader");
           tensorFlowLoaded = true;
         } else {
@@ -187,47 +189,47 @@ public class TensorFlowNetwork<T extends RealType<T>> extends DefaultNetwork<T> 
   @Override
   protected boolean loadModel(final Location source, final String modelName) {
     if (!tensorFlowLoaded) {
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "TensorFlow not loaded, cannot load model");
       return false;
     }
     log("Loading TensorFlow model " + modelName + " from source file " + source.getURI());
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "=== STARTING MODEL LOADING ===");
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Model name: " + modelName);
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow("Model name: " + modelName);
+    DirectFileLogger.logTensorFlow(
         "Source URI: " + source.getURI());
     try {
       if (model != null) {
         model.close();
       }
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "Attempting to load cached model using TensorFlowService");
 
       // Try to load cached model with error handling for cache issues
       try {
         model = tensorFlowService.loadCachedModel(source, modelName, MODEL_TAG);
-        com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+        DirectFileLogger.logTensorFlow(
             "TensorFlowService.loadCachedModel() completed");
       } catch (Exception e) {
         log("TensorFlowService.loadCachedModel() failed due to cache error: " + e.getMessage());
-        com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+        DirectFileLogger.logTensorFlow(
             "TensorFlowService.loadCachedModel() failed due to cache error: " + e.getMessage());
         model = null; // Force fallback to direct loading
       }
       //			loadNetworkSettingsFromJson(tensorFlowService.loadFile(source, modelName, "meta.json"));
     } catch (TensorFlowException e) {
-      com.scipath.scipathj.core.utils.DirectFileLogger.logException(
+      DirectFileLogger.logException(
           "TENSORFLOW", "TensorFlowException during loadCachedModel", e);
       return false;
     }
     // Extract names from the model signature.
     // The strings "input", "probabilities" and "patches" are meant to be
     // in sync with the model exporter (export_saved_model()) in Python.
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "Checking model state: model=" + (model != null ? "not null" : "null"));
     if (model != null) {
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "Model.model() state: " + (model.model() != null ? "not null" : "null"));
     }
     if (model != null && model.model() != null) {
@@ -252,42 +254,42 @@ public class TensorFlowNetwork<T extends RealType<T>> extends DefaultNetwork<T> 
                         + " inputs and "
                         + sig.getOutputsCount()
                         + " outputs");
-                com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+                DirectFileLogger.logTensorFlow(
                     "Successfully loaded model signature with "
                         + sig.getInputsCount()
                         + " inputs and "
                         + sig.getOutputsCount()
                         + " outputs");
-                com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+                DirectFileLogger.logTensorFlow(
                     "Model loaded successfully via TensorFlowService");
                 return true;
               } else {
                 log("Model signature is missing required inputs or outputs");
-                com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+                DirectFileLogger.logTensorFlow(
                     "Model signature is missing required inputs or outputs");
                 sig = null;
               }
             } else {
               log("No metaGraphDef found in SavedModelBundle");
-              com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+              DirectFileLogger.logTensorFlow(
                   "No metaGraphDef found in SavedModelBundle");
               sig = null;
             }
           } catch (InvalidProtocolBufferException e) {
             log("Failed to parse model signature: " + e.getMessage());
-            com.scipath.scipathj.core.utils.DirectFileLogger.logException(
+            DirectFileLogger.logException(
                 "TENSORFLOW", "Failed to parse model signature", e);
             sig = null;
           }
         } else {
           log("Model is not a SavedModelBundle, signature will be null");
-          com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+          DirectFileLogger.logTensorFlow(
               "Model is not a SavedModelBundle, signature will be null");
           sig = null;
         }
       } catch (Exception e) {
         log("Error loading model signature: " + e.getMessage());
-        com.scipath.scipathj.core.utils.DirectFileLogger.logException(
+        DirectFileLogger.logException(
             "TENSORFLOW", "Error loading model signature", e);
         sig = null;
       }
@@ -295,17 +297,17 @@ public class TensorFlowNetwork<T extends RealType<T>> extends DefaultNetwork<T> 
       logService.error(
           "TensorFlowService.loadCachedModel() returned null model.model() - trying direct"
               + " loading");
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "TensorFlowService.loadCachedModel() returned null model.model() - trying direct"
               + " loading");
       // Try direct loading as fallback for JPackage environment
       try {
-        com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+        DirectFileLogger.logTensorFlow(
             "Attempting direct model loading fallback");
         model = loadModelDirectly(source, modelName);
         if (model != null && model.model() != null) {
           log("Successfully loaded model using direct loading fallback");
-          com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+          DirectFileLogger.logTensorFlow(
               "Successfully loaded model using direct loading fallback");
           // Try to extract signature definition from the directly loaded model
           try {
@@ -340,13 +342,13 @@ public class TensorFlowNetwork<T extends RealType<T>> extends DefaultNetwork<T> 
           return true;
         } else {
           logService.error("Direct model loading also failed");
-          com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+          DirectFileLogger.logTensorFlow(
               "Direct model loading also failed - model or model.model() is null");
           return false;
         }
       } catch (Exception e) {
         logService.error("Exception during direct model loading: " + e.getMessage());
-        com.scipath.scipathj.core.utils.DirectFileLogger.logException(
+        DirectFileLogger.logException(
             "TENSORFLOW", "Exception during direct model loading", e);
         return false;
       }
@@ -430,77 +432,77 @@ public class TensorFlowNetwork<T extends RealType<T>> extends DefaultNetwork<T> 
 
   @Override
   public void preprocess() {
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("=== INIZIO PREPROCESSING ===");
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow("=== INIZIO PREPROCESSING ===");
+    DirectFileLogger.logTensorFlow(
         "InputNode presente: " + (inputNode != null));
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "OutputNode presente: " + (outputNode != null));
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "Model presente: " + (model != null));
     if (model != null) {
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "Model.model() presente: " + (model.model() != null));
     }
 
     initMapping();
     calculateMapping();
 
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("=== FINE PREPROCESSING ===");
+    DirectFileLogger.logTensorFlow("=== FINE PREPROCESSING ===");
   }
 
   @Override
   public void initMapping() {
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("--- Inizio initMapping ---");
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow("--- Inizio initMapping ---");
+    DirectFileLogger.logTensorFlow(
         "InputNode stato: " + (inputNode != null ? "presente" : "NULL"));
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "OutputNode stato: " + (outputNode != null ? "presente" : "NULL"));
 
     if (inputNode != null) {
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "Chiamata inputNode.setMappingDefaults()");
       inputNode.setMappingDefaults();
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "inputNode.setMappingDefaults() completata");
     } else {
       log("Warning: inputNode is null in initMapping(), skipping setMappingDefaults()");
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "ERRORE CRITICO: inputNode è null in initMapping()!");
     }
     if (outputNode != null) {
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "Chiamata outputNode.setMappingDefaults()");
       outputNode.setMappingDefaults();
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "outputNode.setMappingDefaults() completata");
     } else {
       log("Warning: outputNode is null in initMapping(), skipping setMappingDefaults()");
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "ERRORE CRITICO: outputNode è null in initMapping()!");
     }
 
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("--- Fine initMapping ---");
+    DirectFileLogger.logTensorFlow("--- Fine initMapping ---");
   }
 
   @Override
   public void calculateMapping() {
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "--- Inizio calculateMapping ---");
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "InputNode presente prima doDimensionReduction: " + (inputNode != null));
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "OutputNode presente prima doDimensionReduction: " + (outputNode != null));
 
     doDimensionReduction();
 
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "InputNode presente prima generateMapping: " + (inputNode != null));
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "OutputNode presente prima generateMapping: " + (outputNode != null));
 
     generateMapping();
 
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("--- Fine calculateMapping ---");
+    DirectFileLogger.logTensorFlow("--- Fine calculateMapping ---");
   }
 
   @Override
@@ -547,32 +549,32 @@ public class TensorFlowNetwork<T extends RealType<T>> extends DefaultNetwork<T> 
   }
 
   private void generateMapping() {
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "--- Inizio generateMapping ---");
 
     if (inputNode != null) {
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "Chiamata inputNode.generateMapping()");
       inputNode.generateMapping();
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "inputNode.generateMapping() completata");
     } else {
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "ERRORE CRITICO: inputNode è null in generateMapping()!");
     }
 
     if (outputNode != null) {
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "Chiamata outputNode.generateMapping()");
       outputNode.generateMapping();
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "outputNode.generateMapping() completata");
     } else {
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "ERRORE CRITICO: outputNode è null in generateMapping()!");
     }
 
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("--- Fine generateMapping ---");
+    DirectFileLogger.logTensorFlow("--- Fine generateMapping ---");
   }
 
   private Dataset createEmptyDuplicateWithoutAxis(
@@ -703,24 +705,24 @@ public class TensorFlowNetwork<T extends RealType<T>> extends DefaultNetwork<T> 
     log("=== STARTING DIRECT MODEL LOADING ===");
     log("Source: " + source.getURI());
     log("Model name: " + modelName);
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "=== STARTING DIRECT MODEL LOADING ===");
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Source: " + source.getURI());
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Model name: " + modelName);
+    DirectFileLogger.logTensorFlow("Source: " + source.getURI());
+    DirectFileLogger.logTensorFlow("Model name: " + modelName);
 
     // STRATEGY 1: Try to load from JAR resources first (much safer for JPackage)
     try {
       log("Attempting to load model from JAR resources...");
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "Attempting to load model from JAR resources...");
       String resourcePath = "/models/2D/" + getModelDirectoryName(modelName) + "/";
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "Resource path: " + resourcePath);
       java.net.URL resourceUrl = TensorFlowNetwork.class.getResource(resourcePath);
 
       if (resourceUrl != null) {
         log("Found model in JAR resources: " + resourceUrl);
-        com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+        DirectFileLogger.logTensorFlow(
             "Found model in JAR resources: " + resourceUrl);
 
         // Extract model from JAR to temporary directory
@@ -751,17 +753,17 @@ public class TensorFlowNetwork<T extends RealType<T>> extends DefaultNetwork<T> 
           return directModel;
         } else {
           log("Could not find model directory in extracted JAR resources");
-          com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+          DirectFileLogger.logTensorFlow(
               "Could not find model directory in extracted JAR resources");
         }
       } else {
         log("Model not found in JAR resources, falling back to ZIP extraction");
-        com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+        DirectFileLogger.logTensorFlow(
             "Model not found in JAR resources, falling back to ZIP extraction");
       }
     } catch (Exception e) {
       log("JAR resource loading failed: " + e.getMessage() + ", falling back to ZIP extraction");
-      com.scipath.scipathj.core.utils.DirectFileLogger.logException(
+      DirectFileLogger.logException(
           "TENSORFLOW", "JAR resource loading failed, falling back to ZIP extraction", e);
     }
 
@@ -949,55 +951,55 @@ public class TensorFlowNetwork<T extends RealType<T>> extends DefaultNetwork<T> 
    * Map model names to directory names in resources.
    */
   private String getModelDirectoryName(String modelName) {
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("=== MODEL NAME MAPPING ===");
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow("=== MODEL NAME MAPPING ===");
+    DirectFileLogger.logTensorFlow(
         "Input model name: '" + modelName + "'");
 
     if (modelName == null) {
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "Model name is null, using default: dsb2018_heavy_augment");
       return "dsb2018_heavy_augment"; // default
     }
 
     String lowerName = modelName.toLowerCase();
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "Lowercase model name: '" + lowerName + "'");
 
     // Map StarDist model names to directory names
     // Check for specific model names first (most specific)
     if (lowerName.equals("versatile (h&e nuclei)")) {
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "Matched 'versatile (h&e nuclei)' -> he_heavy_augment");
       return "he_heavy_augment";
     } else if (lowerName.equals("versatile (fluorescent nuclei)")) {
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "Matched 'versatile (fluorescent nuclei)' -> dsb2018_heavy_augment");
       return "dsb2018_heavy_augment";
     } else if (lowerName.equals("dsb 2018 (from stardist 2d paper)")) {
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "Matched 'dsb 2018 (from stardist 2d paper)' -> dsb2018_paper");
       return "dsb2018_paper";
     }
 
     // Check for partial matches (H&E has priority over versatile)
     if (lowerName.contains("h&e") || lowerName.contains("he")) {
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "Partial match H&E/HE -> he_heavy_augment");
       return "he_heavy_augment";
     } else if (lowerName.contains("dsb2018") && lowerName.contains("paper")) {
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "Partial match DSB2018 paper -> dsb2018_paper");
       return "dsb2018_paper";
     } else if (lowerName.contains("dsb2018")
         || lowerName.contains("fluorescent")
         || lowerName.contains("versatile")) {
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "Partial match DSB2018/fluorescent/versatile -> dsb2018_heavy_augment");
       return "dsb2018_heavy_augment";
     }
 
     // Default fallback
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "No match found, using default: dsb2018_heavy_augment");
     return "dsb2018_heavy_augment";
   }

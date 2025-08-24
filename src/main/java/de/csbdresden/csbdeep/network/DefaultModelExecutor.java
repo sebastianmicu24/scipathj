@@ -29,7 +29,7 @@
 
 package de.csbdresden.csbdeep.network;
 
-import com.scipath.scipathj.core.utils.DirectFileLogger;
+import com.scipath.scipathj.infrastructure.utils.DirectFileLogger;
 import de.csbdresden.csbdeep.network.model.Network;
 import de.csbdresden.csbdeep.task.DefaultTask;
 import de.csbdresden.csbdeep.tiling.AdvancedTiledView;

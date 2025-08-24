@@ -1,7 +1,7 @@
 package com.scipath.scipathj.ui.controllers;
 
-import com.scipath.scipathj.core.config.ConfigurationManager;
-import com.scipath.scipathj.core.engine.SciPathJEngine;
+import com.scipath.scipathj.infrastructure.config.ConfigurationManager;
+import com.scipath.scipathj.infrastructure.engine.SciPathJEngine;
 import com.scipath.scipathj.ui.common.StatusPanel;
 import com.scipath.scipathj.ui.analysis.dialogs.FeatureDisplayDialog;
 import com.scipath.scipathj.ui.model.PipelineInfo;
@@ -229,7 +229,7 @@ public class AnalysisController {
 
     try {
       // Load current settings for CSV format
-      com.scipath.scipathj.core.config.MainSettings mainSettings = configurationManager.loadMainSettings();
+      com.scipath.scipathj.infrastructure.config.MainSettings mainSettings = configurationManager.loadMainSettings();
 
       FeatureDisplayDialog dialog = new FeatureDisplayDialog(
           (java.awt.Frame) SwingUtilities.getWindowAncestor(parentComponent),

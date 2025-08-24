@@ -29,8 +29,8 @@
 
 package de.csbdresden.csbdeep.commands;
 
-import com.scipath.scipathj.core.engine.TensorFlowNetworkWrapper;
-import com.scipath.scipathj.core.utils.DirectFileLogger;
+import com.scipath.scipathj.infrastructure.engine.TensorFlowNetworkWrapper;
+import com.scipath.scipathj.infrastructure.utils.DirectFileLogger;
 import de.csbdresden.csbdeep.io.DefaultInputProcessor;
 import de.csbdresden.csbdeep.io.InputProcessor;
 import de.csbdresden.csbdeep.io.OutputProcessor;

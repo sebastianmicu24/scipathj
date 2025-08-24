@@ -1,7 +1,7 @@
 package com.scipath.scipathj.ui.main;
 
-import com.scipath.scipathj.core.config.ConfigurationManager;
-import com.scipath.scipathj.core.config.MainSettings;
+import com.scipath.scipathj.infrastructure.config.ConfigurationManager;
+import com.scipath.scipathj.infrastructure.config.MainSettings;
 import com.scipath.scipathj.ui.common.dialogs.settings.DisplaySettingsDialog;
 import com.scipath.scipathj.ui.common.dialogs.settings.MainSettingsDialog;
 import java.awt.*;

@@ -1,6 +1,6 @@
 package com.scipath.scipathj;
 
-import com.scipath.scipathj.core.bootstrap.ApplicationContext;
+import com.scipath.scipathj.infrastructure.bootstrap.ApplicationContext;
 import com.scipath.scipathj.ui.main.MainWindow;
 import javax.swing.JFrame;
 import javax.swing.JOptionPane;

@@ -1,6 +1,6 @@
 package com.scipath.scipathj.ui.analysis.components;
 
-import com.scipath.scipathj.core.config.ConfigurationManager;
+import com.scipath.scipathj.infrastructure.config.ConfigurationManager;
 import com.scipath.scipathj.ui.analysis.dialogs.settings.*;
 import com.scipath.scipathj.ui.model.PipelineInfo;
 import com.scipath.scipathj.ui.themes.ThemeManager;

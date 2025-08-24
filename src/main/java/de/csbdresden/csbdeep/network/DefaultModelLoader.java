@@ -29,6 +29,7 @@
 
 package de.csbdresden.csbdeep.network;
 
+import com.scipath.scipathj.infrastructure.utils.DirectFileLogger;
 import de.csbdresden.csbdeep.network.model.Network;
 import de.csbdresden.csbdeep.task.DefaultTask;
 import java.io.FileNotFoundException;
@@ -64,47 +65,47 @@ public class DefaultModelLoader extends DefaultTask implements ModelLoader {
       final String modelName, final Network network, final String modelFileUrl, final Dataset input)
       throws FileNotFoundException {
 
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "=== INIZIO CARICAMENTO MODELLO ===");
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Model name: " + modelName);
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow("Model name: " + modelName);
+    DirectFileLogger.logTensorFlow(
         "Model file URL: " + modelFileUrl);
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "Network class: " + network.getClass().getSimpleName());
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "Input presente: " + (input != null));
 
     if (modelFileUrl.isEmpty()) {
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "ERROR: Model file URL è vuoto!");
       return;
     }
 
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "Chiamando network.loadModel...");
     boolean loaded = network.loadModel(modelFileUrl, modelName);
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "network.loadModel result: " + loaded);
 
     if (!loaded) {
-      com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+      DirectFileLogger.logTensorFlow(
           "ERROR: network.loadModel ha fallito!");
       return;
     }
 
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Caricando input node...");
+    DirectFileLogger.logTensorFlow("Caricando input node...");
     network.loadInputNode(input);
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Input node caricato");
+    DirectFileLogger.logTensorFlow("Input node caricato");
 
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Caricando output node...");
+    DirectFileLogger.logTensorFlow("Caricando output node...");
     network.loadOutputNode(input);
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Output node caricato");
+    DirectFileLogger.logTensorFlow("Output node caricato");
 
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Inizializzando mapping...");
+    DirectFileLogger.logTensorFlow("Inizializzando mapping...");
     network.initMapping();
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow("Mapping inizializzato");
+    DirectFileLogger.logTensorFlow("Mapping inizializzato");
 
-    com.scipath.scipathj.core.utils.DirectFileLogger.logTensorFlow(
+    DirectFileLogger.logTensorFlow(
         "=== FINE CARICAMENTO MODELLO ===");
   }
 }

@@ -1,0 +1,177 @@
+package com.scipath.scipathj.infrastructure.engine;
+
+import com.scipath.scipathj.infrastructure.utils.DirectFileLogger;
+import de.csbdresden.csbdeep.network.model.tensorflow.TensorFlowNetwork;
+import de.csbdresden.csbdeep.task.Task;
+import javax.swing.*;
+import net.imagej.tensorflow.TensorFlowService;
+import org.scijava.plugin.Parameter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Wrapper for TensorFlowNetwork that applies Java 21 ClassLoader fixes
+ * before loading the TensorFlow library.
+ *
+ * @author Sebastian Micu
+ * @version 1.0.0
+ * @since 1.0.0
+ */
+public class TensorFlowNetworkWrapper<T extends net.imglib2.type.numeric.RealType<T>>
+    extends TensorFlowNetwork<T> {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(TensorFlowNetworkWrapper.class);
+
+  @Parameter private TensorFlowService tensorFlowService;
+
+  public TensorFlowNetworkWrapper(Task associatedTask) {
+    super(associatedTask);
+    DirectFileLogger.logTensorFlow(
+        "Costruttore chiamato con task: "
+            + (associatedTask != null ? associatedTask.getClass().getSimpleName() : "null"));
+  }
+
+  @Override
+  public void loadLibrary() {
+    LOGGER.info("Loading TensorFlow library with Java 21 compatibility fixes");
+
+    try {
+      // Apply ClassLoader fixes before TensorFlow loading
+      LOGGER.debug("Applying ClassLoader fixes before TensorFlow library loading");
+      Java21ClassLoaderFix.applyFix();
+
+      // Store current thread context
+      Thread currentThread = Thread.currentThread();
+      ClassLoader originalContextClassLoader = currentThread.getContextClassLoader();
+      try {
+        // Try our custom TensorFlow library loader first
+        LOGGER.debug("Attempting to load TensorFlow library using custom loader");
+        boolean customLoadSuccess = TensorFlowLibraryLoader.loadTensorFlowLibrary();
+
+        if (customLoadSuccess) {
+          String loadedPath = TensorFlowLibraryLoader.getLoadedLibraryPath();
+          LOGGER.info("TensorFlow library loaded successfully using custom loader");
+          LOGGER.info("Library loaded from: {}", loadedPath);
+
+          // If custom loader works, skip the service initialization to avoid UI plugin errors
+          LOGGER.debug("Skipping TensorFlow service initialization since native library is loaded");
+          setTensorFlowLoaded(true);
+          return; // Exit early to avoid UI plugin errors
+        }
+
+        // If custom loader fails, try the standard approach
+        LOGGER.warn("Custom TensorFlow library loader failed, trying standard approach");
+
+        if (tensorFlowService != null) {
+          tensorFlowService.loadLibrary();
+
+          boolean serviceLoaded = tensorFlowService.getStatus().isLoaded();
+          if (serviceLoaded) {
+            String statusInfo = tensorFlowService.getStatus().getInfo();
+            LOGGER.info("TensorFlow library loaded successfully using standard approach");
+            log(statusInfo);
+            setTensorFlowLoaded(true);
+          } else {
+            LOGGER.error("TensorFlow library failed to load using all approaches");
+            setTensorFlowLoaded(false);
+            handleTensorFlowLoadFailure();
+          }
+        } else {
+          LOGGER.error("TensorFlow service is null - cannot load library");
+          setTensorFlowLoaded(false);
+          handleTensorFlowLoadFailure();
+        }
+
+      } finally {
+        // Restore original context class loader if it was changed
+        if (currentThread.getContextClassLoader() != originalContextClassLoader) {
+          LOGGER.debug("Restoring original context ClassLoader");
+          currentThread.setContextClassLoader(originalContextClassLoader);
+        }
+      }
+    } catch (Exception e) {
+      LOGGER.error("Failed to load TensorFlow library with ClassLoader fixes", e);
+      setTensorFlowLoaded(false);
+      handleTensorFlowLoadFailure();
+    }
+  }
+
+  /**
+   * Handles TensorFlow library loading failure.
+   */
+  private void handleTensorFlowLoadFailure() {
+    LOGGER.error("Could not load TensorFlow. Check previous errors and warnings for details.");
+
+    // Get detailed loading status
+    String customLoaderStatus = TensorFlowLibraryLoader.getLoadingStatus();
+    Throwable lastException = TensorFlowLibraryLoader.getLastLoadException();
+
+    LOGGER.error("Detailed TensorFlow loading status:\n{}", customLoaderStatus);
+    if (lastException != null) {
+      LOGGER.error("Last loading exception:", lastException);
+    }
+
+    // Show error dialog with detailed information
+    String errorMessage =
+        String.format(
+            "<html>"
+                + "<h3>TensorFlow Loading Failed</h3>"
+                + "<p>Could not load TensorFlow library using any available method.</p>"
+                + "<p><b>Java Version:</b> %s</p>"
+                + "<p><b>ClassLoader Info:</b> %s</p>"
+                + "<p><b>Custom Loader Status:</b> %s</p>"
+                + "<p><b>Possible Solutions:</b></p>"
+                + "<ul>"
+                + "<li>Ensure TensorFlow native libraries are available</li>"
+                + "<li>Check Java module system compatibility</li>"
+                + "<li>Verify system architecture compatibility</li>"
+                + "<li>Try running with --add-opens JVM arguments</li>"
+                + "<li>Check java.library.path system property</li>"
+                + "</ul>"
+                + "<p>Opening the TensorFlow Library Management tool...</p>"
+                + "</html>",
+            System.getProperty("java.version"),
+            Java21ClassLoaderFix.getClassLoaderInfo(),
+            TensorFlowLibraryLoader.isLibraryLoaded() ? "Loaded" : "Failed");
+
+    JOptionPane.showMessageDialog(
+        null, errorMessage, "TensorFlow Loading Failed", JOptionPane.ERROR_MESSAGE);
+
+    // Try to open TensorFlow management tool
+    try {
+      if (getCommandService() != null) {
+        getCommandService()
+            .run(net.imagej.tensorflow.ui.TensorFlowLibraryManagementCommand.class, true);
+      }
+    } catch (Exception e) {
+      LOGGER.warn("Could not open TensorFlow Library Management tool", e);
+    }
+  }
+
+  /**
+   * Sets the tensorFlowLoaded flag using reflection since it's private in parent.
+   */
+  private void setTensorFlowLoaded(boolean loaded) {
+    try {
+      java.lang.reflect.Field field = TensorFlowNetwork.class.getDeclaredField("tensorFlowLoaded");
+      field.setAccessible(true);
+      field.set(this, loaded);
+    } catch (Exception e) {
+      LOGGER.warn("Could not set tensorFlowLoaded field", e);
+    }
+  }
+
+  /**
+   * Gets the CommandService using reflection since it's private in parent.
+   */
+  private org.scijava.command.CommandService getCommandService() {
+    try {
+      java.lang.reflect.Field field = TensorFlowNetwork.class.getDeclaredField("commandService");
+      field.setAccessible(true);
+      return (org.scijava.command.CommandService) field.get(this);
+    } catch (Exception e) {
+      LOGGER.warn("Could not get CommandService field", e);
+      return null;
+    }
+  }
+}

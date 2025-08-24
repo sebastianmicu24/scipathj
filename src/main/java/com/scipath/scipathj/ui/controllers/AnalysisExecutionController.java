@@ -1,11 +1,11 @@
 package com.scipath.scipathj.ui.controllers;
 
-import com.scipath.scipathj.core.analysis.AnalysisPipeline;
-import com.scipath.scipathj.core.config.ConfigurationManager;
-import com.scipath.scipathj.core.config.NuclearSegmentationSettings;
-import com.scipath.scipathj.core.config.SegmentationConstants;
-import com.scipath.scipathj.core.config.VesselSegmentationSettings;
-import com.scipath.scipathj.core.engine.SciPathJEngine;
+import com.scipath.scipathj.analysis.pipeline.AnalysisPipeline;
+import com.scipath.scipathj.infrastructure.config.ConfigurationManager;
+import com.scipath.scipathj.analysis.config.NuclearSegmentationSettings;
+import com.scipath.scipathj.analysis.config.SegmentationConstants;
+import com.scipath.scipathj.analysis.config.VesselSegmentationSettings;
+import com.scipath.scipathj.infrastructure.engine.SciPathJEngine;
 import com.scipath.scipathj.ui.common.StatusPanel;
 import java.awt.*;
 import java.io.File;

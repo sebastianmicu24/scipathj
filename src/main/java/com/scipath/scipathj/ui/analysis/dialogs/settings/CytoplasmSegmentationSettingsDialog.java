@@ -1,7 +1,7 @@
 package com.scipath.scipathj.ui.analysis.dialogs.settings;
 
-import com.scipath.scipathj.core.config.ConfigurationManager;
-import com.scipath.scipathj.core.config.CytoplasmSegmentationSettings;
+import com.scipath.scipathj.infrastructure.config.ConfigurationManager;
+import com.scipath.scipathj.analysis.config.CytoplasmSegmentationSettings;
 import com.scipath.scipathj.ui.utils.UIConstants;
 import com.scipath.scipathj.ui.utils.UIUtils;
 import java.awt.*;
@@ -26,7 +26,7 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
 
    private CytoplasmSegmentationSettings settings;
    private final ConfigurationManager configManager;
-   private final com.scipath.scipathj.core.config.MainSettings mainSettings;
+   private final com.scipath.scipathj.infrastructure.config.MainSettings mainSettings;
 
   // UI Components
   private JSpinner voronoiExpansionSpinner;

@@ -13,4 +13,4 @@
  * @version 1.0.0
  * @since 1.0.0
  */
-package com.scipath.scipathj.ui.components;
+package com.scipath.scipathj.ui.common.components;

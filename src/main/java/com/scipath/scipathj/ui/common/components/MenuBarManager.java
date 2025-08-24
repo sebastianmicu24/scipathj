@@ -1,6 +1,6 @@
 package com.scipath.scipathj.ui.common.components;
 
-import com.scipath.scipathj.core.config.ConfigurationManager;
+import com.scipath.scipathj.infrastructure.config.ConfigurationManager;
 import com.scipath.scipathj.ui.common.dialogs.AboutDialog;
 import com.scipath.scipathj.ui.common.dialogs.PreferencesDialog;
 import com.scipath.scipathj.ui.analysis.dialogs.settings.VesselSegmentationSettingsDialog;

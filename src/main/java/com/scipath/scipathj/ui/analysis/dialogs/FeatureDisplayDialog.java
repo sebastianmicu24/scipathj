@@ -2,6 +2,7 @@ package com.scipath.scipathj.ui.analysis.dialogs;
 
 import com.scipath.scipathj.ui.utils.UIConstants;
 import com.scipath.scipathj.ui.utils.UIUtils;
+import com.scipath.scipathj.infrastructure.config.MainSettings;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -27,7 +28,7 @@ public class FeatureDisplayDialog extends JDialog {
   private DefaultTableModel tableModel;
   private Map<String, Map<String, Object>> featuresData;
   private String imageName;
-  private com.scipath.scipathj.core.config.MainSettings mainSettings;
+  private MainSettings mainSettings;
 
   public FeatureDisplayDialog(Frame parent, Map<String, Map<String, Object>> features) {
     this(parent, features, null, null);
@@ -37,7 +38,7 @@ public class FeatureDisplayDialog extends JDialog {
     this(parent, features, imageName, null);
   }
 
-  public FeatureDisplayDialog(Frame parent, Map<String, Map<String, Object>> features, String imageName, com.scipath.scipathj.core.config.MainSettings mainSettings) {
+  public FeatureDisplayDialog(Frame parent, Map<String, Map<String, Object>> features, String imageName, MainSettings mainSettings) {
     super(parent, "Extracted Features", true);
     this.featuresData = features;
     this.imageName = imageName;

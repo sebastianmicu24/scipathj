@@ -1,7 +1,7 @@
 package com.scipath.scipathj.ui.common;
 
-import com.scipath.scipathj.core.config.MainSettings;
-import com.scipath.scipathj.data.model.UserROI;
+import com.scipath.scipathj.infrastructure.config.MainSettings;
+import com.scipath.scipathj.roi.model.UserROI;
 import com.scipath.scipathj.ui.themes.ThemeManager;
 import com.scipath.scipathj.ui.utils.ImageLoader;
 import com.scipath.scipathj.ui.utils.UIConstants;

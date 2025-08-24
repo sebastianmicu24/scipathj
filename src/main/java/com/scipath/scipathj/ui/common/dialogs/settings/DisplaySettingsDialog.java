@@ -1,6 +1,6 @@
 package com.scipath.scipathj.ui.common.dialogs.settings;
 
-import com.scipath.scipathj.core.config.MainSettings;
+import com.scipath.scipathj.infrastructure.config.MainSettings;
 import com.scipath.scipathj.ui.utils.UIConstants;
 import com.scipath.scipathj.ui.utils.UIUtils;
 import java.awt.*;

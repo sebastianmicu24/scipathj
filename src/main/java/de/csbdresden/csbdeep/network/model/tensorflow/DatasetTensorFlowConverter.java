@@ -29,7 +29,7 @@
 
 package de.csbdresden.csbdeep.network.model.tensorflow;
 
-import com.scipath.scipathj.core.utils.DirectFileLogger;
+import com.scipath.scipathj.infrastructure.utils.DirectFileLogger;
 import de.csbdresden.csbdeep.converter.*;
 import net.imagej.tensorflow.Tensors;
 import net.imglib2.RandomAccessibleInterval;
