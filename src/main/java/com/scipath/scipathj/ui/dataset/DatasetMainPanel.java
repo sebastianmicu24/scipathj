@@ -90,6 +90,12 @@ public class DatasetMainPanel extends JPanel {
                 classificationPanel.loadImagesFromFolder(imageFolder);
             }
 
+            // Set the ROI ZIP file for loading ROIs
+            File roiZipFile = setupPanel.getSelectedRoiZip();
+            if (roiZipFile != null) {
+                classificationPanel.setRoiZipFile(roiZipFile);
+            }
+
             // Switch to classification view
             showClassificationPanel();
 

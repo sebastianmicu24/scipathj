@@ -115,6 +115,24 @@ public class MainImageViewer extends JPanel
     roiManager.addROIChangeListener(this);
   }
 
+  /**
+   * Adds a ROI overlay listener to receive ROI selection events.
+   */
+  public void addROIOverlayListener(ROIOverlay.ROIOverlayListener listener) {
+    if (roiOverlay != null) {
+      roiOverlay.addROIOverlayListener(listener);
+    }
+  }
+
+  /**
+   * Removes a ROI overlay listener.
+   */
+  public void removeROIOverlayListener(ROIOverlay.ROIOverlayListener listener) {
+    if (roiOverlay != null) {
+      roiOverlay.removeROIOverlayListener(listener);
+    }
+  }
+
   private JLayeredPane createLayeredPane() {
     JLayeredPane pane = new JLayeredPane();
     pane.setPreferredSize(new Dimension(600, 400));
