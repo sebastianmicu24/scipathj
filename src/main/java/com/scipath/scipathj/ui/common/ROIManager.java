@@ -1,6 +1,6 @@
 package com.scipath.scipathj.ui.common;
 
-import com.scipath.scipathj.roi.model.UserROI;
+import com.scipath.scipathj.infrastructure.roi.UserROI;
 import com.scipath.scipathj.analysis.algorithms.classification.CellClassification;
 import ij.gui.Roi;
 import ij.io.RoiDecoder;

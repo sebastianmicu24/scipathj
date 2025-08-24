@@ -1,10 +1,11 @@
 package com.scipath.scipathj.infrastructure.engine;
 
 import com.scipath.scipathj.infrastructure.config.ConfigurationManager;
-import com.scipath.scipathj.infrastructure.events.EventBus;
-import com.scipath.scipathj.infrastructure.pipeline.Pipeline;
-import com.scipath.scipathj.infrastructure.pipeline.PipelineExecutor;
-import com.scipath.scipathj.roi.model.ProcessingResult;
+import com.scipath.scipathj.analysis.pipeline.AnalysisPipeline;
+import com.scipath.scipathj.infrastructure.pipeline.ProcessingResult;
+import com.scipath.scipathj.ui.common.ROIManager;
+import com.scipath.scipathj.infrastructure.config.MainSettings;
+import java.io.File;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -32,9 +33,7 @@ public class SciPathJEngine {
   private static final Logger LOGGER = LoggerFactory.getLogger(SciPathJEngine.class);
 
   private final ConfigurationManager configManager;
-  private final EventBus eventBus;
-  private final PipelineExecutor pipelineExecutor;
-  private final ResourceManager resourceManager;
+  private final AnalysisPipeline analysisPipeline;
   private final ExecutorService executorService;
 
   private volatile boolean isShutdown = false;
@@ -48,9 +47,12 @@ public class SciPathJEngine {
     LOGGER.info("Initializing SciPathJ Engine");
 
     this.configManager = configManager;
-    this.eventBus = new EventBus();
-    this.resourceManager = new ResourceManager();
-    this.pipelineExecutor = new PipelineExecutor(eventBus, resourceManager);
+
+    // Create MainSettings and ROIManager needed for AnalysisPipeline
+    MainSettings mainSettings = configManager.loadMainSettings();
+    ROIManager roiManager = ROIManager.getInstance();
+
+    this.analysisPipeline = new AnalysisPipeline(configManager, mainSettings, roiManager);
     this.executorService = createExecutorService();
 
     LOGGER.info("SciPathJ Engine initialized");
@@ -70,31 +72,44 @@ public class SciPathJEngine {
     return service;
   }
 
-  public CompletableFuture<List<ProcessingResult>> processImages(
-      List<Path> imagePaths, Pipeline pipeline) {
+  public CompletableFuture<AnalysisPipeline.AnalysisResults> processImages(
+      List<Path> imagePaths) {
     checkNotShutdown();
     LOGGER.info(
-        "Starting batch processing of {} images with pipeline: {}",
-        imagePaths.size(),
-        pipeline.getName());
+        "Starting batch processing of {} images with AnalysisPipeline",
+        imagePaths.size());
 
     return CompletableFuture.supplyAsync(
-        () ->
-            executeWithErrorHandling(
-                () -> pipelineExecutor.executeBatch(imagePaths, pipeline),
-                "Batch processing failed"),
+        () -> {
+          try {
+            // Convert Path list to File array for AnalysisPipeline
+            File[] imageFiles = imagePaths.stream()
+                .map(Path::toFile)
+                .toArray(File[]::new);
+
+            return analysisPipeline.processBatch(imageFiles);
+          } catch (Exception e) {
+            LOGGER.error("Batch processing failed", e);
+            throw new RuntimeException("Batch processing failed", e);
+          }
+        },
         executorService);
   }
 
-  public CompletableFuture<ProcessingResult> processImage(Path imagePath, Pipeline pipeline) {
+  public CompletableFuture<AnalysisPipeline.ImageAnalysisResult> processImage(Path imagePath) {
     checkNotShutdown();
     LOGGER.debug("Starting processing of image: {}", imagePath);
 
     return CompletableFuture.supplyAsync(
-        () ->
-            executeWithErrorHandling(
-                () -> pipelineExecutor.executeSingle(imagePath, pipeline),
-                "Image processing failed for: " + imagePath),
+        () -> {
+          try {
+            File imageFile = imagePath.toFile();
+            return analysisPipeline.processImage(imageFile);
+          } catch (Exception e) {
+            LOGGER.error("Image processing failed for: {}", imagePath, e);
+            throw new RuntimeException("Image processing failed for: " + imagePath, e);
+          }
+        },
         executorService);
   }
 
@@ -123,23 +138,6 @@ public class SciPathJEngine {
     return configManager;
   }
 
-  /**
-   * Gets the event bus for subscribing to processing events.
-   *
-   * @return the event bus instance
-   */
-  public EventBus getEventBus() {
-    return eventBus;
-  }
-
-  /**
-   * Gets the resource manager for monitoring system resources.
-   *
-   * @return the resource manager instance
-   */
-  public ResourceManager getResourceManager() {
-    return resourceManager;
-  }
 
   /**
    * Checks if the engine is currently processing any tasks.
@@ -147,7 +145,7 @@ public class SciPathJEngine {
    * @return true if processing is active, false otherwise
    */
   public boolean isProcessing() {
-    return pipelineExecutor.isProcessing();
+    return analysisPipeline.isProcessing();
   }
 
   /**
@@ -156,7 +154,8 @@ public class SciPathJEngine {
    * @return progress percentage (0.0 to 1.0), or 0.0 if not processing
    */
   public double getProgress() {
-    return pipelineExecutor.getProgress();
+    if (!isProcessing()) return 0.0;
+    return (double) analysisPipeline.getProgressPercent() / 100.0;
   }
 
   /**
@@ -166,7 +165,8 @@ public class SciPathJEngine {
    */
   public boolean cancelProcessing() {
     LOGGER.info("Cancelling all processing tasks");
-    return pipelineExecutor.cancelAll();
+    analysisPipeline.cancel();
+    return true;
   }
 
   public void shutdown() {
@@ -176,9 +176,8 @@ public class SciPathJEngine {
     isShutdown = true;
 
     try {
-      pipelineExecutor.cancelAll();
+      cancelProcessing();
       shutdownExecutorService();
-      resourceManager.cleanup();
       LOGGER.info("SciPathJ Engine shutdown complete");
     } catch (InterruptedException e) {
       LOGGER.warn("Shutdown interrupted", e);

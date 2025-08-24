@@ -1,7 +1,7 @@
 package com.scipath.scipathj.ui.main;
 
 import com.scipath.scipathj.infrastructure.config.MainSettings;
-import com.scipath.scipathj.roi.model.UserROI;
+import com.scipath.scipathj.infrastructure.roi.UserROI;
 import com.scipath.scipathj.ui.common.ROIManager;
 import com.scipath.scipathj.ui.analysis.components.ROIToolbar;
 import com.scipath.scipathj.ui.common.MainImageViewer;
@@ -292,7 +292,7 @@ public class ROIController {
    */
   private MainSettings.ROICategory determineROICategory(UserROI roi) {
     // First check the class type - this is more reliable than ROI type
-    if (roi instanceof com.scipath.scipathj.roi.model.NucleusROI) {
+    if (roi instanceof com.scipath.scipathj.infrastructure.roi.NucleusROI) {
       return MainSettings.ROICategory.NUCLEUS;
     }
 

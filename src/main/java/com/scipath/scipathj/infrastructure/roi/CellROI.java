@@ -1,4 +1,4 @@
-package com.scipath.scipathj.roi.model;
+package com.scipath.scipathj.infrastructure.roi;
 
 import ij.gui.Roi;
 import org.slf4j.Logger;
@@ -33,8 +33,6 @@ public class CellROI extends UserROI {
     super(roi, imageFileName, cellName);
     this.cellArea = roi.getStatistics().area;
     this.segmentationMethod = "Voronoi_Tessellation";
-
-    // LOGGER.debug("Created CellROI: {} with area: {:.1f} pixels", cellName, cellArea);
   }
 
   /**
@@ -149,13 +147,6 @@ public class CellROI extends UserROI {
       } else {
         this.nucleusToCytoplasmRatio = 0.0;
       }
-
-    //   LOGGER.debug(
-    //       "Calculated N/C ratio for {}: {:.3f} (nucleus: {:.1f}, cytoplasm: {:.1f})",
-    //       getName(),
-    //       nucleusToCytoplasmRatio,
-    //       nucleusArea,
-    //       cytoplasmArea);
     }
   }
 

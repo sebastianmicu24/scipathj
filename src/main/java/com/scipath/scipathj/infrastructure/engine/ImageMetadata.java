@@ -1,4 +1,4 @@
-package com.scipath.scipathj.roi.model;
+package com.scipath.scipathj.infrastructure.engine;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;

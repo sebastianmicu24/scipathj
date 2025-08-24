@@ -1,6 +1,6 @@
 package com.scipath.scipathj.analysis.algorithms.statistics;
 
-import com.scipath.scipathj.roi.model.UserROI;
+import com.scipath.scipathj.infrastructure.roi.UserROI;
 // TODO: ClassificationResult import - will be implemented later
 // import com.scipath.scipathj.analysis.classification.ClassificationResult;
 import java.io.FileWriter;

@@ -90,21 +90,41 @@ This approach ensures accurate cell segmentation even in dense tissue regions wh
 
 ```
 com.scipath.scipathj/
+├── analysis/
+│   ├── algorithms/     # Analysis algorithms (classification, segmentation, statistics)
+│   │   ├── classification/  # Feature extraction and cell classification
+│   │   ├── segmentation/    # Nuclear, vascular, cytoplasm segmentation
+│   │   └── statistics/      # Statistical analysis tools
+│   ├── config/         # Analysis-specific configuration (feature extraction, segmentation settings)
+│   └── pipeline/       # Analysis pipeline orchestration
 ├── core/
+│   ├── analysis/       # Core analysis utilities (H&E deconvolution, etc.)
 │   ├── bootstrap/      # Application startup and context management
-│   ├── analysis/       # Core analysis and segmentation logic
-│   ├── config/         # Immutable configuration records and manager
-│   ├── engine/         # Central processing engine
-│   └── pipeline/       # Extensible pipeline system
+│   ├── config/         # Configuration records and constants
+│   ├── engine/         # Core processing engine
+│   ├── events/         # Event handling system
+│   ├── pipeline/       # Pipeline system components
+│   └── utils/          # Core utility classes
+├── infrastructure/
+│   ├── bootstrap/      # Application bootstrap services (context, theme, system config)
+│   ├── config/         # Infrastructure configuration (main settings, configuration manager)
+│   ├── engine/         # Infrastructure engine components (TensorFlow wrapper, resource manager)
+│   ├── events/         # Event bus system
+│   ├── pipeline/       # Pipeline infrastructure (executor, validation, etc.)
+│   └── utils/          # Infrastructure utilities (logging, system output capture)
+├── roi/
+│   ├── model/          # ROI data models (UserROI, CellROI, etc.)
+│   └── operations/     # ROI manipulation operations
 ├── ui/
-│   ├── main/           # Main application window
-│   ├── components/     # Reusable UI components (views)
-│   ├── controllers/    # UI logic and event handling
-│   ├── dialogs/        # Settings and dialogs
+│   ├── main/           # Main application window and controllers
+│   ├── analysis/       # Analysis UI components
+│   ├── common/         # Common UI components (image viewer, ROI overlay, etc.)
+│   ├── controllers/    # UI controllers and state management
+│   ├── dataset/        # Dataset creation UI
 │   ├── model/          # UI data models
-│   └── themes/         # Theme management
-├── data/
-│   └── model/          # Core data structures (e.g., ROIs)
+│   ├── themes/         # Theme management
+│   ├── utils/          # UI utilities
+│   └── visualization/  # Results visualization components
 └── SciPathJApplication.java # Main application entry point
 ```
 

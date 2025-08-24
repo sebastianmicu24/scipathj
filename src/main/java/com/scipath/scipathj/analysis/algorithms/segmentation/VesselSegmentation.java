@@ -3,7 +3,7 @@ package com.scipath.scipathj.analysis.algorithms.segmentation;
 import com.scipath.scipathj.infrastructure.config.ConfigurationManager;
 import com.scipath.scipathj.analysis.config.SegmentationConstants;
 import com.scipath.scipathj.analysis.config.VesselSegmentationSettings;
-import com.scipath.scipathj.roi.model.UserROI;
+import com.scipath.scipathj.infrastructure.roi.UserROI;
 import com.scipath.scipathj.ui.common.ROIManager;
 import com.scipath.scipathj.ui.utils.UIConstants;
 import ij.IJ;

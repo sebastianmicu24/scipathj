@@ -1,5 +1,6 @@
-package com.scipath.scipathj.roi.model;
+package com.scipath.scipathj.infrastructure.pipeline;
 
+import com.scipath.scipathj.infrastructure.roi.UserROI;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;

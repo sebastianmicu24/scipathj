@@ -2,7 +2,7 @@ package com.scipath.scipathj.ui.analysis.components;
 
 import com.scipath.scipathj.ui.common.ROIManager;
 import com.scipath.scipathj.infrastructure.config.MainSettings;
-import com.scipath.scipathj.roi.model.UserROI;
+import com.scipath.scipathj.infrastructure.roi.UserROI;
 import com.scipath.scipathj.ui.utils.UIConstants;
 import com.scipath.scipathj.ui.utils.UIUtils;
 import java.awt.*;

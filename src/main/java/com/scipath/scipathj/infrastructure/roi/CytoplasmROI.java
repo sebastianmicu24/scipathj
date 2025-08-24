@@ -1,4 +1,4 @@
-package com.scipath.scipathj.roi.model;
+package com.scipath.scipathj.infrastructure.roi;
 
 import ij.gui.Roi;
 import org.slf4j.Logger;
@@ -34,12 +34,6 @@ public class CytoplasmROI extends UserROI {
     super(roi, imageFileName, cytoplasmName);
     this.cytoplasmArea = roi.getStatistics().area;
     this.segmentationMethod = "Voronoi_Subtraction";
-
-    // LOGGER.debug(
-    //     "Created CytoplasmROI: {} with area: {:.1f} pixels (complex shape: {})",
-    //     cytoplasmName,
-    //     cytoplasmArea,
-    //     hasComplexShape());
   }
 
   /**

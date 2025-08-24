@@ -1,4 +1,4 @@
-package com.scipath.scipathj.roi.model;
+package com.scipath.scipathj.infrastructure.roi;
 
 import ij.gui.Roi;
 import java.awt.Color;

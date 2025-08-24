@@ -3,7 +3,7 @@ package com.scipath.scipathj.ui.main;
 import com.scipath.scipathj.infrastructure.config.ConfigurationManager;
 import com.scipath.scipathj.infrastructure.config.MainSettings;
 import com.scipath.scipathj.infrastructure.engine.SciPathJEngine;
-import com.scipath.scipathj.roi.model.UserROI;
+import com.scipath.scipathj.infrastructure.roi.UserROI;
 import com.scipath.scipathj.ui.analysis.components.FolderSelectionPanel;
 import com.scipath.scipathj.ui.common.MainImageViewer;
 import com.scipath.scipathj.ui.common.components.MainMenuPanel;
@@ -896,7 +896,7 @@ public class MainWindow extends JFrame {
    */
   private MainSettings.ROICategory determineROICategory(UserROI roi) {
     // First check the class type - this is more reliable than ROI type
-    if (roi instanceof com.scipath.scipathj.roi.model.NucleusROI) {
+    if (roi instanceof com.scipath.scipathj.infrastructure.roi.NucleusROI) {
       return MainSettings.ROICategory.NUCLEUS;
     }
 

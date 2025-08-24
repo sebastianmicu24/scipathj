@@ -2,7 +2,7 @@ package com.scipath.scipathj.analysis.algorithms.classification;
 
 import com.scipath.scipathj.analysis.config.FeatureExtractionSettings;
 import com.scipath.scipathj.analysis.algorithms.segmentation.HEDeconvolution;
-import com.scipath.scipathj.roi.model.UserROI;
+import com.scipath.scipathj.infrastructure.roi.UserROI;
 import ij.ImagePlus;
 import ij.gui.Roi;
 import ij.gui.PolygonRoi;
