@@ -57,7 +57,7 @@ public class NucleusROI extends UserROI {
    * @param nucleusName the name/identifier for this nucleus
    */
   public NucleusROI(int x, int y, int width, int height, String imageFileName, String nucleusName) {
-    super(ROIType.COMPLEX_SHAPE, new Rectangle(x, y, width, height), imageFileName, nucleusName);
+    super(new ij.gui.Roi(x, y, width, height), imageFileName, nucleusName, ROIType.NUCLEUS);
     setDisplayColor(DEFAULT_NUCLEUS_COLOR);
     this.segmentationMethod = "StarDist";
     this.isValid = true;

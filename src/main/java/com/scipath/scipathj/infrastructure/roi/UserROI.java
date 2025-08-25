@@ -13,15 +13,11 @@ import java.util.UUID;
 public class UserROI {
 
   public enum ROIType {
-    RECTANGLE("Rectangle"),
-    SQUARE("Square"),
-    CIRCLE("Circle"),
-    POLYGON("Polygon"),
-    COMPLEX_SHAPE("Complex Shape"), // For vessel ROIs with complex shapes
     NUCLEUS("Nucleus"),
     CYTOPLASM("Cytoplasm"),
     CELL("Cell"),
-    VESSEL("Vessel");
+    VESSEL("Vessel"),
+    IGNORE("Ignore");
 
     private final String displayName;
 
@@ -48,67 +44,72 @@ public class UserROI {
   private final Roi imageJRoi;
 
   /**
-   * Creates a new UserROI with simple shape
-   * @param type The type of ROI
-   * @param bounds The bounding rectangle of the ROI
+   * Creates a new UserROI from an ImageJ ROI (used for all biological structures).
+   * @param imageJRoi The ImageJ ROI containing the biological structure
    * @param imageFileName The name of the image this ROI belongs to
    * @param name Optional name for the ROI (can be null for auto-generated names)
+   * @param type The biological type of this ROI
    */
-  public UserROI(ROIType type, Rectangle bounds, String imageFileName, String name) {
+  public UserROI(Roi imageJRoi, String imageFileName, String name, ROIType type) {
     this.id = UUID.randomUUID().toString();
     this.type = type;
-    this.bounds = new Rectangle(bounds); // Create defensive copy
-    this.imageFileName = imageFileName;
-    this.name = name != null ? name : generateDefaultName();
-    this.createdAt = LocalDateTime.now();
-    this.displayColor = generateDefaultColor();
-    this.notes = "";
-    this.imageJRoi = null; // No complex shape for simple ROIs
-  }
-
-  /**
-   * Creates a new UserROI with complex shape (for vessels)
-   * @param imageJRoi The ImageJ ROI containing the complex shape
-   * @param imageFileName The name of the image this ROI belongs to
-   * @param name Optional name for the ROI (can be null for auto-generated names)
-   */
-  public UserROI(Roi imageJRoi, String imageFileName, String name) {
-    this.id = UUID.randomUUID().toString();
-    this.type = ROIType.COMPLEX_SHAPE;
     this.bounds = imageJRoi.getBounds(); // Get bounds from ImageJ ROI
     this.imageFileName = imageFileName;
     this.name = name != null ? name : generateDefaultName();
     this.createdAt = LocalDateTime.now();
-    this.displayColor = Color.RED; // Default color for vessels
+    this.displayColor = generateDefaultColorForType(type);
     this.notes = "";
     this.imageJRoi = (Roi) imageJRoi.clone(); // Store a copy of the ImageJ ROI
   }
 
   /**
-   * Creates a square ROI (convenience constructor)
+   * Creates a new UserROI from an ImageJ ROI with auto-detected type.
+   * @param imageJRoi The ImageJ ROI containing the biological structure
+   * @param imageFileName The name of the image this ROI belongs to
+   * @param name Optional name for the ROI (can be null for auto-generated names)
    */
-  public static UserROI createSquareROI(int x, int y, int size, String imageFileName) {
-    return new UserROI(ROIType.SQUARE, new Rectangle(x, y, size, size), imageFileName, null);
-  }
-
-  /**
-   * Creates a rectangle ROI (convenience constructor)
-   */
-  public static UserROI createRectangleROI(
-      int x, int y, int width, int height, String imageFileName) {
-    return new UserROI(ROIType.RECTANGLE, new Rectangle(x, y, width, height), imageFileName, null);
+  public UserROI(Roi imageJRoi, String imageFileName, String name) {
+    this(imageJRoi, imageFileName, name, detectTypeFromName(name));
   }
 
   private String generateDefaultName() {
     return type.getDisplayName() + "_" + System.currentTimeMillis() % 10000;
   }
 
-  private Color generateDefaultColor() {
-    // Generate a bright, visible color for ROI display
-    Color[] defaultColors = {
-      Color.YELLOW, Color.CYAN, Color.MAGENTA, Color.GREEN, Color.ORANGE, Color.PINK
-    };
-    return defaultColors[(int) (Math.random() * defaultColors.length)];
+  private Color generateDefaultColorForType(ROIType type) {
+    switch (type) {
+      case NUCLEUS:
+        return new Color(0, 255, 0, 128); // Semi-transparent green
+      case CYTOPLASM:
+        return new Color(0, 100, 255, 100); // Semi-transparent blue
+      case CELL:
+        return new Color(255, 255, 0, 120); // Semi-transparent yellow
+      case VESSEL:
+        return new Color(255, 0, 0, 120); // Semi-transparent red
+      case IGNORE:
+        return new Color(128, 128, 128, 80); // Semi-transparent gray
+      default:
+        return new Color(255, 255, 255, 100); // Semi-transparent white
+    }
+  }
+
+  private static ROIType detectTypeFromName(String name) {
+    if (name == null) {
+      return ROIType.VESSEL; // Default fallback
+    }
+    
+    String lowerName = name.toLowerCase();
+    if (lowerName.contains("nucleus") || lowerName.contains("nuclei")) {
+      return ROIType.NUCLEUS;
+    } else if (lowerName.contains("cytoplasm") || lowerName.contains("cyto")) {
+      return ROIType.CYTOPLASM;
+    } else if (lowerName.contains("cell")) {
+      return ROIType.CELL;
+    } else if (lowerName.contains("vessel") || lowerName.contains("blood")) {
+      return ROIType.VESSEL;
+    } else {
+      return ROIType.VESSEL; // Default to vessel for complex shapes
+    }
   }
 
   // Getters
@@ -182,7 +183,7 @@ public class UserROI {
   }
 
   public boolean hasComplexShape() {
-    return imageJRoi != null || type == ROIType.VESSEL;
+    return imageJRoi != null; // All biological structures have complex shapes
   }
 
   // Setters for mutable properties

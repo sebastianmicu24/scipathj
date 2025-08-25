@@ -1,11 +1,10 @@
 package com.scipath.scipathj.ui.dataset;
 
-import com.scipath.scipathj.dataset.DatasetROILoader;
+import com.scipath.scipathj.ui.dataset.DatasetROIManager;
 import com.scipath.scipathj.infrastructure.roi.UserROI;
 import com.scipath.scipathj.ui.common.SimpleImageGallery;
-import com.scipath.scipathj.ui.common.MainImageViewer;
-import com.scipath.scipathj.ui.common.ROIOverlay;
-import com.scipath.scipathj.ui.common.ROIManager;
+import com.scipath.scipathj.ui.dataset.DatasetImageViewer;
+import com.scipath.scipathj.infrastructure.config.MainSettings;
 import com.scipath.scipathj.ui.utils.UIConstants;
 import com.scipath.scipathj.ui.utils.UIUtils;
 import java.awt.*;
@@ -19,19 +18,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Zero-delay dataset classification panel with lightning-fast ROI loading.
- * Completely rewritten for maximum performance and responsiveness.
+ * Enhanced dataset classification panel with Dataset Creator 2.0 integration.
+ * Features interactive ROI overlay, class management, and visual controls.
  */
-public class DatasetClassificationPanel extends JPanel implements ROIOverlay.ROIOverlayListener {
+public class DatasetClassificationPanel extends JPanel {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DatasetClassificationPanel.class);
     
     // Core components
     private SimpleImageGallery imageGallery;
-    private MainImageViewer mainImageViewer;
-    private DatasetClassManager classManager;
-    private DatasetROILoader roiLoader;
-    private ROIManager roiManager;
+    private DatasetImageViewer datasetImageViewer;
+    private DatasetControlPanel controlPanel;
+    private DatasetROIManager datasetROIManager;
     private File selectedRoiZip;
     
     // High-performance threading
@@ -43,8 +41,7 @@ public class DatasetClassificationPanel extends JPanel implements ROIOverlay.ROI
     });
 
     public DatasetClassificationPanel() {
-        this.roiLoader = new DatasetROILoader();
-        this.roiManager = ROIManager.getInstance();
+        this.datasetROIManager = new DatasetROIManager();
         initializeComponents();
     }
 
@@ -55,12 +52,15 @@ public class DatasetClassificationPanel extends JPanel implements ROIOverlay.ROI
         // Title
         add(UIUtils.createTitleLabel("Dataset Creation - Classification"), BorderLayout.NORTH);
 
-        // Class management
-        classManager = new DatasetClassManager();
-        add(classManager, BorderLayout.NORTH);
-
-        // Main content
-        add(createMainContent(), BorderLayout.CENTER);
+        // Enhanced control panel with Dataset Creator 2.0 features
+        controlPanel = new DatasetControlPanel(datasetROIManager);
+        
+        // Main content with controls on the right
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        mainPanel.add(createMainContent(), BorderLayout.CENTER);
+        mainPanel.add(controlPanel, BorderLayout.EAST);
+        
+        add(mainPanel, BorderLayout.CENTER);
 
         // Footer
         add(createFooter(), BorderLayout.SOUTH);
@@ -73,12 +73,9 @@ public class DatasetClassificationPanel extends JPanel implements ROIOverlay.ROI
         imageGallery = new SimpleImageGallery();
         mainContent.add(imageGallery, BorderLayout.WEST);
 
-        // Main image viewer
-        mainImageViewer = new MainImageViewer();
-        mainContent.add(mainImageViewer, BorderLayout.CENTER);
-
-        // Setup ROI handling
-        setupROIHandling();
+        // Dataset-specific image viewer with native ROI integration
+        datasetImageViewer = new DatasetImageViewer(datasetROIManager, MainSettings.createDefault());
+        mainContent.add(datasetImageViewer, BorderLayout.CENTER);
 
         return mainContent;
     }
@@ -88,7 +85,7 @@ public class DatasetClassificationPanel extends JPanel implements ROIOverlay.ROI
         footer.setBorder(UIUtils.createPadding(UIConstants.LARGE_SPACING, 0, 0, 0));
         footer.setOpaque(false);
 
-        String footerText = "Click on ROIs to assign them to the selected class • Use class manager to add/remove classes";
+        String footerText = "Click on ROIs to assign them to the selected class • Use E key to toggle outlines • Use controls to adjust appearance";
         JLabel footerLabel = new JLabel(footerText);
         footerLabel.setFont(footerLabel.getFont().deriveFont(Font.ITALIC, UIConstants.SMALL_FONT_SIZE));
         footerLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
@@ -98,11 +95,6 @@ public class DatasetClassificationPanel extends JPanel implements ROIOverlay.ROI
         return footer;
     }
 
-    private void setupROIHandling() {
-        if (mainImageViewer != null) {
-            mainImageViewer.addROIOverlayListener(this);
-        }
-    }
 
     /**
      * ZERO-DELAY: Loads images and sets up instant ROI loading.
@@ -114,53 +106,38 @@ public class DatasetClassificationPanel extends JPanel implements ROIOverlay.ROI
             // Setup lightning-fast image selection
             imageGallery.setSelectionChangeListener(e -> {
                 File selectedImage = imageGallery.getSelectedImageFile();
-                if (selectedImage != null && mainImageViewer != null) {
+                if (selectedImage != null && datasetImageViewer != null) {
                     instantLoadImageAndROIs(selectedImage);
                 }
             });
         }
     }
-
     /**
-     * INSTANT: Simultaneous image and ROI loading with zero coordination delay.
+     * INSTANT: Simultaneous image and ROI loading with enhanced overlay.
      */
     private void instantLoadImageAndROIs(File imageFile) {
-        long startTime = System.currentTimeMillis();
-        LOGGER.debug("INSTANT LOAD START: {}", imageFile.getName());
-
-        // Start image loading immediately
-        mainImageViewer.displayImage(imageFile);
-
-        // Start ROI loading in parallel with zero delay
-        if (selectedRoiZip != null) {
-            CompletableFuture.supplyAsync(() -> {
-                try {
-                    LOGGER.debug("ROI loading started after {}ms", System.currentTimeMillis() - startTime);
-                    return roiLoader.loadROIsForImage(selectedRoiZip, imageFile.getName());
-                } catch (Exception e) {
-                    LOGGER.error("ROI loading failed: {}", e.getMessage());
-                    return List.<UserROI>of();
-                }
-            }, fastExecutor).thenAccept(rois -> {
-                long loadTime = System.currentTimeMillis() - startTime;
-                LOGGER.debug("ROI loading completed in {}ms, applying {} ROIs", loadTime, rois.size());
+        CompletableFuture.runAsync(() -> {
+            try {
+                long startTime = System.currentTimeMillis();
                 
-                // Apply ROIs immediately on EDT
                 SwingUtilities.invokeLater(() -> {
-                    // Clear existing ROIs
-                    roiLoader.clearROIsForImage(imageFile.getName());
-                    
-                    // Add new ROIs instantly
-                    for (UserROI roi : rois) {
-                        roiManager.addROI(roi);
+                    if (datasetImageViewer != null) {
+                        try {
+                            // Load image and ROIs together using DatasetImageViewer
+                            LOGGER.debug("Image and ROI loading started");
+                            datasetImageViewer.loadImageWithROIs(imageFile, selectedRoiZip);
+                            
+                            LOGGER.debug("Loading completed in {}ms", System.currentTimeMillis() - startTime);
+                            
+                        } catch (Exception e) {
+                            LOGGER.error("High-speed loading failed for {}: {}", imageFile.getName(), e.getMessage(), e);
+                        }
                     }
-                    
-                    long totalTime = System.currentTimeMillis() - startTime;
-                    LOGGER.info("INSTANT LOAD COMPLETE: {} ROIs in {}ms for '{}'", 
-                              rois.size(), totalTime, imageFile.getName());
                 });
-            });
-        }
+            } catch (Exception e) {
+                LOGGER.error("Background loading failed for {}: {}", imageFile.getName(), e.getMessage(), e);
+            }
+        }, fastExecutor);
     }
 
     /**
@@ -171,8 +148,8 @@ public class DatasetClassificationPanel extends JPanel implements ROIOverlay.ROI
         LOGGER.info("ROI ZIP file set: {}", roiZipFile.getAbsolutePath());
         
         // Clear any existing cache
-        if (roiLoader != null) {
-            roiLoader.clearCache();
+        if (datasetROIManager != null) {
+            datasetROIManager.clearAllROIs();
         }
     }
 
@@ -182,12 +159,12 @@ public class DatasetClassificationPanel extends JPanel implements ROIOverlay.ROI
         return imageGallery;
     }
 
-    public MainImageViewer getMainImageViewer() {
-        return mainImageViewer;
+    public DatasetImageViewer getDatasetImageViewer() {
+        return datasetImageViewer;
     }
 
-    public DatasetClassManager getClassManager() {
-        return classManager;
+    public DatasetControlPanel getControlPanel() {
+        return controlPanel;
     }
 
     public File getSelectedImageFile() {
@@ -195,102 +172,57 @@ public class DatasetClassificationPanel extends JPanel implements ROIOverlay.ROI
     }
 
     public String getSelectedClassName() {
-        return classManager != null ? classManager.getSelectedClassName() : null;
+        return datasetROIManager != null ? datasetROIManager.getSelectedClass() : "Unclassified";
     }
 
     public int getROICountForCurrentImage() {
         File currentImage = getSelectedImageFile();
-        if (currentImage != null && roiLoader != null) {
-            return roiLoader.getROICount(currentImage.getName());
+        if (currentImage != null && datasetROIManager != null) {
+            return datasetROIManager.getROICount(currentImage.getName());
         }
         return 0;
     }
 
-    // ===== Class Management =====
+    // ===== Class Management (delegated to DatasetROIManager) =====
 
     public void addClass(String className) {
-        if (classManager != null) {
-            classManager.addClass(className);
+        if (datasetROIManager != null) {
+            datasetROIManager.createClass(className, java.awt.Color.RED);
         }
     }
 
     public void removeClass(String className) {
-        if (classManager != null) {
-            classManager.removeClass(className);
+        if (datasetROIManager != null) {
+            datasetROIManager.removeClass(className);
         }
     }
 
     public java.util.List<String> getClassNames() {
-        return classManager != null ? classManager.getClassNames() : java.util.Collections.emptyList();
+        return datasetROIManager != null ? 
+            java.util.List.copyOf(datasetROIManager.getAllAvailableClasses()) : 
+            java.util.Collections.emptyList();
     }
 
     public void clearROIsForCurrentImage() {
         File currentImage = getSelectedImageFile();
-        if (currentImage != null && roiLoader != null) {
-            roiLoader.clearROIsForImage(currentImage.getName());
+        if (currentImage != null && datasetROIManager != null) {
+            datasetROIManager.clearROIsForImage(currentImage.getName());
+            if (datasetImageViewer != null && datasetImageViewer.getDatasetROIOverlay() != null) {
+                // Update overlay to show no ROIs - use new overlay system
+                datasetImageViewer.getDatasetROIOverlay().setRois(null);
+                datasetImageViewer.getDatasetROIOverlay().repaint();
+            }
             LOGGER.info("Cleared ROIs for image '{}'", currentImage.getName());
         }
     }
-
-    // ===== ROI Overlay Listener Implementation =====
-
-    @Override
-    public void onROICreated(UserROI roi) {
-        // Not used in dataset classification mode
-    }
-
-    @Override
-    public void onROISelected(UserROI roi) {
-        handleROISelection(roi);
-    }
-
-    @Override
-    public void onROIDeselected() {
-        // Not used in dataset classification mode
-    }
-
+    
     /**
-     * Handles ROI selection for class assignment.
+     * Cleanup resources when panel is disposed.
      */
-    private void handleROISelection(UserROI selectedROI) {
-        if (selectedROI == null || classManager == null) {
-            return;
+    public void dispose() {
+        if (controlPanel != null) {
+            controlPanel.dispose();
         }
-
-        String selectedClass = classManager.getSelectedClassName();
-        if (selectedClass == null) {
-            JOptionPane.showMessageDialog(this,
-                "Please select a class first before clicking on ROIs.",
-                "No Class Selected",
-                JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        // Show confirmation dialog
-        int result = JOptionPane.showConfirmDialog(this,
-            String.format("Assign ROI '%s' to class '%s'?", selectedROI.getName(), selectedClass),
-            "Assign ROI to Class",
-            JOptionPane.YES_NO_OPTION,
-            JOptionPane.QUESTION_MESSAGE);
-
-        if (result == JOptionPane.YES_OPTION) {
-            assignROIToClass(selectedROI, selectedClass);
-            
-            JOptionPane.showMessageDialog(this,
-                String.format("ROI '%s' assigned to class '%s'", selectedROI.getName(), selectedClass),
-                "ROI Assigned",
-                JOptionPane.INFORMATION_MESSAGE);
-            
-            LOGGER.info("Assigned ROI '{}' to class '{}'", selectedROI.getName(), selectedClass);
-        }
-    }
-
-    /**
-     * Assigns a ROI to a specific class.
-     */
-    private void assignROIToClass(UserROI roi, String className) {
-        // For now, just log the assignment
-        // TODO: Implement proper data structure for export
-        LOGGER.info("ROI '{}' (ID: {}) assigned to class '{}'", roi.getName(), roi.getId(), className);
+        LOGGER.debug("Disposed DatasetClassificationPanel");
     }
 }

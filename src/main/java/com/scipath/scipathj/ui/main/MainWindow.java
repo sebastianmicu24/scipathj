@@ -904,7 +904,6 @@ public class MainWindow extends JFrame {
     UserROI.ROIType roiType = roi.getType();
     switch (roiType) {
       case VESSEL:
-      case COMPLEX_SHAPE:
         return MainSettings.ROICategory.VESSEL;
       case NUCLEUS:
         return MainSettings.ROICategory.NUCLEUS;
@@ -912,6 +911,8 @@ public class MainWindow extends JFrame {
         return MainSettings.ROICategory.CYTOPLASM;
       case CELL:
         return MainSettings.ROICategory.CELL;
+      case IGNORE:
+        return MainSettings.ROICategory.VESSEL; // Treat ignore as vessel category
       default:
         // Check name-based heuristics as fallback
         String name = roi.getName().toLowerCase();

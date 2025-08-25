@@ -527,34 +527,16 @@ public class ROIManager {
         LOGGER.warn("Complex shape ROI was null, falling back to rectangle for ROI: {}", userROI.getName());
       }
     } else {
-      // Handle simple shapes
-      LOGGER.debug("Using simple shape ROI for type: {}", userROI.getType());
-      switch (userROI.getType()) {
-        case SQUARE:
-        case RECTANGLE:
-          roi = new Roi(userROI.getX(), userROI.getY(), userROI.getWidth(), userROI.getHeight());
-          break;
-        case CIRCLE:
-          // Create oval ROI for circles
-          roi =
-              new ij.gui.OvalRoi(
-                  userROI.getX(), userROI.getY(), userROI.getWidth(), userROI.getHeight());
-          break;
-        case COMPLEX_SHAPE:
-        case VESSEL:
-          // Special handling for vessel ROIs that might not have complex shape flag set
-          roi = userROI.getImageJRoi();
-          if (roi != null) {
-            roi = (Roi) roi.clone();
-            LOGGER.debug("Found ImageJ ROI for vessel type: {}", roi.getClass().getSimpleName());
-          } else {
-            roi = new Roi(userROI.getX(), userROI.getY(), userROI.getWidth(), userROI.getHeight());
-            LOGGER.warn("No ImageJ ROI found for vessel type, using rectangle fallback for ROI: {}", userROI.getName());
-          }
-          break;
-        default:
-          roi = new Roi(userROI.getX(), userROI.getY(), userROI.getWidth(), userROI.getHeight());
-          break;
+      // All biological structures should have ImageJ ROI, fallback to bounds if not
+      LOGGER.debug("Using ROI for biological type: {}", userROI.getType());
+      roi = userROI.getImageJRoi();
+      if (roi != null) {
+        roi = (Roi) roi.clone();
+        LOGGER.debug("Found ImageJ ROI for type: {}", roi.getClass().getSimpleName());
+      } else {
+        // Fallback to bounding rectangle
+        roi = new Roi(userROI.getX(), userROI.getY(), userROI.getWidth(), userROI.getHeight());
+        LOGGER.warn("No ImageJ ROI found for type {}, using rectangle fallback for ROI: {}", userROI.getType(), userROI.getName());
       }
     }
 
@@ -662,16 +644,9 @@ public class ROIManager {
       Rectangle bounds = ijRoi.getBounds();
       UserROI.ROIType type;
 
-      // Determine ROI type
-      if (ijRoi instanceof ij.gui.OvalRoi) {
-        type = UserROI.ROIType.CIRCLE;
-      } else if (bounds.width == bounds.height) {
-        type = UserROI.ROIType.SQUARE;
-      } else {
-        type = UserROI.ROIType.RECTANGLE;
-      }
-
-      userROI = new UserROI(type, bounds, imageFileName, name);
+      // All loaded ROIs are treated as biological structures
+      // Default to VESSEL type, let the UserROI constructor auto-detect from name
+      userROI = new UserROI(ijRoi, imageFileName, name);
     }
 
     // Set properties from ImageJ ROI

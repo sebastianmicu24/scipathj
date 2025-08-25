@@ -74,7 +74,7 @@ public class ROIOverlay extends JComponent {
   private boolean isCreatingROI = false;
   private Point roiStartPoint;
   private Point roiCurrentPoint;
-  private UserROI.ROIType creationMode = UserROI.ROIType.SQUARE;
+  private UserROI.ROIType creationMode = UserROI.ROIType.VESSEL;
 
   // Listeners
   private final List<ROIOverlayListener> listeners = new CopyOnWriteArrayList<>();
@@ -665,13 +665,9 @@ public class ROIOverlay extends JComponent {
         Rectangle imageBounds = inverseTransformRectangle(bounds);
 
         UserROI newROI;
-        if (creationMode == UserROI.ROIType.SQUARE) {
-          int size = Math.min(imageBounds.width, imageBounds.height);
-          newROI = UserROI.createSquareROI(imageBounds.x, imageBounds.y, size, currentImageFileName);
-        } else {
-          newROI = UserROI.createRectangleROI(
-              imageBounds.x, imageBounds.y, imageBounds.width, imageBounds.height, currentImageFileName);
-        }
+        // Create ROI with bounding rectangle - all biological structures are complex shapes
+        ij.gui.Roi ijRoi = new ij.gui.Roi(imageBounds.x, imageBounds.y, imageBounds.width, imageBounds.height);
+        newROI = new UserROI(ijRoi, currentImageFileName, null, creationMode);
 
         listeners.forEach(listener -> {
           try {
@@ -796,7 +792,6 @@ public class ROIOverlay extends JComponent {
    UserROI.ROIType roiType = roi.getType();
    switch (roiType) {
      case VESSEL: return MainSettings.ROICategory.VESSEL;
-     case COMPLEX_SHAPE: return MainSettings.ROICategory.VESSEL;
      case NUCLEUS: return MainSettings.ROICategory.NUCLEUS;
      case CYTOPLASM: return MainSettings.ROICategory.CYTOPLASM;
      case CELL: return MainSettings.ROICategory.CELL;

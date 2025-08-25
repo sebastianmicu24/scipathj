@@ -213,7 +213,8 @@ public class ROIStatisticsDialog extends JDialog {
     if (mainSettings == null) return Color.BLACK;
 
     // Create a dummy ROI with the specified type to use the updated logic
-    UserROI dummyROI = new UserROI(type, new java.awt.Rectangle(0, 0, 1, 1), "dummy", "dummy");
+    ij.gui.Roi dummyRoi = new ij.gui.Roi(0, 0, 1, 1);
+    UserROI dummyROI = new UserROI(dummyRoi, "dummy", "dummy", type);
     MainSettings.ROICategory category = determineROICategory(dummyROI);
     return mainSettings.getSettingsForCategory(category).borderColor();
   }
@@ -231,10 +232,10 @@ public class ROIStatisticsDialog extends JDialog {
     UserROI.ROIType roiType = roi.getType();
     switch (roiType) {
       case VESSEL: return MainSettings.ROICategory.VESSEL;
-      case COMPLEX_SHAPE: return MainSettings.ROICategory.VESSEL;
       case NUCLEUS: return MainSettings.ROICategory.NUCLEUS;
       case CYTOPLASM: return MainSettings.ROICategory.CYTOPLASM;
       case CELL: return MainSettings.ROICategory.CELL;
+      case IGNORE: return MainSettings.ROICategory.VESSEL; // Treat ignore as vessel category
       default: break;
     }
 
