@@ -1,6 +1,5 @@
 package com.scipath.scipathj.ui.dataset;
 
-import com.scipath.scipathj.infrastructure.config.MainSettings;
 import com.scipath.scipathj.infrastructure.roi.UserROI;
 import com.scipath.scipathj.ui.themes.ThemeManager;
 import com.scipath.scipathj.ui.utils.ImageLoader;
@@ -13,7 +12,6 @@ import java.awt.event.AdjustmentListener;
 import java.awt.event.MouseWheelEvent;
 import java.awt.event.MouseWheelListener;
 import java.io.File;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import javax.swing.*;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
@@ -21,13 +19,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Dataset-specific image viewer with integrated DatasetROIOverlay.
- * Optimized for dataset creation workflow with enhanced ROI functionality.
+ * Streamlined dataset image viewer with zoom/pan and integrated NewDatasetROIOverlay.
+ * Designed specifically for dataset creation workflow with high-performance ROI display.
+ * 
+ * @author Sebastian Micu
+ * @version 4.0.0
  */
-public class DatasetImageViewer extends JPanel implements DatasetROIManager.DatasetInteractionListener {
+public class DatasetImageViewer extends JPanel {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DatasetImageViewer.class);
-    private static final int MAX_DISPLAY_SIZE = 800;
 
     // Zoom functionality
     private static final double MIN_ZOOM = 0.1; // 10%
@@ -39,7 +39,7 @@ public class DatasetImageViewer extends JPanel implements DatasetROIManager.Data
     private JLabel imageLabel;
     private JLabel imageInfoLabel;
     private JScrollPane scrollPane;
-    private DatasetROIOverlay datasetROIOverlay;
+    private NewDatasetROIOverlay roiOverlay;
     private JLayeredPane layeredPane;
     private File currentImageFile;
     private ImagePlus currentImagePlus;
@@ -49,9 +49,6 @@ public class DatasetImageViewer extends JPanel implements DatasetROIManager.Data
     private Image originalImage;
     private int originalImageWidth;
     private int originalImageHeight;
-
-    // Dataset-specific ROI management
-    private DatasetROIManager datasetROIManager;
 
     // Zoom controls
     private JPanel zoomControlPanel;
@@ -67,20 +64,19 @@ public class DatasetImageViewer extends JPanel implements DatasetROIManager.Data
     private long lastUpdateTime = 0;
     private static final long UPDATE_THROTTLE_MS = 16; // ~60fps
 
-    public DatasetImageViewer(DatasetROIManager datasetROIManager, MainSettings settings) {
-        this.datasetROIManager = datasetROIManager;
-        initializeComponents(settings);
-        setupDatasetROISystem();
+    public DatasetImageViewer() {
+        initializeComponents();
+        setupROISystem();
         showEmptyState();
     }
 
-    private void initializeComponents(MainSettings settings) {
+    private void initializeComponents() {
         setLayout(new BorderLayout());
         setBorder(UIUtils.createPadding(UIConstants.MEDIUM_SPACING));
         setOpaque(false);
 
         imageLabel = createImageLabel();
-        datasetROIOverlay = new DatasetROIOverlay(datasetROIManager, settings);
+        roiOverlay = new NewDatasetROIOverlay();
         layeredPane = createLayeredPane();
         scrollPane = createScrollPane();
         imageInfoLabel = createInfoLabel();
@@ -107,11 +103,8 @@ public class DatasetImageViewer extends JPanel implements DatasetROIManager.Data
         });
     }
 
-    private void setupDatasetROISystem() {
-        // Add this viewer as a listener to the dataset ROI manager
-        datasetROIManager.addInteractionListener(this);
-        
-        LOGGER.debug("Dataset ROI system setup complete");
+    private void setupROISystem() {
+        LOGGER.debug("Setup streamlined ROI system complete");
     }
 
     private JLayeredPane createLayeredPane() {
@@ -122,9 +115,9 @@ public class DatasetImageViewer extends JPanel implements DatasetROIManager.Data
         imageLabel.setBounds(0, 0, 600, 400);
         pane.add(imageLabel, JLayeredPane.DEFAULT_LAYER);
 
-        // Add dataset ROI overlay to top layer - native integration
-        datasetROIOverlay.setBounds(0, 0, 600, 400);
-        pane.add(datasetROIOverlay, JLayeredPane.PALETTE_LAYER);
+        // Add streamlined ROI overlay to top layer
+        roiOverlay.setBounds(0, 0, 600, 400);
+        pane.add(roiOverlay, JLayeredPane.PALETTE_LAYER);
 
         return pane;
     }
@@ -167,7 +160,7 @@ public class DatasetImageViewer extends JPanel implements DatasetROIManager.Data
         pane.getVerticalScrollBar().addAdjustmentListener(new AdjustmentListener() {
             @Override
             public void adjustmentValueChanged(AdjustmentEvent e) {
-                LOGGER.debug("Vertical scroll: {}", e.getValue());
+                LOGGER.trace("Vertical scroll: {}", e.getValue());
                 throttledROIUpdate();
             }
         });
@@ -175,7 +168,7 @@ public class DatasetImageViewer extends JPanel implements DatasetROIManager.Data
         pane.getHorizontalScrollBar().addAdjustmentListener(new AdjustmentListener() {
             @Override
             public void adjustmentValueChanged(AdjustmentEvent e) {
-                LOGGER.debug("Horizontal scroll: {}", e.getValue());
+                LOGGER.trace("Horizontal scroll: {}", e.getValue());
                 throttledROIUpdate();
             }
         });
@@ -216,7 +209,7 @@ public class DatasetImageViewer extends JPanel implements DatasetROIManager.Data
 
         // Create zoom slider
         zoomSlider = new JSlider(10, 400, 100); // Values in percentage
-        zoomSlider.setPreferredSize(new Dimension(400, 20));
+        zoomSlider.setPreferredSize(new Dimension(300, 20));
         zoomSlider.setToolTipText("Zoom Level");
         zoomSlider.setMajorTickSpacing(50);
         zoomSlider.setMinorTickSpacing(10);
@@ -239,14 +232,14 @@ public class DatasetImageViewer extends JPanel implements DatasetROIManager.Data
         JPanel rightGroup = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
         rightGroup.setOpaque(false);
 
-        zoomFitButton = UIUtils.createButton("Fit", null, e -> zoomToFit());
-        zoomFitButton.setPreferredSize(new Dimension(40, 28));
-        zoomFitButton.setToolTipText("Zoom to Fit");
+        zoomFitButton = UIUtils.createButton("", FontAwesomeSolid.EXPAND_ARROWS_ALT, e -> zoomToFit());
+        zoomFitButton.setPreferredSize(new Dimension(28, 28));
+        zoomFitButton.setToolTipText("Fit to Window");
         rightGroup.add(zoomFitButton);
 
-        zoom100Button = UIUtils.createButton("100%", null, e -> zoomTo100());
-        zoom100Button.setPreferredSize(new Dimension(45, 28));
-        zoom100Button.setToolTipText("Zoom to 100%");
+        zoom100Button = UIUtils.createButton("", FontAwesomeSolid.SEARCH, e -> zoomTo100());
+        zoom100Button.setPreferredSize(new Dimension(28, 28));
+        zoom100Button.setToolTipText("100%");
         rightGroup.add(zoom100Button);
 
         panel.add(leftGroup);
@@ -256,10 +249,9 @@ public class DatasetImageViewer extends JPanel implements DatasetROIManager.Data
     }
 
     private JLabel createInfoLabel() {
-        JLabel label = new JLabel(" ");
-        label.setFont(label.getFont().deriveFont(Font.PLAIN, UIConstants.SMALL_FONT_SIZE));
+        JLabel label = UIUtils.createLabel("", UIConstants.TINY_FONT_SIZE, null);
         label.setHorizontalAlignment(SwingConstants.CENTER);
-        label.setBorder(UIUtils.createPadding(UIConstants.SMALL_SPACING, 0, 0, 0));
+        label.setBorder(UIUtils.createPadding(UIConstants.MEDIUM_SPACING, 0, 0, 0));
         return label;
     }
 
@@ -276,97 +268,68 @@ public class DatasetImageViewer extends JPanel implements DatasetROIManager.Data
             return;
         }
 
-        isLoading = true;
         currentImageFile = imageFile;
-
         LOGGER.info("Loading image and ROIs: {}", imageFile.getName());
+        showLoadingState();
 
-        // Load image synchronously (ImageLoader doesn't have async method)
+        CompletableFuture.supplyAsync(() -> loadImageSafely(imageFile))
+            .thenAccept(imagePlus -> handleImageLoaded(imagePlus, roiZipFile))
+            .exceptionally(this::handleImageError);
+    }
+
+    private ImagePlus loadImageSafely(File imageFile) {
         try {
-            ImagePlus imagePlus = ImageLoader.loadImage(imageFile.getAbsolutePath());
+            return ImageLoader.loadImage(imageFile.getAbsolutePath());
+        } catch (Exception e) {
+            LOGGER.error("Error loading image: {}", imageFile.getAbsolutePath(), e);
+            return null;
+        }
+    }
+
+    private void handleImageLoaded(ImagePlus imagePlus, File roiZipFile) {
+        SwingUtilities.invokeLater(() -> {
             if (imagePlus != null) {
                 displayImageWithROIs(imagePlus, roiZipFile);
             } else {
-                showErrorState("Could not load image");
+                showErrorState("Unsupported format or corrupted file");
             }
-        } catch (Exception e) {
-            LOGGER.error("Error loading image: {}", imageFile.getName(), e);
-            showErrorState("Error loading image: " + e.getMessage());
-        } finally {
-            isLoading = false;
-        }
+        });
+    }
+
+    private Void handleImageError(Throwable throwable) {
+        LOGGER.error("Error in image loading task: {}", currentImageFile.getAbsolutePath(), throwable);
+        SwingUtilities.invokeLater(() -> showErrorState(throwable.getMessage()));
+        return null;
     }
 
     private void displayImageWithROIs(ImagePlus imagePlus, File roiZipFile) {
         try {
             currentImagePlus = imagePlus;
+            isLoading = false;
             originalImage = imagePlus.getImage();
             originalImageWidth = imagePlus.getWidth();
             originalImageHeight = imagePlus.getHeight();
+
+            // Start with fit zoom for better initial view
+            currentZoom = calculateFitZoom();
 
             // Create and display scaled image
             Image scaledImage = createScaledImage();
             if (scaledImage != null) {
                 ImageIcon imageIcon = new ImageIcon(scaledImage);
                 imageLabel.setIcon(imageIcon);
+                imageLabel.setText("");
 
                 // Update layout
                 updateLayeredPaneLayout(imageIcon);
 
-                // Load ROIs from ZIP file into dataset manager
+                // Set original image dimensions for ROI overlay
+                roiOverlay.setImageDimensions(originalImageWidth, originalImageHeight);
+
+                // Load ROIs from ZIP file if provided
                 if (roiZipFile != null && roiZipFile.exists()) {
-                    // Add listener for when async loading completes
-                    datasetROIManager.addDatasetListener(new DatasetROIManager.DatasetROIListener() {
-                        @Override
-                        public void onClassAssigned(String roiKey, String className) {}
-                        @Override
-                        public void onClassRemoved(String roiKey) {}
-                        @Override
-                        public void onLoadingStarted(String operation) {}
-                        @Override
-                        public void onLoadingProgress(int loaded, int total) {}
-                        
-                        @Override
-                        public void onLoadingCompleted(int totalLoaded) {
-                            SwingUtilities.invokeLater(() -> {
-                                // Update overlay with loaded ROIs after async loading completes
-                                List<UserROI> loadedROIs = datasetROIManager.getROIsForImage(currentImageFile.getName());
-                                datasetROIOverlay.setCurrentImageFileName(currentImageFile.getName());
-                                datasetROIOverlay.setRois(loadedROIs);
-                                
-                                LOGGER.debug("Updated DatasetROIOverlay with {} ROIs for image '{}' after async loading",
-                                    loadedROIs.size(), currentImageFile.getName());
-                                
-                                // Remove this temporary listener
-                                datasetROIManager.removeDatasetListener(this);
-                            });
-                        }
-                        
-                        @Override
-                        public void onLoadingFailed(String error) {
-                            SwingUtilities.invokeLater(() -> {
-                                // Clear overlay on loading failure
-                                datasetROIOverlay.setCurrentImageFileName(currentImageFile.getName());
-                                datasetROIOverlay.setRois(null);
-                                LOGGER.debug("Cleared overlay due to loading failure");
-                                
-                                // Remove this temporary listener
-                                datasetROIManager.removeDatasetListener(this);
-                            });
-                        }
-                    });
-                    
-                    // Start async loading
-                    datasetROIManager.loadROIsFromZipFile(roiZipFile, currentImageFile.getName());
-                } else {
-                    // Clear overlay if no ROI file
-                    datasetROIOverlay.setCurrentImageFileName(currentImageFile.getName());
-                    datasetROIOverlay.setRois(null);
-                    LOGGER.debug("No ROI file provided, cleared overlay");
+                    roiOverlay.loadROIsFromZip(roiZipFile, currentImageFile.getName());
                 }
-                
-                datasetROIOverlay.setImageDimensions(originalImageWidth, originalImageHeight);
-                updateDatasetROIOverlayTransform();
 
                 // Enable zoom controls
                 setZoomControlsEnabled(true);
@@ -408,11 +371,11 @@ public class DatasetImageViewer extends JPanel implements DatasetROIManager.Data
         imageLabel.setBounds(imageX, imageY, imageWidth, imageHeight);
         layeredPane.add(imageLabel, JLayeredPane.DEFAULT_LAYER);
 
-        // Set dataset ROI overlay bounds to match layered pane
-        datasetROIOverlay.setBounds(0, 0, layeredPaneWidth, layeredPaneHeight);
-        layeredPane.add(datasetROIOverlay, JLayeredPane.PALETTE_LAYER);
+        // Set ROI overlay bounds to match layered pane
+        roiOverlay.setBounds(0, 0, layeredPaneWidth, layeredPaneHeight);
+        layeredPane.add(roiOverlay, JLayeredPane.PALETTE_LAYER);
 
-        updateDatasetROIOverlayTransform();
+        updateROIOverlayTransform();
         layeredPane.revalidate();
         layeredPane.repaint();
 
@@ -421,8 +384,8 @@ public class DatasetImageViewer extends JPanel implements DatasetROIManager.Data
             layeredPaneWidth, layeredPaneHeight, imageX, imageY);
     }
 
-    private void updateDatasetROIOverlayTransform() {
-        if (datasetROIOverlay == null || currentImagePlus == null || imageLabel.getIcon() == null) {
+    private void updateROIOverlayTransform() {
+        if (roiOverlay == null || currentImagePlus == null || imageLabel.getIcon() == null) {
             return;
         }
 
@@ -432,10 +395,8 @@ public class DatasetImageViewer extends JPanel implements DatasetROIManager.Data
         int displayedImageHeight = imageIcon.getIconHeight();
 
         // Calculate scale factors (same for both X and Y to maintain aspect ratio)
-        double scale = Math.min(
-            (double) displayedImageWidth / originalImageWidth,
-            (double) displayedImageHeight / originalImageHeight
-        );
+        double scaleX = (double) displayedImageWidth / originalImageWidth;
+        double scaleY = (double) displayedImageHeight / originalImageHeight;
 
         // Calculate image position in layered pane (centered)
         int layeredPaneWidth = layeredPane.getWidth();
@@ -443,11 +404,12 @@ public class DatasetImageViewer extends JPanel implements DatasetROIManager.Data
         int imageX = Math.max(0, (layeredPaneWidth - displayedImageWidth) / 2);
         int imageY = Math.max(0, (layeredPaneHeight - displayedImageHeight) / 2);
 
-        LOGGER.debug("Dataset ROI Transform - Scale: {}, Position: ({},{}), Image: {}x{}, Original: {}x{}",
-            scale, imageX, imageY, displayedImageWidth, displayedImageHeight, originalImageWidth, originalImageHeight);
+        LOGGER.trace("ROI Transform - Scale: {}x{}, Position: ({},{}), Image: {}x{}, Original: {}x{}",
+            scaleX, scaleY, imageX, imageY, displayedImageWidth, displayedImageHeight, 
+            originalImageWidth, originalImageHeight);
 
-        // Set uniform transform for accurate overlay alignment
-        datasetROIOverlay.setImageTransform(scale, scale, imageX, imageY);
+        // Set transform for accurate overlay alignment
+        roiOverlay.setImageTransform(scaleX, scaleY, imageX, imageY);
     }
 
     // ===== ZOOM FUNCTIONALITY =====
@@ -555,7 +517,9 @@ public class DatasetImageViewer extends JPanel implements DatasetROIManager.Data
             if (scrollPosition != null) {
                 SwingUtilities.invokeLater(() -> {
                     JViewport viewport = scrollPane.getViewport();
-                    viewport.setViewPosition(scrollPosition);
+                    int x = Math.max(0, Math.min(scrollPosition.x, layeredPane.getWidth() - viewport.getWidth()));
+                    int y = Math.max(0, Math.min(scrollPosition.y, layeredPane.getHeight() - viewport.getHeight()));
+                    viewport.setViewPosition(new Point(x, y));
                 });
             }
 
@@ -575,12 +539,12 @@ public class DatasetImageViewer extends JPanel implements DatasetROIManager.Data
     private void throttledROIUpdate() {
         long now = System.currentTimeMillis();
         if (!updatePending && (now - lastUpdateTime) >= UPDATE_THROTTLE_MS) {
-            updateDatasetROIOverlayTransform();
+            updateROIOverlayTransform();
             lastUpdateTime = now;
         } else if (!updatePending) {
             updatePending = true;
             SwingUtilities.invokeLater(() -> {
-                updateDatasetROIOverlayTransform();
+                updateROIOverlayTransform();
                 updatePending = false;
                 lastUpdateTime = System.currentTimeMillis();
             });
@@ -590,86 +554,93 @@ public class DatasetImageViewer extends JPanel implements DatasetROIManager.Data
     // ===== STATE MANAGEMENT =====
 
     private void showEmptyState() {
-        imageLabel.setIcon(null);
-        imageLabel.setText("No image loaded");
-        setZoomControlsEnabled(false);
-        updateImageInfo();
-        
-        if (datasetROIOverlay != null) {
-            datasetROIOverlay.repaint();
-        }
-    }
-
-    private void showErrorState(String message) {
-        imageLabel.setIcon(null);
-        imageLabel.setText(message);
+        showStatePanel(
+            FontAwesomeSolid.IMAGE,
+            "No image selected",
+            "Select an image from the gallery to view it here",
+            UIManager.getColor("Label.disabledForeground"));
+        imageInfoLabel.setText("");
         currentImageFile = null;
         currentImagePlus = null;
         originalImage = null;
+        currentZoom = 1.0;
         setZoomControlsEnabled(false);
-        updateImageInfo();
-        
-        if (datasetROIOverlay != null) {
-            datasetROIOverlay.repaint();
+        updateZoomLabel();
+    }
+
+    private void showLoadingState() {
+        isLoading = true;
+        showStatePanel(
+            FontAwesomeSolid.SPINNER,
+            "Loading image...",
+            null,
+            UIManager.getColor("Label.disabledForeground"));
+        imageInfoLabel.setText(
+            "Loading " + (currentImageFile != null ? currentImageFile.getName() : "image") + "...");
+    }
+
+    private void showErrorState(String errorMessage) {
+        isLoading = false;
+        showStatePanel(
+            FontAwesomeSolid.EXCLAMATION_TRIANGLE,
+            "Failed to load image",
+            errorMessage,
+            UIConstants.ERROR_COLOR);
+        imageInfoLabel.setText(
+            "Error loading " + (currentImageFile != null ? currentImageFile.getName() : "image"));
+    }
+
+    private void showStatePanel(FontAwesomeSolid icon, String message, String detail, Color color) {
+        JPanel panel = UIUtils.createPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+
+        // Icon
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.insets = new Insets(0, 0, UIConstants.LARGE_SPACING, 0);
+        panel.add(UIUtils.createIconLabel(icon, icon == FontAwesomeSolid.IMAGE ? 64 : 48, color), gbc);
+
+        // Main message
+        gbc.gridy++;
+        gbc.insets = new Insets(0, 0, detail != null ? UIConstants.MEDIUM_SPACING : 0, 0);
+        panel.add(
+            UIUtils.createBoldLabel(
+                message,
+                icon == FontAwesomeSolid.IMAGE
+                    ? UIConstants.SUBTITLE_FONT_SIZE
+                    : UIConstants.LARGE_FONT_SIZE),
+            gbc);
+
+        // Detail message
+        if (detail != null) {
+            gbc.gridy++;
+            gbc.insets = new Insets(0, 0, 0, 0);
+            JLabel detailLabel =
+                UIUtils.createLabel(
+                    "<html><center>" + detail + "</center></html>",
+                    UIConstants.NORMAL_FONT_SIZE,
+                    UIManager.getColor("Label.disabledForeground"));
+            panel.add(detailLabel, gbc);
         }
+
+        // Clear the layered pane and show state panel
+        layeredPane.removeAll();
+        layeredPane.add(panel, JLayeredPane.DEFAULT_LAYER);
+        panel.setBounds(0, 0, layeredPane.getWidth(), layeredPane.getHeight());
+        layeredPane.revalidate();
+        layeredPane.repaint();
     }
 
     private void updateImageInfo() {
         if (currentImageFile != null && currentImagePlus != null) {
-            String info = String.format("%s | %d x %d pixels | %s",
+            String info = String.format("%s | %d × %d pixels | %s | %.0f%%",
                 currentImageFile.getName(),
                 originalImageWidth, originalImageHeight,
-                currentImagePlus.getShortTitle());
+                ImageLoader.getFileExtension(currentImageFile.getName()).toUpperCase(),
+                currentZoom * 100);
             imageInfoLabel.setText(info);
         } else {
-            imageInfoLabel.setText(" ");
-        }
-    }
-
-    // ===== DATASET INTERACTION LISTENER =====
-
-    @Override
-    public void onROISelected(UserROI roi) {
-        LOGGER.debug("ROI selected: {}", roi != null ? roi.getName() : "none");
-        repaint();
-    }
-
-    @Override
-    public void onROIHovered(UserROI roi) {
-        LOGGER.debug("ROI hovered: {}", roi != null ? roi.getName() : "none");
-        repaint();
-    }
-
-    @Override
-    public void onROIUnhovered(UserROI roi) {
-        LOGGER.debug("ROI unhovered: {}", roi != null ? roi.getName() : "none");
-        repaint();
-    }
-
-    @Override
-    public void onClassCreated(String className, Color color) {
-        LOGGER.debug("Class created: {} with color {}", className, color);
-        repaint();
-    }
-
-    @Override
-    public void onClassRemoved(String className) {
-        LOGGER.debug("Class removed: {}", className);
-        repaint();
-    }
-
-    @Override
-    public void onSelectedClassChanged(String className) {
-        LOGGER.debug("Selected class changed to: {}", className);
-        repaint();
-    }
-
-    @Override
-    public void onVisualSettingsChanged(float opacity, float borderWidth, boolean outlinesVisible) {
-        LOGGER.debug("Visual settings changed - opacity: {}, border: {}, outlines: {}",
-            opacity, borderWidth, outlinesVisible);
-        if (datasetROIOverlay != null) {
-            datasetROIOverlay.repaint();
+            imageInfoLabel.setText("");
         }
     }
 
@@ -683,11 +654,20 @@ public class DatasetImageViewer extends JPanel implements DatasetROIManager.Data
         return currentImagePlus;
     }
 
-    public DatasetROIOverlay getDatasetROIOverlay() {
-        return datasetROIOverlay;
+    public NewDatasetROIOverlay getROIOverlay() {
+        return roiOverlay;
     }
 
     public double getCurrentZoom() {
         return currentZoom;
+    }
+
+    public boolean isLoading() {
+        return isLoading;
+    }
+
+    public void clearImage() {
+        roiOverlay.clear();
+        showEmptyState();
     }
 }

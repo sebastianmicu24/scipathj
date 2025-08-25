@@ -146,7 +146,7 @@ public class MainWindow extends JFrame {
    */
   private void createMainPanels() {
     mainMenuPanel = new MainMenuPanel();
-    datasetCreationPanel = new DatasetMainPanel();
+    datasetCreationPanel = new DatasetMainPanel(configurationManager.loadMainSettings());
     resultsVisualizationPanel = new ResultsVisualizationPanel();
     analysisSetupPanel = createAnalysisSetupPanel();
     imageViewPanel = createImageViewPanel();

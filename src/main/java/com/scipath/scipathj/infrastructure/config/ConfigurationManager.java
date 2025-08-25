@@ -606,13 +606,7 @@ public class ConfigurationManager {
     // Save CSV inclusion setting for ignored ROIs
     properties.setProperty("includeIgnoredInCsv", String.valueOf(settings.includeIgnoredInCsv()));
 
-    // For backward compatibility, also save vessel ROI settings as legacy properties
-    properties.setProperty(
-        "roiBorderColor", colorToString(settings.getVesselSettings().borderColor()));
-    properties.setProperty(
-        "roiFillOpacity", String.valueOf(settings.getVesselSettings().fillOpacity()));
-    properties.setProperty(
-        "roiBorderWidth", String.valueOf(settings.getVesselSettings().borderWidth()));
+    // Vessel ROI settings are now handled through the modern VesselSegmentationSettings record
 
     return properties;
   }

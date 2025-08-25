@@ -6,6 +6,7 @@ import ij.gui.ShapeRoi;
 import java.awt.*;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
+import java.util.*;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,10 +36,15 @@ public class ROIRenderingEngine {
     private int bufferWidth;
     private int bufferHeight;
     private boolean bufferValid = false;
+    private long lastRenderTime = 0;
+    private int lastROICount = 0;
     
     // Current rendering settings
     private MainSettings settings;
     private ROIColorProvider colorProvider;
+    
+    // Performance mode settings
+    private boolean fastModeEnabled = false;
     
     /**
      * Interface for providing custom colors for ROIs in different contexts.
@@ -112,6 +118,17 @@ public class ROIRenderingEngine {
     }
     
     /**
+     * Enable fast mode for dataset creation (simple rectangle rendering like Fiji).
+     */
+    public void setFastModeEnabled(boolean enabled) {
+        if (this.fastModeEnabled != enabled) {
+            this.fastModeEnabled = enabled;
+            invalidateBuffer();
+            LOGGER.debug("Fast rendering mode {}", enabled ? "enabled" : "disabled");
+        }
+    }
+    
+    /**
      * Update rendering settings.
      */
     public void updateSettings(MainSettings newSettings) {
@@ -137,9 +154,8 @@ public class ROIRenderingEngine {
             LOGGER.debug("Resized rendering buffer to {}x{}", bufferWidth, bufferHeight);
         }
     }
-    
     /**
-     * Render ROIs to the master buffer at native resolution.
+     * Render ROIs to the master buffer at native resolution with smart caching.
      */
     public void renderToBuffer(List<UserROI> rois, int imageWidth, int imageHeight) {
         ensureBufferSize(imageWidth, imageHeight);
@@ -149,6 +165,19 @@ public class ROIRenderingEngine {
             return;
         }
         
+        // Smart caching: only re-render if buffer is invalid or data changed
+        long currentTime = System.currentTimeMillis();
+        boolean dataChanged = (rois.size() != lastROICount);
+        
+        if (bufferValid && !dataChanged && (currentTime - lastRenderTime) < 100) {
+            // Buffer is valid and recent, skip rendering
+            LOGGER.trace("Skipping buffer render - valid cache ({}ms ago, {} ROIs)",
+                        currentTime - lastRenderTime, rois.size());
+            return;
+        }
+        
+        long startTime = System.nanoTime();
+        
         Graphics2D g2d = masterBuffer.createGraphics();
         try {
             // Clear buffer
@@ -156,19 +185,28 @@ public class ROIRenderingEngine {
             g2d.fillRect(0, 0, bufferWidth, bufferHeight);
             g2d.setComposite(AlphaComposite.SrcOver);
             
-            // Optimize for speed
+            // Optimize for maximum speed
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
             g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
+            g2d.setRenderingHint(RenderingHints.KEY_COLOR_RENDERING, RenderingHints.VALUE_COLOR_RENDER_SPEED);
+            g2d.setRenderingHint(RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_SPEED);
+            g2d.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+            g2d.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_OFF);
             
-            // Render all ROIs
-            for (UserROI roi : rois) {
-                if (colorProvider.shouldRenderROI(roi)) {
-                    renderROIToBuffer(g2d, roi);
-                }
+            // Choose rendering approach based on mode
+            int renderedCount;
+            if (fastModeEnabled) {
+                renderedCount = renderROIsFastMode(g2d, rois);
+            } else {
+                renderedCount = renderROIsBatch(g2d, rois);
             }
             
             bufferValid = true;
-            LOGGER.debug("Rendered {} ROIs to buffer", rois.size());
+            lastRenderTime = currentTime;
+            lastROICount = rois.size();
+            
+            long renderTimeMs = (System.nanoTime() - startTime) / 1_000_000;
+            LOGGER.debug("Rendered {} ROIs to buffer in {}ms", renderedCount, renderTimeMs);
             
         } finally {
             g2d.dispose();
@@ -199,8 +237,8 @@ public class ROIRenderingEngine {
             
             // Apply transform for proper coordinate synchronization
             AffineTransform transform = new AffineTransform();
+            transform.translate(offsetX, offsetY);
             transform.scale(scaleX, scaleY);
-            transform.translate(offsetX / scaleX, offsetY / scaleY);
             
             target.drawImage(visiblePortion, transform, null);
             
@@ -252,17 +290,11 @@ public class ROIRenderingEngine {
         }
         
         try {
-            // Apply full transform to match display
+            // Apply correct transform to match display coordinates
             AffineTransform transform = new AffineTransform();
+            transform.translate(offsetX, offsetY);
             transform.scale(scaleX, scaleY);
-            transform.translate(offsetX / scaleX, offsetY / scaleY);
-            
-            // Account for ShapeRoi base coordinates
-            Roi imageJRoi = roi.getImageJRoi();
-            if (imageJRoi instanceof ShapeRoi) {
-                ShapeRoi shapeRoi = (ShapeRoi) imageJRoi;
-                transform.translate(shapeRoi.getXBase(), shapeRoi.getYBase());
-            }
+            // Buffer margin is already included in the rendered coordinates
             
             java.awt.Shape transformedShape = transform.createTransformedShape(shape);
             return transformedShape.contains(point);
@@ -278,6 +310,7 @@ public class ROIRenderingEngine {
      */
     public void invalidateBuffer() {
         bufferValid = false;
+        lastRenderTime = 0; // Reset cache timer
     }
     
     /**
@@ -288,6 +321,129 @@ public class ROIRenderingEngine {
     }
     
     // === PRIVATE METHODS ===
+    
+    /**
+     * Ultra-fast polygon rendering mode for dataset creation - optimized for speed.
+     */
+    private int renderROIsFastMode(Graphics2D g2d, List<UserROI> rois) {
+        int renderedCount = 0;
+        
+        // Set single color and stroke for all ROIs to minimize state changes
+        g2d.setColor(Color.YELLOW);
+        g2d.setStroke(new BasicStroke(1.0f));
+        
+        // Pre-allocate arrays for polygon coordinates to avoid repeated allocations
+        int[] xPoints = new int[1000]; // Most ROIs won't exceed this
+        int[] yPoints = new int[1000];
+        
+        // Render all ROIs as fast polygons
+        for (UserROI roi : rois) {
+            if (!colorProvider.shouldRenderROI(roi)) {
+                continue;
+            }
+            
+            try {
+                Roi imageJRoi = roi.getImageJRoi();
+                if (imageJRoi != null) {
+                    // Get polygon directly from ImageJ ROI (fastest method)
+                    Polygon polygon = imageJRoi.getPolygon();
+                    if (polygon != null && polygon.npoints > 2) {
+                        
+                        // Ensure arrays are large enough
+                        if (polygon.npoints > xPoints.length) {
+                            xPoints = new int[polygon.npoints + 100];
+                            yPoints = new int[polygon.npoints + 100];
+                        }
+                        
+                        // Copy and translate coordinates with proper offset handling
+                        int baseOffsetX = BUFFER_MARGIN;
+                        int baseOffsetY = BUFFER_MARGIN;
+                        
+                        // For ShapeRoi, DON'T add base coordinates as they're already in the polygon
+                        // The polygon coordinates from getPolygon() are already relative to the image
+                        
+                        for (int i = 0; i < polygon.npoints; i++) {
+                            xPoints[i] = polygon.xpoints[i] + baseOffsetX;
+                            yPoints[i] = polygon.ypoints[i] + baseOffsetY;
+                        }
+                        
+                        // Draw polygon outline (fast method)
+                        g2d.drawPolygon(xPoints, yPoints, polygon.npoints);
+                        renderedCount++;
+                    }
+                }
+            } catch (Exception e) {
+                // Ignore errors in fast mode for maximum performance
+            }
+        }
+        
+        return renderedCount;
+    }
+    
+    /**
+     * Fast batch rendering optimized for large numbers of ROIs.
+     */
+    private int renderROIsBatch(Graphics2D g2d, List<UserROI> rois) {
+        int renderedCount = 0;
+        
+        // Group ROIs by color to minimize graphics state changes
+        Map<Color, List<UserROI>> roisByColor = new HashMap<>();
+        
+        for (UserROI roi : rois) {
+            if (!colorProvider.shouldRenderROI(roi)) {
+                continue;
+            }
+            
+            MainSettings.ROICategory category = determineROICategory(roi);
+            Color borderColor = colorProvider.getBorderColor(roi, category);
+            
+            roisByColor.computeIfAbsent(borderColor, k -> new ArrayList<>()).add(roi);
+        }
+        
+        // Render each color group in batch
+        for (Map.Entry<Color, List<UserROI>> entry : roisByColor.entrySet()) {
+            Color color = entry.getKey();
+            List<UserROI> roisWithColor = entry.getValue();
+            
+            // Set color once for the whole batch
+            g2d.setColor(color);
+            g2d.setStroke(new BasicStroke(2.0f)); // Use fixed stroke width for speed
+            
+            // Render all ROIs with this color
+            for (UserROI roi : roisWithColor) {
+                if (renderROIFast(g2d, roi)) {
+                    renderedCount++;
+                }
+            }
+        }
+        
+        return renderedCount;
+    }
+    
+    /**
+     * Fast ROI rendering using simplified geometry.
+     */
+    private boolean renderROIFast(Graphics2D g2d, UserROI roi) {
+        try {
+            // Use bounds rectangle for maximum speed (like Fiji)
+            Rectangle bounds = roi.getBounds();
+            if (bounds == null || bounds.width <= 0 || bounds.height <= 0) {
+                return false;
+            }
+            
+            // Calculate position with buffer margin only (bounds are already image-relative)
+            int x = bounds.x + BUFFER_MARGIN;
+            int y = bounds.y + BUFFER_MARGIN;
+            
+            // Draw simple rectangle outline (fastest approach)
+            g2d.drawRect(x, y, bounds.width, bounds.height);
+            
+            return true;
+        } catch (Exception e) {
+            LOGGER.warn("Failed to render ROI '{}': {}", roi.getName(), e.getMessage());
+            return false;
+        }
+    }
     
     private void renderROIToBuffer(Graphics2D g2d, UserROI roi) {
         java.awt.Shape shape = getROIShape(roi);

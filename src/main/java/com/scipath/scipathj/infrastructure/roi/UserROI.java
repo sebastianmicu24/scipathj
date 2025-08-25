@@ -39,6 +39,7 @@ public class UserROI {
   private Color displayColor;
   private String notes;
   private boolean ignored = false;
+  private String assignedClass = null; // For dataset classification
 
   // For complex shapes (like vessels), store the actual ImageJ ROI
   private final Roi imageJRoi;
@@ -193,6 +194,14 @@ public class UserROI {
 
   public void setNotes(String notes) {
     this.notes = notes != null ? notes : "";
+  }
+
+  public String getAssignedClass() {
+    return assignedClass;
+  }
+
+  public void setAssignedClass(String assignedClass) {
+    this.assignedClass = assignedClass;
   }
 
   // Utility methods

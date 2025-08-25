@@ -1,4 +1,4 @@
-"C:\Users\sebas\Downloads\Cell Classifier (1).html"# SciPathJ
+# SciPathJ
 
 **Segmentation and Classification of Images, Pipelines for the Analysis of Tissue Histopathology**
 
@@ -108,9 +108,9 @@ SciPathJ features a completely redesigned ROI (Region of Interest) system that a
 - `ROIRenderingEngine`: Shared optimized rendering engine
 - `UserROI`: Biological structure-focused ROI model
 
-**Application-Specific Managers:**
+- **Application-Specific Managers:**
 - `AnalysisROIManager`: Classification results, measurements, validation
-- `DatasetROIManager`: Class assignment, batch loading (replaces DatasetROILoader)
+- *Dataset Context*: Handled by modular components ([`DatasetMainPanel`](src/main/java/com/scipath/scipathj/ui/dataset/DatasetMainPanel.java:1), [`NewDatasetROIOverlay`](src/main/java/com/scipath/scipathj/ui/dataset/NewDatasetROIOverlay.java:1), [`ProgressiveROILoader`](src/main/java/com/scipath/scipathj/ui/dataset/ProgressiveROILoader.java:1))
 - `VisualizationROIManager`: Custom color schemes, feature-based visualization
 
 **Rendering Components:**
@@ -211,9 +211,6 @@ com.scipath.scipathj/
 │   │   ├── ROIRenderingEngine.java      # Shared rendering engine
 │   │   └── UserROI.java                 # Biological structure ROI model
 │   └── utils/          # Infrastructure utilities (logging, system output capture)
-├── roi/                # Legacy ROI models (being phased out)
-│   ├── model/          # Legacy ROI data models (UserROI, CellROI, etc.)
-│   └── operations/     # Legacy ROI manipulation operations
 ├── ui/
 │   ├── main/           # Main application window and controllers
 │   ├── analysis/       # Analysis UI components
@@ -223,9 +220,15 @@ com.scipath.scipathj/
 │   ├── common/         # Common UI components (image viewer, ROI overlay, etc.)
 │   ├── controllers/    # UI controllers and state management
 │   ├── dataset/        # Dataset creation UI
-│   │   ├── DatasetROIManager.java      # Dataset-specific ROI manager (replaces DatasetROILoader)
-│   │   ├── DatasetROIOverlay.java      # Dataset-specific ROI overlay
-│   │   └── DatasetClassificationPanel.java # Class assignment UI
+│   │   ├── DatasetMainPanel.java         # Main dataset orchestrator
+│   │   ├── DatasetSetupPanel.java        # Setup phase (file selection)
+│   │   ├── DatasetClassificationPanel.java # Classification phase UI
+│   │   ├── DatasetImageViewer.java       # Image viewer with ROI overlay
+│   │   ├── DatasetClassManager.java      # Class management for ROI assignment
+│   │   ├── DatasetControlsPanel.java     # UI controls for dataset operations
+│   │   ├── NewDatasetROIOverlay.java     # ROI overlay for dataset context
+│   │   ├── FastDatasetROIRenderer.java   # High-performance ROI rendering
+│   │   └── ProgressiveROILoader.java     # Asynchronous ROI loading
 │   ├── model/          # UI data models
 │   ├── themes/         # Theme management
 │   ├── utils/          # UI utilities
@@ -385,20 +388,20 @@ Run comprehensive segmentation and classification on tissue images using advance
 - Vascular segmentation thresholds and morphological operations
 
 ### 2. Create Dataset
-**Status: Available** - *Enhanced with ROI System v2.0 + Performance Optimizations*
+**Status: Available** - *High-Performance Implementation with Modular Architecture*
 
-Advanced tools for creating custom classification datasets with high-performance ROI processing:
+Advanced tools for creating custom classification datasets with streamlined workflow:
 
-- **🔧 DatasetROIManager**: Dedicated ROI manager with async class assignment capabilities
-- **📊 Interactive Class Assignment**: Click-to-assign classes with visual feedback and hover effects
+- **🎯 Two-Phase Workflow**: Setup phase for file selection, classification phase for ROI assignment
+- **📊 Interactive Class Assignment**: Click-to-assign classes with visual feedback via [`NewDatasetROIOverlay`](src/main/java/com/scipath/scipathj/ui/dataset/NewDatasetROIOverlay.java:1)
 - **📁 Nested ZIP Support**: Enhanced loading from nested ZIP files with progress tracking
-- **⚡ High-Performance Loading**: Asynchronous ROI loading with smart filtering (cells + nuclei only)
+- **⚡ High-Performance Loading**: Asynchronous ROI loading via [`ProgressiveROILoader`](src/main/java/com/scipath/scipathj/ui/dataset/ProgressiveROILoader.java:1) with smart filtering (cells + nuclei only)
+- **🚀 Fast Rendering**: High-performance ROI rendering via [`FastDatasetROIRenderer`](src/main/java/com/scipath/scipathj/ui/dataset/FastDatasetROIRenderer.java:1)
 - **🎯 Smart ROI Display**: Z-order management with cells on top for optimal interaction
 - **🔍 Intelligent Filtering**: Selective loading reduces memory usage by 50-70%
-- **📈 Real-time Statistics**: Live statistics by class and dataset completeness
+- **📈 Class Management**: Dynamic class creation and management via [`DatasetClassManager`](src/main/java/com/scipath/scipathj/ui/dataset/DatasetClassManager.java:1)
 - **🛡️ Robust Error Handling**: Comprehensive validation and corrupted file recovery
-- **💾 Export Formats**: Multiple export formats for machine learning pipelines
-- **⚡ Performance**: 3x faster loading with optimized overlay alignment
+- **💾 Modular Architecture**: Clean separation of concerns with [`DatasetMainPanel`](src/main/java/com/scipath/scipathj/ui/dataset/DatasetMainPanel.java:1) orchestration
 
 ### 3. Visualize Results
 **Status: Available** - *Enhanced with ROI System v2.0*
@@ -439,23 +442,34 @@ analysisOverlay.setAnalysisFilters(showClassifiedOnly, showValidOnly, customFilt
 ### Dataset Context API
 
 ```java
-// Create dataset-specific ROI manager
-DatasetROIManager datasetManager = new DatasetROIManager();
+// Create dataset main panel (orchestrates setup and classification)
+DatasetMainPanel datasetPanel = new DatasetMainPanel(settings);
 
-// Load ROIs from ZIP with progress tracking
-datasetManager.loadROIsFromZipFile(zipFile, imageName);
-datasetManager.addDatasetListener(new DatasetROIListener() {
+// Handle ROI loading with progress tracking using NewDatasetROIOverlay
+NewDatasetROIOverlay overlay = new NewDatasetROIOverlay();
+overlay.addInteractionListener(new NewDatasetROIOverlay.InteractionListener() {
     @Override
-    public void onLoadingProgress(int loaded, int total) {
+    public void onROIClicked(UserROI roi, String assignedClass) {
+        // Handle ROI click for class assignment
+    }
+    
+    @Override
+    public void onProgressUpdate(int loaded, int total) {
         updateProgressBar(loaded, total);
     }
 });
 
-// Assign classes to ROIs
-datasetManager.assignClass(roiKey, "Tumor");
+// Load ROIs asynchronously with ProgressiveROILoader
+ProgressiveROILoader loader = new ProgressiveROILoader();
+loader.addProgressListener((loaded, total, rois) -> {
+    overlay.onROIBatchLoaded(rois, loaded, total);
+});
+loader.loadROIsProgressively(zipFile, imageName);
 
-// Get dataset statistics
-DatasetROIManager.DatasetStatistics stats = datasetManager.getDatasetStatistics();
+// Class management through DatasetClassManager
+DatasetClassManager classManager = new DatasetClassManager();
+classManager.addClass("Tumor");
+classManager.addClass("Normal");
 ```
 
 ### Visualization Context API
@@ -529,13 +543,14 @@ The dataset creation workflow has been significantly enhanced:
 - **Interactive Filtering**: Filter by classification status, validation, or custom criteria
 
 #### Dataset Context
-- **Interactive Class Assignment**: Click-to-assign classes with visual feedback
-- **High-Performance Loading**: Asynchronous loading with smart filtering (cells + nuclei only)
-- **Batch Processing**: Robust loading from nested ZIP files with progress tracking
+- **Setup Phase**: [`DatasetSetupPanel`](src/main/java/com/scipath/scipathj/ui/dataset/DatasetSetupPanel.java:1) for file selection (ROI ZIP and image folder)
+- **Classification Phase**: [`DatasetClassificationPanel`](src/main/java/com/scipath/scipathj/ui/dataset/DatasetClassificationPanel.java:1) for interactive ROI class assignment
+- **Interactive Class Assignment**: Click-to-assign classes with visual feedback via [`NewDatasetROIOverlay`](src/main/java/com/scipath/scipathj/ui/dataset/NewDatasetROIOverlay.java:1)
+- **High-Performance Loading**: Asynchronous loading with smart filtering via [`ProgressiveROILoader`](src/main/java/com/scipath/scipathj/ui/dataset/ProgressiveROILoader.java:1)
+- **Fast Rendering**: High-performance ROI rendering via [`FastDatasetROIRenderer`](src/main/java/com/scipath/scipathj/ui/dataset/FastDatasetROIRenderer.java:1)
+- **Class Management**: Dynamic class creation and management via [`DatasetClassManager`](src/main/java/com/scipath/scipathj/ui/dataset/DatasetClassManager.java:1)
 - **Z-Order Display**: Cells render on top of nuclei for optimal interaction
-- **Statistics**: Real-time per-class statistics and dataset completeness tracking
-- **Error Recovery**: Comprehensive handling of corrupted or malformed files
-- **Memory Optimization**: 50-70% reduced memory footprint through selective loading
+- **Memory Optimization**: 50-70% reduced memory footprint through selective loading (cells + nuclei only)
 
 #### Visualization Context
 - **Color Schemes**: Multiple visualization modes (Default, Heat Map, Feature-based, Custom)
