@@ -654,6 +654,10 @@ public class DatasetImageViewer extends JPanel {
         return currentImagePlus;
     }
 
+    public String getCurrentImageFileName() {
+        return currentImageFile != null ? currentImageFile.getName() : null;
+    }
+
     public NewDatasetROIOverlay getROIOverlay() {
         return roiOverlay;
     }

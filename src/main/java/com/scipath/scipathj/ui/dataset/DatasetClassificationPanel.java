@@ -72,8 +72,9 @@ public class DatasetClassificationPanel extends JPanel {
         controlsPanel.setMinimumSize(new Dimension(280, 400));
         controlsPanel.setPreferredSize(new Dimension(320, 600));
         
-        // Connect controls to overlay
+        // Connect controls to overlay and image viewer
         controlsPanel.setOverlay(datasetImageViewer.getROIOverlay());
+        controlsPanel.setDatasetImageViewer(datasetImageViewer);
         
         // Layout using split panes
         JSplitPane leftSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
@@ -191,7 +192,12 @@ public class DatasetClassificationPanel extends JPanel {
             
             // Load image and ROIs using the new integrated viewer
             datasetImageViewer.loadImageWithROIs(imageFile, selectedRoiZip);
-            
+
+            // Update controls panel with current image for feature extraction
+            if (datasetImageViewer.getCurrentImagePlus() != null) {
+                controlsPanel.setCurrentImage(datasetImageViewer.getCurrentImagePlus());
+            }
+
             controlsPanel.updateStatus("Loaded: " + imageFile.getName());
             LOGGER.info("Successfully loaded image: {}", imageFile.getName());
             

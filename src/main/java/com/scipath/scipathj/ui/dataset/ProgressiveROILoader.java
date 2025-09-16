@@ -223,10 +223,10 @@ public class ProgressiveROILoader {
         if (roi == null) {
             return false;
         }
-        
-        // Filter for cells and nuclei only for performance
+
+        // Filter for cells, nuclei, and cytoplasm for complete ROI coverage
         String name = roi.getName().toLowerCase();
-        return name.startsWith("cell") || name.startsWith("nucleus");
+        return name.startsWith("cell") || name.startsWith("nucleus") || name.startsWith("cytoplasm");
     }
     
     private String cleanROIName(String entryName) {

@@ -168,6 +168,7 @@ public class FastDatasetROIRenderer {
     
     /**
      * Check if ROI should be rendered based on type visibility.
+     * CRITICAL MODIFICATION: Cytoplasm ROIs are always hidden from dataset overlay display
      */
     private boolean shouldRenderROI(UserROI roi, boolean nucleiVisible, boolean cellsVisible) {
         UserROI.ROIType type = roi.getType();
@@ -175,8 +176,9 @@ public class FastDatasetROIRenderer {
             case NUCLEUS:
                 return nucleiVisible;
             case CELL:
-            case CYTOPLASM:
                 return cellsVisible;
+            case CYTOPLASM:
+                return false; // Always hide cytoplasm ROIs from visual display
             default:
                 return nucleiVisible || cellsVisible; // Show other types if either is visible
         }

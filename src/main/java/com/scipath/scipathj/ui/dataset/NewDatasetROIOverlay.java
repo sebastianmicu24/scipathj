@@ -51,7 +51,7 @@ public class NewDatasetROIOverlay extends JComponent implements ProgressiveROILo
     private float borderWidth = 2.0f;
     private float fillOpacity = 0.2f;
     private boolean nucleiVisible = true;
-    private boolean cellsVisible = true;
+    private boolean cellsVisible = true; // Allow cell ROIs to be visible but cytoplasm will be filtered separately
     
     // Interaction listeners
     private final List<InteractionListener> interactionListeners = new ArrayList<>();
@@ -127,15 +127,17 @@ public class NewDatasetROIOverlay extends JComponent implements ProgressiveROILo
         this.borderWidth = borderWidth;
         this.fillOpacity = fillOpacity;
         this.nucleiVisible = nucleiVisible;
-        this.cellsVisible = cellsVisible;
-        
+
+        // ALLOW CELL VISIBILITY: Let cellsVisible param control CELL ROIs, cytoplasm handled separately
+        this.cellsVisible = cellsVisible; // Restore original behavior for cells
+
         // Only update border width and fill opacity, not the global visibility
         // The type-specific visibility will be handled in the render method
         renderer.setVisualProperties(borderWidth, fillOpacity, true); // Always true, let type filtering handle visibility
         repaint();
-        
+
         LOGGER.debug("Updated visual controls: border={}, opacity={}, nuclei={}, cells={}",
-                   borderWidth, fillOpacity, nucleiVisible, cellsVisible);
+                    borderWidth, fillOpacity, nucleiVisible, this.cellsVisible);
     }
     
     /**
@@ -241,11 +243,11 @@ public class NewDatasetROIOverlay extends JComponent implements ProgressiveROILo
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        
+
         if (allROIs.isEmpty()) {
             return;
         }
-        
+
         Graphics2D g2d = (Graphics2D) g.create();
         try {
             // Use fast renderer with type-specific visibility

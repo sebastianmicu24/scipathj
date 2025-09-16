@@ -1,17 +1,31 @@
 package com.scipath.scipathj.ui.dataset;
 
-import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
+import java.io.IOException;
+import java.awt.*;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
 import javax.swing.filechooser.FileNameExtensionFilter;
+import ij.gui.Roi;
+import ij.WindowManager;
+import ij.ImagePlus;
+import com.scipath.scipathj.infrastructure.roi.UserROI;
+import com.scipath.scipathj.infrastructure.config.ConfigurationManager;
+import com.scipath.scipathj.infrastructure.config.MainSettings;
+import com.scipath.scipathj.analysis.algorithms.classification.FeatureExtraction;
+import com.scipath.scipathj.analysis.config.FeatureExtractionSettings;
+import com.scipath.scipathj.ui.utils.ImageLoader;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,6 +76,7 @@ public class DatasetControlsPanel extends JPanel {
     // UI Components
     private JButton loadROIsButton;
     private JButton clearROIsButton;
+    private JButton downloadTrainingDataButton;
     private JSlider borderWidthSlider;
     private JSlider fillOpacitySlider;
     private JCheckBox showNucleiCheckBox;
@@ -81,6 +96,14 @@ public class DatasetControlsPanel extends JPanel {
     // Integration
     private NewDatasetROIOverlay overlay;
     private final List<ControlListener> listeners = new ArrayList<>();
+    private ImagePlus currentImagePlus;
+
+    // Reference to DatasetImageViewer for accessing image files
+    private DatasetImageViewer datasetImageViewer;
+
+    // Feature extraction components
+    private com.scipath.scipathj.analysis.algorithms.classification.FeatureExtraction featureExtractor;
+    private Map<String, Map<String, Object>> currentFeatures;
     
     /**
      * Class item for combo box with color support.
@@ -226,6 +249,7 @@ public class DatasetControlsPanel extends JPanel {
         // File operations
         loadROIsButton = createModernButton("Load ROIs from ZIP", getSuccessColor());
         clearROIsButton = createModernButton("Clear ROIs", getDangerColor());
+        downloadTrainingDataButton = createModernButton("Download Training Data", new Color(102, 102, 255)); // Dark blue
         
         // Visual controls
         borderWidthSlider = createModernSlider(1, 5, 2, 1);
@@ -305,10 +329,11 @@ public class DatasetControlsPanel extends JPanel {
     }
     
     private JPanel createFileOperationsPanel() {
-        JPanel panel = new JPanel(new GridLayout(2, 1, 5, 5));
+        JPanel panel = new JPanel(new GridLayout(3, 1, 5, 5));
         panel.setOpaque(false);
         panel.add(loadROIsButton);
         panel.add(clearROIsButton);
+        panel.add(downloadTrainingDataButton);
         return panel;
     }
     
@@ -614,6 +639,7 @@ public class DatasetControlsPanel extends JPanel {
         // File operations
         loadROIsButton.addActionListener(e -> handleLoadROIs());
         clearROIsButton.addActionListener(e -> handleClearROIs());
+        downloadTrainingDataButton.addActionListener(e -> handleDownloadTrainingData());
         
         // Visual controls
         borderWidthSlider.addChangeListener(e -> applyVisualControls());
@@ -662,6 +688,922 @@ public class DatasetControlsPanel extends JPanel {
 
         // Notify listeners
         notifyListeners(listener -> listener.onClearROIsRequested());
+    }
+
+    /**
+     * Handle the download training data button click.
+     * Uses the existing analysis pipeline to extract features from manually classified cells.
+     */
+    private void handleDownloadTrainingData() {
+        try {
+            if (overlay == null) {
+                JOptionPane.showMessageDialog(this, "No ROI overlay available. Please load ROIs first.",
+                                                "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            if (datasetImageViewer == null || datasetImageViewer.getCurrentImageFile() == null) {
+                JOptionPane.showMessageDialog(this, "No image file loaded. Please load an image first.",
+                                                "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            // Check if we have any ROIs with manual classifications (excluding unassigned)
+            boolean hasManualClassifications = false;
+            int totalCells = 0;
+            for (String className : classCounts.keySet()) {
+                Integer count = classCounts.get(className);
+                if (count != null && count > 0) {
+                    totalCells += count;
+                    if (!"Unclassified".equals(className)) {
+                        hasManualClassifications = true;
+                    }
+                }
+            }
+
+            if (!hasManualClassifications) {
+                String message = totalCells == 0
+                    ? "No cells found in the current overlay. Please load ROIs first."
+                    : totalCells + " cells found, but all are unclassified. Please classify some cells first.";
+                JOptionPane.showMessageDialog(this, message, "Warning", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            // Show file chooser to select output location
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setSelectedFile(new File("training_data.json"));
+            if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+                File outputFile = fileChooser.getSelectedFile();
+
+                // Extract features using the analysis pipeline approach
+                extractAndSaveTrainingDataUsingPipeline(outputFile);
+
+                updateStatus("Training data saved to: " + outputFile.getName());
+                JOptionPane.showMessageDialog(this, "Training data successfully saved using the analysis pipeline!\n" +
+                        "This includes full feature extraction with H&E deconvolution.\n" +
+                        "You can now use this comprehensive JSON file to train your XGBoost classifier.",
+                        "Success", JOptionPane.INFORMATION_MESSAGE);
+            }
+
+        } catch (Exception e) {
+            LOGGER.error("Error downloading training data", e);
+            JOptionPane.showMessageDialog(this, "Error extracting training data: " + e.getMessage(),
+                                            "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /**
+     * Extract features from classified cells using the analysis pipeline and save to JSON file.
+     */
+    private void extractAndSaveTrainingDataUsingPipeline(File outputFile) throws Exception {
+        File imageFile = datasetImageViewer.getCurrentImageFile();
+        String imageFileName = datasetImageViewer.getCurrentImageFileName();
+
+        // Load the image using the analysis pipeline's ImageLoader (loads into ImageJ's global window manager)
+        ij.ImagePlus imagePlus = ImageLoader.loadImage(imageFile.getAbsolutePath());
+        if (imagePlus == null) {
+            throw new Exception("Failed to load image: " + imageFileName);
+        }
+
+        // Initialize configuration manager and settings for feature extraction
+        ConfigurationManager configManager = new ConfigurationManager();
+        MainSettings mainSettings = configManager.loadMainSettings();
+        FeatureExtractionSettings featureSettings = configManager.loadFeatureExtractionSettings();
+
+        // Get all ROIs from the overlay
+        Map<String, UserROI> allROIs = getAllROIsFromOverlay();
+        if (allROIs.isEmpty()) {
+            throw new Exception("No ROIs found in overlay");
+        }
+
+        // Separate ROIs by type for FeatureExtraction
+        List<UserROI> vesselROIs = new ArrayList<>();
+        List<UserROI> nucleusROIs = new ArrayList<>();
+        List<UserROI> cytoplasmROIs = new ArrayList<>();
+        List<UserROI> cellROIs = new ArrayList<>();
+        List<UserROI> classifiedCells = new ArrayList<>();
+        List<UserROI> classifiedNuclei = new ArrayList<>();
+        List<UserROI> classifiedCytoplasms = new ArrayList<>();
+
+        // Initialize cytoplasm ROIs collection to track what we find
+        int initialCytoplasmCount = 0;
+
+        // DEBUG: Log all ROIs before categorization
+        LOGGER.info("=== ROI CATEGORIZATION DEBUGGING START ===");
+        LOGGER.info("Total ROIs to categorize: {}", allROIs.size());
+        int cytoplasmCount = 0, nucleusCount = 0, cellCount = 0, vesselCount = 0;
+        for (UserROI roi : allROIs.values()) {
+            switch (roi.getType()) {
+                case CYTOPLASM:
+                    cytoplasmCount++;
+                    break;
+                case NUCLEUS:
+                    nucleusCount++;
+                    break;
+                case CELL:
+                    cellCount++;
+                    break;
+                case VESSEL:
+                    vesselCount++;
+                    break;
+            }
+        }
+        LOGGER.info("ROI type counts: Cells={}, Nuclei={}, Cytoplasm={}, Vessels={}", cellCount, nucleusCount, cytoplasmCount, vesselCount);
+
+        // Log specific details about Cytoplasm ROIs
+        if (cytoplasmCount > 0) {
+            LOGGER.info("Cytoplasm ROI details:");
+            int counter = 0;
+            for (UserROI roi : allROIs.values()) {
+                if (roi.getType() == com.scipath.scipathj.infrastructure.roi.UserROI.ROIType.CYTOPLASM && counter < 10) {
+                    LOGGER.info("  Cytoplasm ROI: {} (class: '{}', assignedClass: '{}')",
+                                roi.getName(),
+                                roi.getType(),
+                                roi.getAssignedClass() != null ? "'" + roi.getAssignedClass() + "'" : "NULL");
+                    counter++;
+                }
+            }
+        } else {
+            LOGGER.warn("NO CYTOPLASM ROIs found in overlay - this is likely the issue!");
+        }
+        LOGGER.info("=== ROI CATEGORIZATION DEBUGGING END ===");
+
+        // Categorize ROIs and filter for manually classified ROIs
+        for (UserROI roi : allROIs.values()) {
+            switch (roi.getType()) {
+                case VESSEL:
+                    vesselROIs.add(roi);
+                    break;
+                case NUCLEUS:
+                    nucleusROIs.add(roi);
+                    String nucleusClassName = roi.getAssignedClass();
+                    // Include classified nuclei
+                    if (nucleusClassName != null && !nucleusClassName.trim().isEmpty()) {
+                        classifiedNuclei.add(roi);
+                    }
+                    break;
+                case CYTOPLASM:
+                    cytoplasmROIs.add(roi);
+                    String cytoplasmClassName = roi.getAssignedClass();
+                    // Include classified cytoplasm
+                    if (cytoplasmClassName != null && !cytoplasmClassName.trim().isEmpty()) {
+                        classifiedCytoplasms.add(roi);
+                        LOGGER.debug("Added CYTOPLASM ROI to classified: {} -> class '{}'", roi.getName(), cytoplasmClassName);
+                    } else {
+                        LOGGER.debug("CYTOPLASM ROI not classified: {} -> class '{}' (isEmpty: {})",
+                                     roi.getName(), cytoplasmClassName, cytoplasmClassName != null ? cytoplasmClassName.trim().isEmpty() : "NULL");
+                    }
+                    break;
+                case CELL:
+                    cellROIs.add(roi);
+                    String cellClassName = roi.getAssignedClass();
+                    // Include classified cells
+                    if (cellClassName != null && !cellClassName.trim().isEmpty()) {
+                        classifiedCells.add(roi);
+                    }
+                    break;
+            }
+        }
+
+        if (classifiedCells.isEmpty() && classifiedNuclei.isEmpty() && classifiedCytoplasms.isEmpty()) {
+           // Comprehensive debugging info to understand why no classified ROIs
+           LOGGER.warn("=== CLASSIFICATION DEBUGGING START ===");
+           LOGGER.warn("No manually classified ROIs found. Comprehensive debugging info:");
+           LOGGER.warn("Total ROIs extracted from overlay: {}", allROIs.size());
+           LOGGER.warn("Total cells extracted: {}", cellROIs.size());
+           LOGGER.warn("Total nuclei extracted: {}", nucleusROIs.size());
+           LOGGER.warn("Total cytoplasm extracted: {}", cytoplasmROIs.size());
+
+           // Log detailed classification status for each ROI type
+           LOGGER.warn("=== DETAILED CLASSIFICATION BREAKDOWN ===");
+           LOGGER.warn("CLASSIFIED CELLS: {}", classifiedCells.size());
+           for (UserROI cell : classifiedCells.subList(0, Math.min(classifiedCells.size(), 5))) {
+               LOGGER.warn(" - Cell: {} -> class: '{}'", cell.getName(), cell.getAssignedClass());
+           }
+
+           LOGGER.warn("CLASSIFIED NUCLEI: {}", classifiedNuclei.size());
+           for (UserROI nucleus : classifiedNuclei.subList(0, Math.min(classifiedNuclei.size(), 5))) {
+               LOGGER.warn(" - Nuclei: {} -> class: '{}'", nucleus.getName(), nucleus.getAssignedClass());
+           }
+
+           LOGGER.warn("CLASSIFIED CYTOPLASM: {}", classifiedCytoplasms.size());
+           for (UserROI cytoplasm : classifiedCytoplasms.subList(0, Math.min(classifiedCytoplasms.size(), 5))) {
+               LOGGER.warn(" - Cytoplasm: {} -> class: '{}'", cytoplasm.getName(), cytoplasm.getAssignedClass());
+           }
+
+            // Log all ROIs with their details
+            LOGGER.warn("=== ALL ROI DETAILS ===");
+            for (UserROI roi : allROIs.values()) {
+                LOGGER.warn("ROI: {} -> class: '{}' (type: {}, file: {}, key: {})",
+                    roi.getName(),
+                    roi.getAssignedClass() != null ? "'" + roi.getAssignedClass() + "'" : "NULL",
+                    roi.getType(),
+                    roi.getImageFileName(),
+                    roi.getImageFileName() + ":" + roi.getName());
+            }
+
+            // Log cell-specific details with filtering analysis
+            LOGGER.warn("=== CELL-SPECIFIC ANALYSIS ===");
+            for (UserROI roi : cellROIs) {
+                String className = roi.getAssignedClass();
+                boolean hasClass = className != null && !className.trim().isEmpty();
+                boolean isUnclassified = "Unclassified".equals(className);
+                boolean wouldBeIncluded = hasClass && !isUnclassified;
+
+                LOGGER.warn("Cell ROI: '{}' -> class: '{}' (hasClass: {}, isUnclassified: {}, included: {})",
+                    roi.getName(), className != null ? "'" + className + "'" : "NULL",
+                    hasClass, isUnclassified, wouldBeIncluded);
+            }
+
+            LOGGER.warn("=== CLASSIFICATION DEBUGGING END ===");
+            throw new Exception("No manually classified cells found - see detailed debug logs above");
+        }
+
+        LOGGER.info("Creating FeatureExtraction with {} vessels, {} nuclei, {} cytoplasm, {} cells ({} classified)",
+                vesselROIs.size(), nucleusROIs.size(), cytoplasmROIs.size(), cellROIs.size(), classifiedCells.size());
+
+        // Create FeatureExtraction instance using the same approach as AnalysisPipeline
+        FeatureExtraction featureExtraction = new FeatureExtraction(
+            imagePlus,
+            imageFileName,
+            vesselROIs,
+            nucleusROIs,
+            cytoplasmROIs,
+            cellROIs,
+            featureSettings,
+            mainSettings
+        );
+
+        // Extract features for all ROIs
+        Map<String, Map<String, Object>> allFeatures = featureExtraction.extractFeatures();
+        LOGGER.info("Feature extraction completed - extracted features for {} ROIs total", allFeatures.size());
+
+        // Reorganize features by image name -> cell ID -> ROI type
+        Map<String, Map<String, Map<String, Map<String, Object>>>> organizedFeatures = new LinkedHashMap<>();
+
+        // CRITICAL FIX: Add classification info to features that would otherwise have null class
+        // Feature extraction doesn't include the class info, so we need to add it from our ROIs
+        Map<String, String> roiClassMapping = new LinkedHashMap<>();
+        for (UserROI roi : allROIs.values()) {
+            if (roi.getAssignedClass() != null && !roi.getAssignedClass().isEmpty()) {
+                String roiKey = roi.getImageFileName() + "_" + roi.getType().toString() + "_" + roi.getName().split("_")[1];
+                roiClassMapping.put(roiKey, roi.getAssignedClass());
+                LOGGER.debug("Mapped ROI class: '{}' -> class '{}'", roiKey, roi.getAssignedClass());
+            }
+        }
+
+        // Debug: Log first 10 feature keys to verify structure
+        int keyCount = 0;
+        for (String key : allFeatures.keySet()) {
+            Map<String, Object> features = allFeatures.get(key);
+            // FIX: Determine the cell ID from the feature key and look up its class
+            // Feature keys look like: "P1 - 9 - 03.tif_Cell_1541"
+            String cellId = null;
+            String roiType = null;
+
+            // Parse roiType and cellId from feature key
+            java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(".*_([^_]+)_(\\d+)");
+            java.util.regex.Matcher matcher = pattern.matcher(key);
+            if (matcher.matches()) {
+                roiType = matcher.group(1).toUpperCase(); // "CELL", "NUCLEUS", etc.
+                cellId = matcher.group(2); // "1541", etc.
+            }
+
+            // Look for this combination in our classification mapping
+            if (cellId != null && roiType != null) {
+                for (String mappedKey : roiClassMapping.keySet()) {
+                    // mappedKey looks like: "P1 - 9 - 03.tif_CELL_1005"
+                    // We match if the cell ID matches (ignore exact roiType for now)
+                    if (mappedKey.contains(cellId)) {
+                        if (features == null) {
+                            features = new LinkedHashMap<>();
+                            allFeatures.put(key, features);
+                        }
+                        String assignedClass = roiClassMapping.get(mappedKey);
+                        features.put("class", assignedClass);
+                        LOGGER.debug("Added class '{}' to feature key '{}' (matched with {})",
+                                   assignedClass, key, mappedKey);
+                        break;
+                    }
+                }
+            }
+
+            if (keyCount < 5) {
+                LOGGER.debug("Feature key example: '{}' -> class: '{}'",
+                    key, features != null && features.containsKey("class") ? features.get("class") : "null");
+            }
+            keyCount++;
+        }
+        LOGGER.info("Sample keys analyzed. Total features to organize: {}", allFeatures.size());
+
+        // Process all features (now with class info added)
+        for (String key : allFeatures.keySet()) {
+            Map<String, Object> features = allFeatures.get(key);
+            if (features != null && features.containsKey("class")) {
+                parseAndOrganizeFeatures(key, features, organizedFeatures);
+            }
+        }
+
+        // DEBUG: Log what we have after organization
+        LOGGER.info("=== ORGANIZATION SUMMARY ===");
+        LOGGER.info("Total organized images: {}", organizedFeatures.size());
+        for (String imgName : organizedFeatures.keySet()) {
+            Map<String, Map<String, Map<String, Object>>> img = organizedFeatures.get(imgName);
+            LOGGER.info("Image '{}' has {} cell IDs", imgName, img.size());
+            for (String cellId : img.keySet().toArray(new String[0])) {
+                // Only log first few
+                if (img.keySet().size() <= 5 || cellId.equals("395")) { // Include cell 395 for debugging
+                    Map<String, Map<String, Object>> types = img.get(cellId);
+                    LOGGER.info("  Cell {} has ROI types: {}", cellId, types.keySet());
+                    if (cellId.equals("395")) {
+                        LOGGER.info("    Cell 395 details:");
+                        for (String type : types.keySet()) {
+                            LOGGER.info("      {}: {} features", type, types.get(type).size());
+                        }
+                    }
+                }
+                if (img.keySet().size() > 5 && !cellId.equals("395")) break; // Skip most for brevity
+            }
+        }
+        LOGGER.info("=== END ORGANIZATION SUMMARY ===");
+
+        // Filter to only include images and cells that have manual classifications
+        Map<String, Map<String, Map<String, Map<String, Object>>>> filteredFeatures = new LinkedHashMap<>();
+
+        LOGGER.info("Starting filter process - {} organized images, {} classified cells, {} classified nuclei, {} classified cytoplasm",
+                   organizedFeatures.size(), classifiedCells.size(), classifiedNuclei.size(), classifiedCytoplasms.size());
+
+        // Quick debug of what we're trying to match
+        if (!classifiedCells.isEmpty() && !organizedFeatures.isEmpty()) {
+            UserROI firstCell = classifiedCells.get(0);
+            String firstImage = organizedFeatures.keySet().iterator().next();
+            Map<String, Map<String, Map<String, Object>>> firstImageData = organizedFeatures.get(firstImage);
+            String firstFeatureCellId = firstImageData.keySet().iterator().next();
+
+            LOGGER.info("Sample mapping: Classified cell '{}' (type={}) -> looking for features like '{}' in image '{}'",
+                       firstCell.getName(), firstCell.getType(), firstFeatureCellId, firstImage);
+        }
+
+        java.util.Set<String> matchedCells = new java.util.HashSet<>();
+        int totalClassifiedROIs = classifiedCells.size() + classifiedNuclei.size() + classifiedCytoplasms.size();
+
+        // Helper method to process classified ROIs of any type
+        java.util.function.BiConsumer<java.util.List<UserROI>, String> processClassifiedROIs =
+            (roiList, roiTypeName) -> {
+                LOGGER.info("Processing {} classified {} ROIs for feature matching...", roiList.size(), roiTypeName);
+                for (UserROI roi : roiList) {
+                    String[] parts = roi.getName().split("_");
+                    if (parts.length >= 2) {
+                        String imageName = roi.getImageFileName();
+                        String roiName = roi.getName();
+                        String roiClass = roi.getAssignedClass();
+
+                        // Extract numerical ID from ROI name (e.g., "Cell_15" -> "15", "Nucleus_3" -> "3")
+                        String baseId;
+                        try {
+                            String[] nameParts = roiName.split("_");
+                            if (nameParts.length >= 2) {
+                                baseId = nameParts[nameParts.length - 1]; // Last part should be the number
+                            } else {
+                                continue; // Skip if can't parse
+                            }
+                        } catch (Exception e) {
+                            LOGGER.warn("Could not parse ID from ROI name: '{}'", roiName);
+                            continue;
+                        }
+
+                        LOGGER.debug("Looking for features matching {} ({}) with class '{}'", roiName, baseId, roiClass);
+
+                        // Try to find matching features
+                        boolean found = false;
+                        for (String imageKey : organizedFeatures.keySet()) {
+                            LOGGER.debug("Checking image key: '{}' (looking for match with '{}')", imageKey, imageName);
+                            if (!imageKey.contains(imageName.split("\\.")[0])) { // Loose image name matching
+                                continue;
+                            }
+
+                            Map<String, Map<String, Map<String, Object>>> imageFeatures = organizedFeatures.get(imageKey);
+                            LOGGER.debug("Found {} feature cell IDs for image '{}'", imageFeatures.size(), imageKey);
+
+                            for (String featureCellId : imageFeatures.keySet()) {
+                                Map<String, Map<String, Object>> roiTypes = imageFeatures.get(featureCellId);
+
+                                LOGGER.debug("Checking feature cell ID '{}' against ROI ID '{}'", featureCellId, baseId);
+
+                                // Try exact match first
+                                if (baseId.equals(featureCellId)) {
+                                    // Found matching cell ID
+                                    String targetKey = "classified_" + roi.getType().toString().toLowerCase() + "_" + baseId;
+                                    matchedCells.add(targetKey);
+
+                                    if (!filteredFeatures.containsKey(imageName)) {
+                                        filteredFeatures.put(imageName, new LinkedHashMap<>());
+                                    }
+                                    if (!filteredFeatures.get(imageName).containsKey(baseId)) {
+                                        filteredFeatures.get(imageName).put(baseId, new LinkedHashMap<>());
+                                    }
+
+                                    // Add all ROI type features for this cell ID
+                                    filteredFeatures.get(imageName).get(baseId).putAll(roiTypes);
+                                    LOGGER.info("SUCCESS: MATCHED {} -> {} ROI types included for cell {}", roiTypeName, roiTypes.size(), baseId);
+
+                                    LOGGER.debug("MATCHED {}: {} ({}) -> features for {}", roiTypeName, roiName, baseId, featureCellId);
+                                    found = true;
+                                    break;
+                                }
+                            }
+
+                            if (found) {
+                                LOGGER.debug("Found match in image '{}'", imageKey);
+                                break;
+                            }
+                        }
+
+                        if (!found) {
+                            LOGGER.warn("No match found for classified {}: {} (id={}) - check if features were extracted for this ROI", roiTypeName, roiName, baseId);
+                        }
+                    } else {
+                        LOGGER.warn("Invalid ROI name for {} category: '{}'", roiTypeName, parts.length);
+                    }
+                }
+            };
+
+        // Process all classified ROI types
+        LOGGER.info("Processing {} classified cells...", classifiedCells.size());
+        processClassifiedROIs.accept(classifiedCells, "CELL");
+
+        LOGGER.info("Processing {} classified nuclei...", classifiedNuclei.size());
+        processClassifiedROIs.accept(classifiedNuclei, "NUCLEUS");
+
+        LOGGER.info("Processing {} classified cytoplasm...", classifiedCytoplasms.size());
+        processClassifiedROIs.accept(classifiedCytoplasms, "CYTOPLASM");
+
+        LOGGER.info("Filter process complete - processed {} ROIs total, matched {} entries, {} total cells in output",
+                   totalClassifiedROIs, matchedCells.size(), countTotalCells(filteredFeatures));
+
+        // Clean up the ImagePlus to free memory
+        if (imagePlus != null) {
+            imagePlus.close();
+        }
+
+        // Create JSON structure with new format
+        Map<String, Object> jsonData = new LinkedHashMap<>();
+        jsonData.put("timestamp", new java.util.Date().toString());
+        jsonData.put("totalClassifiedCells", countTotalCells(filteredFeatures));
+        jsonData.put("classes", new ArrayList<>(classCounts.keySet()));
+        jsonData.put("classifiedROIs", filteredFeatures);
+        jsonData.put("featureExtractionSettings", featureSettings.toString());
+
+        // Convert to JSON and save
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.writerWithDefaultPrettyPrinter().writeValue(outputFile, jsonData);
+
+        LOGGER.info("Training data saved using analysis pipeline - reorganized structure with {} images",
+                filteredFeatures.size());
+    }
+
+    /**
+     * Get all ROIs from the overlay.
+     * Uses reflection as a workaround since the overlay currently doesn't expose ROIs directly.
+     */
+    private java.util.Map<String, UserROI> getAllROIsFromOverlay() {
+        Map<String, UserROI> allROIs = new HashMap<>();
+
+        LOGGER.info("=== ROI EXTRACTION DEBUGGING ===");
+        LOGGER.info("Attempting to get ROIs from overlay. ROI overlay present: {}", overlay != null);
+        if (overlay != null) {
+            LOGGER.info("Overlay ROICount from getROICount(): {}", overlay.getROICount());
+
+            // Try to get classification counts as additional validation
+            Map<String, Integer> currentCounts = overlay.getClassificationCounts();
+            if (currentCounts != null && !currentCounts.isEmpty()) {
+                LOGGER.info("Current classification counts in overlay: {}", currentCounts);
+            } else {
+                LOGGER.warn("No classification counts available from overlay");
+            }
+        }
+
+        // Try multiple extraction methods in order of preference
+        // NOTE: For training data export, we want ALL ROIs (including cytoplasm),
+        // not just the ones that are visually displayed
+        boolean extractionSuccess = false;
+
+        LOGGER.info("=== TRAINING DATA: Attempting comprehensive ROI extraction ===");
+
+        // Method 1: Direct reflection access to allROIs field (including hidden ROIs)
+        extractionSuccess = extractViaDirectReflection(allROIs, true); // true = include all ROIs
+        LOGGER.info("Method 1 result: {} (found {} ROIs)", extractionSuccess, allROIs.size());
+
+        if (!extractionSuccess) {
+            // Method 2: Alternative reflection methods with full access
+            extractionSuccess = extractViaAlternativeMethods(allROIs, true); // true = include all ROIs
+            LOGGER.info("Method 2 result: {} (found {} ROIs)", extractionSuccess, allROIs.size());
+        }
+
+        if (!extractionSuccess) {
+            // Method 3: Fallback to ROI Manager (will get all available ROIs)
+            Map<String, UserROI> fallbackROIs = getROIsFromFallbackSources();
+            allROIs.putAll(fallbackROIs);
+            extractionSuccess = !fallbackROIs.isEmpty();
+            LOGGER.info("Method 3 result: {} (found {} ROIs)", extractionSuccess, allROIs.size());
+        }
+
+        // ADDITIONAL METHOD: Try to access internal ROI storage that might bypass visibility filters
+        if (!extractionSuccess) {
+            try {
+                extractionSuccess = extractFromInternalStorage(allROIs);
+                LOGGER.info("Method 4 (Internal Storage) result: {} (total {} ROIs)",
+                           extractionSuccess, allROIs.size());
+            } catch (Exception e) {
+                LOGGER.warn("Method 4 failed: {}", e.getMessage());
+            }
+        }
+
+        // EMERGENCY METHOD: Try to directly reconstruct cytoplasm ROIs from overlay data
+        // (Only if there are no ROIs found at all - cytoplasm reconstruct check happens after categorization)
+        if (!extractionSuccess) {
+            LOGGER.info("=== EMERGENCY: Attempting to reconstruct missing cytoplasm ROIs ===");
+            extractionSuccess = reconstructHiddenCytoplasmROIs(allROIs);
+            LOGGER.info("Emergency reconstruction result: {} (total {} ROIs)",
+                       extractionSuccess, allROIs.size());
+        }
+
+        LOGGER.info("Final ROI extraction result: {} total ROIs extracted to training data", allROIs.size());
+        LOGGER.info("=== END ROI EXTRACTION DEBUGGING ===");
+
+        return allROIs;
+    }
+
+    /**
+     * Try to extract ROIs from overlay's internal storage that might contain hidden ROIs
+     * This method attempts to access private fields that might store filtered data
+     */
+    private boolean extractFromInternalStorage(Map<String, UserROI> targetMap) {
+        try {
+            // Try to access any internal storage fields that might contain all ROIs
+            java.lang.reflect.Field[] fields = overlay.getClass().getDeclaredFields();
+            for (java.lang.reflect.Field field : fields) {
+                field.setAccessible(true);
+                String fieldName = field.getName().toLowerCase();
+
+                // Look for fields that might contain ROI data
+                if (fieldName.contains("roi") || fieldName.contains("all") || fieldName.contains("data")) {
+                    Object fieldValue = field.get(overlay);
+                    if (fieldValue instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, UserROI> roiMap = (Map<String, UserROI>) fieldValue;
+                        if (roiMap != null && !roiMap.isEmpty()) {
+                            int addedCount = 0;
+                            for (UserROI roi : roiMap.values()) {
+                                if (roi != null && roi.getImageFileName() != null) {
+                                    String key = roi.getImageFileName() + ":" + roi.getName();
+                                    if (!targetMap.containsKey(key)) { // Don't overwrite existing
+                                        targetMap.put(key, roi);
+                                        addedCount++;
+
+                                        if (roi.getType() == com.scipath.scipathj.infrastructure.roi.UserROI.ROIType.CYTOPLASM) {
+                                            LOGGER.debug("🔍 INTERNAL STORAGE: Found cytoplasm ROI: {} (class: '{}')",
+                                                        roi.getName(),
+                                                        roi.getAssignedClass() != null ? roi.getAssignedClass() : "NULL");
+                                        }
+                                    }
+                                }
+                            }
+                            if (addedCount > 0) {
+                                LOGGER.info("Internal storage extraction via {}: {} ROIs", fieldName, addedCount);
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Internal storage extraction failed: {}", e.getMessage());
+        }
+        return false;
+    }
+
+    /**
+     * Emergency method to try to reconstruct missing cytoplasm ROIs
+     * This attempts to find cytoplasm ROIs through alternative access methods
+     */
+    private boolean reconstructHiddenCytoplasmROIs(Map<String, UserROI> targetMap) {
+        LOGGER.warn("=== ENTERING EMERGENCY CYTOPLASM RECOVERY MODE ===");
+
+        try {
+            // Try to access any method on the overlay that might return ROIs
+            java.lang.reflect.Method[] methods = overlay.getClass().getDeclaredMethods();
+            int methodsTried = 0;
+
+            for (java.lang.reflect.Method method : methods) {
+                if (method.getReturnType().equals(List.class) || method.getReturnType().equals(Map.class)) {
+                    method.setAccessible(true);
+                    String methodName = method.getName();
+
+                    // Try methods that look like they return ROI data
+                    if (methodName.toLowerCase().contains("roi") || methodName.toLowerCase().contains("get") ||
+                        methodName.toLowerCase().contains("list") || methodName.toLowerCase().contains("collect")) {
+
+                        try {
+                            Object result = method.invoke(overlay);
+
+                            if (result instanceof Map) {
+                                @SuppressWarnings("unchecked")
+                                Map<String, UserROI> roiMap = (Map<String, UserROI>) result;
+                                int cytoplasmFound = 0;
+
+                                for (UserROI roi : roiMap.values()) {
+                                    if (roi.getType() == com.scipath.scipathj.infrastructure.roi.UserROI.ROIType.CYTOPLASM) {
+                                        cytoplasmFound++;
+                                        String key = roi.getImageFileName() + ":" + roi.getName();
+                                        if (!targetMap.containsKey(key)) {
+                                            targetMap.put(key, roi);
+                                            LOGGER.info("🔥 EMERGENCY RECOVERY: Reconstructed cytoplasm ROI: {} (class: '{}')",
+                                                        roi.getName(),
+                                                        roi.getAssignedClass() != null ? roi.getAssignedClass() : "NULL");
+                                        }
+                                    }
+                                }
+
+                                if (cytoplasmFound > 0) {
+                                    LOGGER.info("✅ EMERGENCY RECOVERY SUCCESS: Found {} cytoplasm ROIs via {}", cytoplasmFound, methodName);
+                                    return true;
+                                }
+
+                            } else if (result instanceof List) {
+                                @SuppressWarnings("unchecked")
+                                List<UserROI> roiList = (List<UserROI>) result;
+                                int cytoplasmFound = 0;
+
+                                for (UserROI roi : roiList) {
+                                    if (roi.getType() == com.scipath.scipathj.infrastructure.roi.UserROI.ROIType.CYTOPLASM) {
+                                        cytoplasmFound++;
+                                        String key = roi.getImageFileName() + ":" + roi.getName();
+                                        if (!targetMap.containsKey(key)) {
+                                            targetMap.put(key, roi);
+                                            LOGGER.info("🔥 EMERGENCY RECOVERY: Reconstructed cytoplasm ROI: {} (class: '{}')",
+                                                        roi.getName(),
+                                                        roi.getAssignedClass() != null ? roi.getAssignedClass() : "NULL");
+                                        }
+                                    }
+                                }
+
+                                if (cytoplasmFound > 0) {
+                                    LOGGER.info("✅ EMERGENCY RECOVERY SUCCESS: Found {} cytoplasm ROIs via {}", cytoplasmFound, methodName);
+                                    return true;
+                                }
+                            }
+
+                            methodsTried++;
+                        } catch (Exception invokerEx) {
+                            // Just skip this method
+                        }
+                    }
+                }
+            }
+
+            LOGGER.warn("=== EMERGENCY CYTOPLASM RECOVERY: Tried {} methods, found 0 cytoplasm ROIs ===", methodsTried);
+
+        } catch (Exception e) {
+            LOGGER.error("Emergency cytoplasm recovery failed: {}", e.getMessage());
+        }
+
+        return false;
+    }
+
+    /**
+     * Extract ROIs directly from allROIs field using reflection
+     * @param targetMap Map to store extracted ROIs
+     * @param includeAll If true, bypasses any visibility filters for training data
+     */
+    private boolean extractViaDirectReflection(Map<String, UserROI> targetMap, boolean includeAll) {
+        try {
+            java.lang.reflect.Field allROIsField = overlay.getClass().getDeclaredField("allROIs");
+            allROIsField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            List<UserROI> roiList = (List<UserROI>) allROIsField.get(overlay);
+
+            if (roiList != null && !roiList.isEmpty()) {
+                int addedCount = 0;
+                int skippedHidden = 0;
+                for (UserROI roi : roiList) {
+                    if (roi != null && roi.getImageFileName() != null) {
+                        // For training data export, include ALL ROIs regardless of visibility
+                        String key = roi.getImageFileName() + ":" + roi.getName();
+                        targetMap.put(key, roi);
+                        addedCount++;
+
+                        // Debug log for cytoplasm ROIs
+                        if (roi.getType() == com.scipath.scipathj.infrastructure.roi.UserROI.ROIType.CYTOPLASM) {
+                            LOGGER.debug("✅ TRAINING DATA: Included cytoplasmic ROI: {} (class: '{}')",
+                                        roi.getName(),
+                                        roi.getAssignedClass() != null ? roi.getAssignedClass() : "NULL");
+                        }
+                    }
+                }
+                LOGGER.info("Direct reflection extracted {} ROIs{}",
+                           addedCount,
+                           includeAll ? " (including hidden)" : "");
+                return addedCount > 0;
+            }
+        } catch (Exception e) {
+            LOGGER.warn("Direct reflection failed: {}", e.getMessage());
+        }
+        return false;
+    }
+
+    /**
+     * Extract ROIs using alternative reflection methods
+     * @param targetMap Map to store extracted ROIs
+     * @param includeAll If true, bypasses any visibility filters for training data
+     */
+    private boolean extractViaAlternativeMethods(Map<String, UserROI> targetMap, boolean includeAll) {
+        // Try accessing via renderer field
+        try {
+            java.lang.reflect.Field rendererField = overlay.getClass().getDeclaredField("renderer");
+            rendererField.setAccessible(true);
+            Object renderer = rendererField.get(overlay);
+
+            if (renderer != null) {
+                // Try to get ROIs from renderer
+                java.lang.reflect.Field roiListField = renderer.getClass().getDeclaredField("roiList");
+                roiListField.setAccessible(true);
+                @SuppressWarnings("unchecked")
+                List<UserROI> roiList = (List<UserROI>) roiListField.get(renderer);
+
+                if (roiList != null && !roiList.isEmpty()) {
+                    int count = 0;
+                    for (UserROI roi : roiList) {
+                        if (roi != null && roi.getImageFileName() != null) {
+                            targetMap.put(roi.getImageFileName() + ":" + roi.getName(), roi);
+                            count++;
+
+                            // Debug log for cytoplasm ROIs
+                            if (roi.getType() == com.scipath.scipathj.infrastructure.roi.UserROI.ROIType.CYTOPLASM) {
+                                LOGGER.debug("✅ TRAINING DATA (ALT): Included cytoplasmic ROI: {} (class: '{}')",
+                                            roi.getName(),
+                                            roi.getAssignedClass() != null ? roi.getAssignedClass() : "NULL");
+                            }
+                        }
+                    }
+                    LOGGER.info("Renderer method extracted {} ROIs{}",
+                               count,
+                               includeAll ? " (including hidden)" : "");
+                    return count > 0;
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.warn("Renderer method failed: {}", e.getMessage());
+        }
+        return false;
+    }
+
+    /**
+     * Fallback method to get ROIs if reflection fails.
+     */
+    private Map<String, UserROI> getROIsFromFallbackSources() {
+        Map<String, UserROI> allROIs = new HashMap<>();
+
+        // Try to get ROIs from ImageJ ROI Manager if possible
+        try {
+            if (datasetImageViewer != null && datasetImageViewer.getCurrentImagePlus() != null) {
+                ij.ImagePlus currentImage = datasetImageViewer.getCurrentImagePlus();
+                ij.plugin.frame.RoiManager roiManagerFrame = ij.plugin.frame.RoiManager.getInstance();
+                if (roiManagerFrame != null) {
+                    Roi[] rois = roiManagerFrame.getRoisAsArray();
+                    for (int i = 0; i < rois.length; i++) {
+                        String imageName = datasetImageViewer.getCurrentImageFileName();
+                        if (imageName != null) {
+                            String roiName = "Cell_" + (i + 1); // Generic naming
+                            UserROI userROI = new UserROI(rois[i], imageName, roiName);
+                            userROI.setAssignedClass("Unclassified"); // Default classification
+                            allROIs.put(imageName + ":" + roiName, userROI);
+                        }
+                    }
+                    LOGGER.debug("Extracted {} ROIs from ImageJ ROI Manager", allROIs.size());
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Could not get ROIs from ImageJ ROI Manager: {}", e.getMessage());
+        }
+
+        return allROIs;
+    }
+
+    /**
+     * Calculate circularity for a ROI.
+     */
+    private double calculateCircularity(UserROI roi) {
+        try {
+            Roi imageJRoi = roi.getImageJRoi();
+            if (imageJRoi != null) {
+                double area = imageJRoi.getStatistics().area;
+                double perimeter = imageJRoi.getLength();
+                if (perimeter > 0) {
+                    return (4.0 * Math.PI * area) / (perimeter * perimeter);
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Error calculating circularity for ROI {}: {}", roi.getName(), e.getMessage());
+        }
+        return 1.0; // Default circularity (circle)
+    }
+
+    /**
+     * Create basic features as fallback when comprehensive feature extraction fails.
+     */
+    private Map<String, Object> createBasicFeatures(UserROI roi) {
+        Map<String, Object> features = new LinkedHashMap<>();
+        features.put("class", roi.getAssignedClass());
+        features.put("area", roi.getArea());
+        features.put("x", roi.getCenterX());
+        features.put("y", roi.getCenterY());
+        features.put("width", roi.getWidth());
+        features.put("height", roi.getHeight());
+        features.put("circularity", calculateCircularity(roi));
+        features.put("bounding_box", roi.getBounds().toString());
+        return features;
+    }
+
+    /**
+     * Parse feature key and organize by image -> cell ID -> ROI type.
+     * Expected key format: "imageName_ROIType_XX" or "imageName_ROIType_YY" or similar.
+     */
+    private void parseAndOrganizeFeatures(String key, Map<String, Object> features,
+                                         Map<String, Map<String, Map<String, Map<String, Object>>>> organizedData) {
+        try {
+            // Parse the key - expected format: "imageName_ROIType_cellId"
+            // e.g., "P1 - 9 - 03.tif_Nucleus_1", "P1 - 9 - 03.tif_Cell_1", "P1 - 9 - 03.tif_Cytoplasm_1"
+            String[] parts = key.split("_");
+            if (parts.length < 3) {
+                // If parsing fails, try alternative format or skip
+                return;
+            }
+
+            // Extract components - handle complex file names with dashes
+            String roiType;
+            String cellId;
+            String imageName;
+
+            // Check if we have at least 3 parts after splitting
+            if (parts.length >= 3) {
+                // Last part is cell ID
+                cellId = parts[parts.length - 1];
+
+                // Second to last part is ROI type
+                roiType = parts[parts.length - 2];
+
+                // Everything before is image name (reconstruct with underscores if needed)
+                if (parts.length > 3) {
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < parts.length - 2; i++) {
+                        if (i > 0) sb.append("_");
+                        sb.append(parts[i]);
+                    }
+                    imageName = sb.toString();
+                } else {
+                    imageName = parts[0];
+                }
+            } else {
+                // Fallback for unexpected format
+                imageName = key;
+                roiType = "Unknown";
+                cellId = "0";
+            }
+
+            // Ensure proper ROI type mapping
+            if (!roiType.equals("Cell") && !roiType.equals("Nucleus") && !roiType.equals("Cytoplasm")) {
+                // If not a recognized type, try to interpret differently
+                if (roiType.toLowerCase().contains("cell")) {
+                    roiType = "Cell";
+                } else if (roiType.toLowerCase().contains("nucleus")) {
+                    roiType = "Nucleus";
+                } else if (roiType.toLowerCase().contains("cyto")) {
+                    roiType = "Cytoplasm";
+                }
+            }
+
+            // Initialize nested maps
+            organizedData.computeIfAbsent(imageName, k -> new LinkedHashMap<>());
+            organizedData.get(imageName).computeIfAbsent(cellId, k -> new LinkedHashMap<>());
+
+            // Add features for this ROI type
+            organizedData.get(imageName).get(cellId).put(roiType, features);
+
+        } catch (Exception e) {
+            LOGGER.debug("Error parsing ROI key {}: {}", key, e.getMessage());
+        }
+    }
+
+    /**
+     * Count total unique cells across all images.
+     */
+    private int countTotalCells(Map<String, Map<String, Map<String, Map<String, Object>>>> data) {
+        int totalCells = 0;
+        for (Map<String, Map<String, Map<String, Object>>> imageData : data.values()) {
+            totalCells += imageData.size(); // Each image key represents one cell
+        }
+        return totalCells;
     }
     
     private void applyVisualControls() {
@@ -790,5 +1732,26 @@ public class DatasetControlsPanel extends JPanel {
     public String getSelectedClassName() {
         ClassItem selected = (ClassItem) classComboBox.getSelectedItem();
         return selected != null ? selected.getName() : "Unclassified";
+    }
+
+    /**
+     * Set the current ImagePlus for feature extraction.
+     */
+    public void setCurrentImage(ImagePlus imagePlus) {
+        this.currentImagePlus = imagePlus;
+    }
+
+    /**
+     * Get the current ImagePlus.
+     */
+    public ImagePlus getCurrentImage() {
+        return currentImagePlus;
+    }
+
+    /**
+     * Set the DatasetImageViewer reference for accessing image files.
+     */
+    public void setDatasetImageViewer(DatasetImageViewer viewer) {
+        this.datasetImageViewer = viewer;
     }
 }

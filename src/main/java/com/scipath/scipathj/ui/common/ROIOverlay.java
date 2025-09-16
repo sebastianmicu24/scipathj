@@ -850,3 +850,4 @@ public class ROIOverlay extends JComponent {
     return new Rectangle(x, y, width, height);
   }
 }
+
