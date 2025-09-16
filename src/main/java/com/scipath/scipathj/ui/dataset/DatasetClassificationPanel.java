@@ -18,7 +18,7 @@ import org.slf4j.LoggerFactory;
  * Integrates DatasetImageViewer, NewDatasetROIOverlay, and DatasetControlsPanel.
  * 
  * @author Sebastian Micu
- * @version 5.0.0
+ * @version 1.0.0
  */
 public class DatasetClassificationPanel extends JPanel {
 
@@ -43,7 +43,6 @@ public class DatasetClassificationPanel extends JPanel {
         initializeComponents();
         setupEventHandlers();
         
-        LOGGER.info("Initialized streamlined DatasetClassificationPanel v5.0.0");
     }
     
     private void initializeClassNames() {
@@ -69,6 +68,10 @@ public class DatasetClassificationPanel extends JPanel {
         // Create integrated controls panel
         controlsPanel = new DatasetControlsPanel();
         
+        // Set minimum size for controls panel to prevent color square compression
+        controlsPanel.setMinimumSize(new Dimension(280, 400));
+        controlsPanel.setPreferredSize(new Dimension(320, 600));
+        
         // Connect controls to overlay
         controlsPanel.setOverlay(datasetImageViewer.getROIOverlay());
         
@@ -83,7 +86,8 @@ public class DatasetClassificationPanel extends JPanel {
         mainSplit.setLeftComponent(leftSplit);
         mainSplit.setRightComponent(controlsPanel);
         mainSplit.setDividerLocation(800);
-        mainSplit.setResizeWeight(1.0);
+        mainSplit.setResizeWeight(0.8); // Changed from 1.0 to 0.8 to give controls panel some protection
+        mainSplit.setOneTouchExpandable(true); // Allow users to easily collapse/expand
         
         add(mainSplit, BorderLayout.CENTER);
         

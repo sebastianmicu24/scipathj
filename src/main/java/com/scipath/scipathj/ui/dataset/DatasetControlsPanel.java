@@ -18,9 +18,10 @@ import org.slf4j.LoggerFactory;
 /**
  * Modern control panel for dataset creation with enhanced class management and visual controls.
  * Features color-coded class system, modern styling, and theme-aware interface design.
+ * Rewritten with robust color square rendering that maintains size regardless of layout constraints.
  * 
  * @author Sebastian Micu
- * @version 5.0.0
+ * @version 5.1.0
  */
 public class DatasetControlsPanel extends JPanel {
     
@@ -56,7 +57,7 @@ public class DatasetControlsPanel extends JPanel {
         return new Color(fg.getRed(), fg.getGreen(), fg.getBlue(), 64); // Semi-transparent border
     }
     
-    private static final Color UNCLASSIFIED_COLOR = new Color(61, 61, 61);  // #3d3d3d
+    private static final Color UNCLASSIFIED_COLOR = new Color(255, 255, 0);  // Default yellow ROI color
     
     // UI Components
     private JButton loadROIsButton;
@@ -128,7 +129,7 @@ public class DatasetControlsPanel extends JPanel {
         setupModernLayout();
         setupEventHandlers();
         
-        LOGGER.debug("Created modern DatasetControlsPanel v5.0.0 (status panel removed)");
+        LOGGER.debug("Created robust DatasetControlsPanel v5.1.0 with improved color square rendering");
     }
     
     /**
@@ -136,12 +137,8 @@ public class DatasetControlsPanel extends JPanel {
      */
     private void initializeDefaultClasses() {
         classColors.put("Unclassified", UNCLASSIFIED_COLOR);
-        classColors.put("Normal", new Color(76, 175, 80));   // Material Green
-        classColors.put("Tumor", new Color(244, 67, 54));    // Material Red
-        
+
         classCounts.put("Unclassified", 0);
-        classCounts.put("Normal", 0);
-        classCounts.put("Tumor", 0);
     }
     
     /**
@@ -164,6 +161,7 @@ public class DatasetControlsPanel extends JPanel {
                 
                 @Override
                 public void onClassAssigned(com.scipath.scipathj.infrastructure.roi.UserROI roi, String className) {
+                    updateClassCountsFromOverlay();
                     LOGGER.info("Assigned '{}' to {}", className, roi.getName());
                 }
                 
@@ -178,6 +176,9 @@ public class DatasetControlsPanel extends JPanel {
             
             // Apply initial visual settings
             applyVisualControls();
+
+            // Update class counts from existing ROIs
+            updateClassCountsFromOverlay();
         }
     }
     
@@ -207,13 +208,15 @@ public class DatasetControlsPanel extends JPanel {
     /**
      * Update progress (status removed, keeping for compatibility).
      */
-    public void updateProgress(int current, int total) {
-        SwingUtilities.invokeLater(() -> {
-            // Update class counters based on current progress
-            updateClassCounters();
-            LOGGER.debug("Progress: {} / {} ROIs loaded", current, total);
-        });
-    }
+     public void updateProgress(int current, int total) {
+         SwingUtilities.invokeLater(() -> {
+             // Update class counters from overlay when loading completes
+             if (current == total && current > 0) {
+                 updateClassCountsFromOverlay();
+             }
+             LOGGER.debug("Progress: {} / {} ROIs loaded", current, total);
+         });
+     }
     
     // === PRIVATE METHODS ===
     
@@ -234,14 +237,28 @@ public class DatasetControlsPanel extends JPanel {
         styleCheckBox(showNucleiCheckBox);
         styleCheckBox(showCellsCheckBox);
         
-        // Class management
+        // Class management - using robust renderer
         classModel = new DefaultComboBoxModel<>();
         classModel.addElement(new ClassItem("Unclassified", UNCLASSIFIED_COLOR));
-        classModel.addElement(new ClassItem("Normal", new Color(76, 175, 80)));
-        classModel.addElement(new ClassItem("Tumor", new Color(244, 67, 54)));
         
         classComboBox = new JComboBox<>(classModel);
-        classComboBox.setRenderer(new ClassItemRenderer());
+        classComboBox.setRenderer(new RobustClassItemRenderer());
+
+        // Ensure minimum dimensions for combo box to always show color squares properly
+        classComboBox.setMinimumSize(new Dimension(140, 28));
+        classComboBox.setPreferredSize(new Dimension(180, 28));
+
+        // Additional protection against layout compression
+        classComboBox.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                Dimension currentSize = classComboBox.getSize();
+                if (currentSize.width < 120) {
+                    // Prevent excessive compression
+                    classComboBox.setSize(Math.max(120, currentSize.width), currentSize.height);
+                }
+            }
+        });
         
         // Class creation components
         classNameField = new JTextField(15);
@@ -252,8 +269,8 @@ public class DatasetControlsPanel extends JPanel {
         colorPickerButton = createColorPickerButton();
         colorPreview = createColorPreview();
         addClassButton = createModernButton("Add Class", getPrimaryColor());
-        
-        // Class counters panel
+
+        // Class counters panel - use adaptive layout to prevent overflow
         classCountersPanel = new JPanel();
         classCountersPanel.setLayout(new FlowLayout(FlowLayout.CENTER, 10, 5));
         classCountersPanel.setOpaque(false);
@@ -431,11 +448,19 @@ public class DatasetControlsPanel extends JPanel {
     
     private JButton createColorPickerButton() {
         JButton button = new JButton();
+        // Set fixed size for the color picker button
         button.setPreferredSize(new Dimension(40, 30));
+        button.setMinimumSize(new Dimension(40, 30));
+        button.setMaximumSize(new Dimension(40, 30));
+        button.setSize(new Dimension(40, 30));
         button.setBackground(new Color(255, 87, 34)); // Material Orange
         button.setBorder(BorderFactory.createLineBorder(getBorderColor(), 1));
         button.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        
+
+        // Disable layout expansion
+        button.setBorderPainted(true);
+        button.setFocusPainted(false);
+
         button.addActionListener(e -> {
             Color newColor = JColorChooser.showDialog(this, "Choose Class Color", button.getBackground());
             if (newColor != null) {
@@ -443,7 +468,7 @@ public class DatasetControlsPanel extends JPanel {
                 colorPreview.setBackground(newColor);
             }
         });
-        
+
         return button;
     }
     
@@ -484,22 +509,104 @@ public class DatasetControlsPanel extends JPanel {
     }
     
     /**
-     * Custom renderer for class combo box with colors.
+     * Adaptive renderer that scales color square based on available space.
+     * Prevents the square from becoming a dot when panel width is constrained.
      */
-    private class ClassItemRenderer extends DefaultListCellRenderer {
+    private class RobustClassItemRenderer extends JLabel implements ListCellRenderer<ClassItem> {
+        private static final int PREFERRED_SQUARE_SIZE = 16;
+        private static final int MIN_SQUARE_SIZE = 8;
+        private final int BORDER_MARGIN = 2;
+
+        private ClassItem currentItem;
+        private int availableWidth = 0;
+
+        public RobustClassItemRenderer() {
+            setOpaque(true);
+        }
+
         @Override
-        public Component getListCellRendererComponent(JList<?> list, Object value, int index,
-                                                    boolean isSelected, boolean cellHasFocus) {
-            super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-            
-            if (value instanceof ClassItem) {
-                ClassItem item = (ClassItem) value;
-                setBackground(isSelected ? list.getSelectionBackground() : item.getColor());
-                setForeground(isSelected ? list.getSelectionForeground() : getContrastColor(item.getColor()));
-                setText(item.getName());
-            }
-            
+        public Component getListCellRendererComponent(JList<? extends ClassItem> list, ClassItem value,
+                                                    int index, boolean isSelected, boolean cellHasFocus) {
+            this.currentItem = value;
+
+            // Set text and basic properties
+            setText(value != null ? value.getName() : "");
+            setBackground(isSelected ? list.getSelectionBackground() : list.getBackground());
+            setForeground(isSelected ? list.getSelectionForeground() : list.getForeground());
+            setFont(new Font("Segoe UI", Font.PLAIN, 12));
+
+            // Add left padding to prevent text from overlapping the color square
+            setBorder(BorderFactory.createEmptyBorder(0, 25, 0, 0));
+
             return this;
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+
+            if (currentItem != null) {
+                // Calculate dynamic square size and position based on available space
+                Dimension size = getSize();
+                int availableWidth = size.width;
+                int availableHeight = size.height;
+
+                // Calculate square size - scale down if space is limited
+                int squareSize = calculateDynamicSquareSize(availableWidth, availableHeight);
+                int squareX = calculateDynamicSquareX(availableWidth, squareSize);
+                int y = Math.max(1, (availableHeight - squareSize) / 2);
+
+                // Ensure square stays within bounds
+                if (squareX + squareSize > availableWidth) {
+                    squareSize = Math.max(MIN_SQUARE_SIZE, availableWidth - squareX - BORDER_MARGIN);
+                }
+                if (squareSize < MIN_SQUARE_SIZE) {
+                    squareSize = MIN_SQUARE_SIZE;
+                    squareX = Math.max(0, availableWidth - squareSize - BORDER_MARGIN);
+                }
+
+                // Fill square
+                g.setColor(currentItem.getColor());
+                g.fillRect(squareX, y, squareSize, squareSize);
+
+                // Draw border
+                g.setColor(Color.DARK_GRAY);
+                g.drawRect(squareX, y, squareSize, squareSize);
+            }
+        }
+
+        private int calculateDynamicSquareSize(int availableWidth, int availableHeight) {
+            // Try preferred size first
+            if (availableWidth >= PREFERRED_SQUARE_SIZE + BORDER_MARGIN * 2 + 40) { // Space for square + text
+                return PREFERRED_SQUARE_SIZE;
+            }
+
+            // Scale down proportionally if space is limited
+            int maxSquareSize = Math.min(availableWidth - BORDER_MARGIN * 2 - 20, availableHeight - 4);
+            return Math.max(MIN_SQUARE_SIZE, Math.min(PREFERRED_SQUARE_SIZE, maxSquareSize));
+        }
+
+        private int calculateDynamicSquareX(int availableWidth, int squareSize) {
+            // Position at the left, with small margin
+            return BORDER_MARGIN;
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            Dimension textSize = super.getPreferredSize();
+            // Ensure enough space for preferred square + text
+            int preferredWidth = PREFERRED_SQUARE_SIZE + BORDER_MARGIN * 2 + textSize.width + 10;
+            return new Dimension(preferredWidth, Math.max(24, textSize.height));
+        }
+
+        @Override
+        public Dimension getMinimumSize() {
+            // Absolute minimum - smaller than before to allow more flexibility
+            return new Dimension(MIN_SQUARE_SIZE + BORDER_MARGIN * 2 + 15, 18);
+        }
+
+        public int getAppropriateSquareSize(int availableWidth) {
+            return calculateDynamicSquareSize(availableWidth, PREFERRED_SQUARE_SIZE);
         }
     }
     
@@ -544,9 +651,15 @@ public class DatasetControlsPanel extends JPanel {
         if (overlay != null) {
             overlay.clear();
         }
-        
+
+        // Reset class counts when clearing ROIs
+        for (String className : classCounts.keySet()) {
+            classCounts.put(className, 0);
+        }
+        updateClassCounters();
+
         updateStatus("ROIs cleared");
-        
+
         // Notify listeners
         notifyListeners(listener -> listener.onClearROIsRequested());
     }
@@ -625,6 +738,27 @@ public class DatasetControlsPanel extends JPanel {
         return false;
     }
     
+    /**
+     * Update class counts from the overlay.
+     */
+    private void updateClassCountsFromOverlay() {
+        if (overlay != null) {
+            java.util.Map<String, Integer> overlayCounts = overlay.getClassificationCounts();
+            if (overlayCounts != null) {
+                // Reset counts to 0
+                for (String className : classCounts.keySet()) {
+                    classCounts.put(className, 0);
+                }
+                // Update with overlay counts
+                for (java.util.Map.Entry<String, Integer> entry : overlayCounts.entrySet()) {
+                    classCounts.put(entry.getKey(), entry.getValue());
+                }
+                updateClassCounters();
+                LOGGER.debug("Updated class counts from overlay: {}", classCounts);
+            }
+        }
+    }
+
     private void notifyListeners(java.util.function.Consumer<ControlListener> action) {
         for (ControlListener listener : listeners) {
             try {

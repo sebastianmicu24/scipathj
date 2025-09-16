@@ -415,13 +415,18 @@ public class CytoplasmSegmentation {
   }
 
   /**
-   * Validates if a cell ROI meets the criteria.
+   * Validates if a cell ROI meets the criteria with proper scale conversion.
    */
   private boolean isValidCell(Roi cellRoi) {
     if (cellRoi == null) return false;
 
     double area = cellRoi.getStatistics().area;
-    if (area < settings.minCellSize() || area > settings.maxCellSize()) {
+    // Convert pixel area to scaled units for comparison
+    double areaInScaledUnits = mainSettings.pixelsToMicrometers(area);
+    double minSizeInScaledUnits = mainSettings.pixelsToMicrometers(settings.minCellSize());
+    double maxSizeInScaledUnits = mainSettings.pixelsToMicrometers(settings.maxCellSize());
+
+    if (areaInScaledUnits < minSizeInScaledUnits || areaInScaledUnits > maxSizeInScaledUnits) {
       return false;
     }
 
@@ -438,13 +443,17 @@ public class CytoplasmSegmentation {
   }
 
   /**
-   * Validates if a cytoplasm ROI meets the criteria.
+   * Validates if a cytoplasm ROI meets the criteria with proper scale conversion.
    */
   private boolean isValidCytoplasm(CytoplasmROI cytoplasm) {
     if (cytoplasm == null) return false;
 
     double area = cytoplasm.getCytoplasmArea();
-    return area >= settings.minCytoplasmSize();
+    // Convert pixel area to scaled units for comparison
+    double areaInScaledUnits = mainSettings.pixelsToMicrometers(area);
+    double minSizeInScaledUnits = mainSettings.pixelsToMicrometers(settings.minCytoplasmSize());
+
+    return areaInScaledUnits >= minSizeInScaledUnits;
   }
 
   /**

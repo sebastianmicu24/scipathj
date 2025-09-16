@@ -31,7 +31,8 @@ public record MainSettings(
       boolean includeIgnoredInCsv) {
 
   // Default values for scale conversion
-  public static final double DEFAULT_PIXELS_PER_MICROMETER = 1.0;
+  // Keep default at 1.0 - actual scale should be configured by user
+  public static final double DEFAULT_PIXELS_PER_MICROMETER = 1.0; // Default
   public static final String DEFAULT_SCALE_UNIT = "μm";
 
   // Legacy constants for backward compatibility

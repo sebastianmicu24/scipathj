@@ -303,7 +303,23 @@ public class NucleusROI extends UserROI {
   }
 
   /**
-   * Gets a summary of the nucleus morphological features.
+   * Gets a summary of the nucleus morphological features in scaled units.
+   *
+   * @param mainSettings The main settings containing scale information
+   * @return a formatted string with nucleus measurements in scaled units
+   */
+  public String getMorphologySummary(com.scipath.scipathj.infrastructure.config.MainSettings mainSettings) {
+    double areaInScaledUnits = mainSettings.pixelsToMicrometers(area);
+    double perimeterInScaledUnits = mainSettings.pixelsToMicrometers(perimeter);
+    String unit = mainSettings.scaleUnit();
+
+    return String.format(
+        "Area: %.1f %s², Perimeter: %.1f %s, Circularity: %.3f, Aspect Ratio: %.2f, Solidity: %.3f",
+        areaInScaledUnits, unit, perimeterInScaledUnits, unit, circularity, aspectRatio, solidity);
+  }
+
+  /**
+   * Gets a summary of the nucleus morphological features in pixels (backward compatibility).
    *
    * @return a formatted string with nucleus measurements
    */

@@ -103,7 +103,6 @@ public class CellClassification {
           loadClassDetails();
 
           LOGGER.info("XGBoost classifier initialized successfully");
-          LOGGER.info("ROI Analysis: {}", getROIStatistics());
       } catch (Exception e) {
           LOGGER.error("Failed to initialize XGBoost classifier: {}", e.getMessage(), e);
       }
@@ -334,9 +333,12 @@ public class CellClassification {
               rowIndex++;
           }
 
+
           // Create DMatrix
           DMatrix classificationMatrix = new DMatrix(featureData, numRows, numCols, Float.NaN);
           LOGGER.debug("Created DMatrix for classification: {} rows, {} columns", numRows, numCols);
+
+          // Feature preprocessing complete
 
           // Run prediction
           float[][] predictions = booster.predict(classificationMatrix);
@@ -344,6 +346,9 @@ public class CellClassification {
 
           // Process results
           Map<String, ClassificationResult> results = new HashMap<>();
+
+          // Process predictions
+
           for (int i = 0; i < roiKeys.size(); i++) {
               String roiKey = roiKeys.get(i);
               float[] probs = predictions[i];
@@ -627,8 +632,6 @@ public class CellClassification {
   private ROIInfo parseROIInfo(String roiKey) {
       if (roiKey == null) return null;
 
-      // Debug logging removed for production
-
       // Extract the ROI name from the key (format: "imageName_ROIType_ID")
       // Find the last occurrence of ROI type pattern (Cell_, Cytoplasm_, Nucleus_)
       String roiName = roiKey;
@@ -776,6 +779,7 @@ public class CellClassification {
 
       return null;
   }
+
 
   /**
    * Process XGBoost prediction results and convert to ClassificationResult.
@@ -1016,29 +1020,36 @@ public class CellClassification {
   private String getROIType(String roiKey) {
       if (roiKey == null) return "unknown";
 
-      // Extract the ROI name from the key (format: "imageName_ROIName")
-      String roiName = roiKey;
-      int lastUnderscore = roiKey.lastIndexOf('_');
-      if (lastUnderscore > 0 && lastUnderscore < roiKey.length() - 1) {
-          roiName = roiKey.substring(lastUnderscore + 1);
+      // First, try to use the proper ROI parsing logic
+      ROIInfo parsedInfo = parseROIInfo(roiKey);
+      if (parsedInfo != null) {
+          switch (parsedInfo.roiType) {
+              case "Cell":
+                  return "Cell ROIs";
+              case "Nucleus":
+                  return "Nucleus ROIs";
+              case "Cytoplasm":
+                  return "Cytoplasm ROIs";
+              case "Vessel":
+                  return "Vessel ROIs";
+          }
       }
 
-      String lowerName = roiName.toLowerCase();
+      // Fallback to pattern matching for edge cases
+      String lowerName = roiKey.toLowerCase();
 
       // Determine type based on flexible pattern matching
-      if (lowerName.startsWith("cell_") || lowerName.contains("cell") || lowerName.endsWith("_cell")) {
+      if (lowerName.contains("_cell_") || roiKey.contains("_Cell_")) {
           return "Cell ROIs";
-      } else if (lowerName.startsWith("nucleus_") || lowerName.contains("nucleus") || lowerName.endsWith("_nucleus")) {
+      } else if (lowerName.contains("_nucleus_") || roiKey.contains("_Nucleus_")) {
           return "Nucleus ROIs";
-      } else if (lowerName.startsWith("cytoplasm_") || lowerName.contains("cytoplasm") ||
-                 lowerName.contains("cyto") || lowerName.endsWith("_cytoplasm") ||
-                 lowerName.startsWith("cyto_") || lowerName.endsWith("_cyto")) {
+      } else if (lowerName.contains("_cytoplasm_") || roiKey.contains("_Cytoplasm_") ||
+                 lowerName.contains("_cyto") || roiKey.contains("_Cyto")) {
           return "Cytoplasm ROIs";
-      } else if (lowerName.startsWith("vessel_") || lowerName.contains("vessel") || lowerName.endsWith("_vessel")) {
+      } else if (lowerName.contains("_vessel_") || roiKey.contains("_Vessel_")) {
           return "Vessel ROIs";
       } else {
-          // Debug: Log unknown ROI names to help identify the issue
-          System.out.println("CellClassification: Unknown ROI type for name: '" + roiName + "' (full key: '" + roiKey + "')");
+          // This is expected for parsed ROIs where the parseROIInfo succeeded
           return "Other ROIs";
       }
   }

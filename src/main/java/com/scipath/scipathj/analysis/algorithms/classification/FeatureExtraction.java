@@ -16,17 +16,91 @@ import org.slf4j.LoggerFactory;
 /**
  * Ultra-Fast Feature Extraction for SciPathJ H&E Analysis.
  * Optimized implementation using ImageJ's native C functions and spatial indexing.
- * 
- * Features exactly 47 measurements per ROI type (following SCHELI specification):
- * - Spatial: Vessel Distance, Closest Vessel, Neighbor Count, Closest Neighbor Distance, Closest Neighbor
- * - Basic: Area, X, Y, XM, YM, Perim., BX, BY, Width, Height  
- * - Shape: Major, Minor, Angle, Circ., Feret, FeretX, FeretY, FeretAngle, MinFeret, AR, Round, Solidity
- * - Intensity: IntDen, Mean, StdDev, Mode, Min, Max, Median, Skew, Kurt
- * - H&E: Hema_Mean, Hema_StdDev, Hema_Mode, Hema_Min, Hema_Max, Hema_Median, Hema_Skew, Hema_Kurt,
- *        Eosin_Mean, Eosin_StdDev, Eosin_Mode, Eosin_Min, Eosin_Max, Eosin_Median, Eosin_Skew, Eosin_Kurt
+ *
+ * ⚠️  IMPORTANT UNIT OF MEASUREMENT SPECIFICATIONS ⚠️
+ *
+ * All features are exported in physical units (micrometers) for classifier compatibility.
+ * This means that regardless of image pixel:meter ratio, features have consistent physical scale.
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────────────┐
+ * │                          FEATURE UNIT SPECIFICATIONS                           │
+ * ├─────────────────┬─────────────────────┬─────────────────────────────────────────┤
+ * │ Feature Type    │ Units               │ Description                           │
+ * ├─────────────────┼─────────────────────┼─────────────────────────────────────────┤
+ * │ Spatial Distance│ μm (micrometers)    │ All distance measurements converted   │
+ * │                 │                     │ from pixels to microns                │
+ * ├─────────────────┼─────────────────────┼─────────────────────────────────────────┤
+ * │ Area            │ μm² (micrometers²)  │ Area measurements in square microns  │
+ * ├─────────────────┼─────────────────────┼─────────────────────────────────────────┤
+ * │ Linear Distance │ μm (micrometers)    │ Length measurements (perimeter,      │
+ * │                 │                     │ feret measurements, etc.)             │
+ * ├─────────────────┼─────────────────────┼─────────────────────────────────────────┤
+ * │ Coordinates     │ px (pixels)         │ Position coordinates remain in       │
+ * │                 │                     │ pixels for reference purposes        │
+ * ├─────────────────┼─────────────────────┼─────────────────────────────────────────┤
+ * │ Ratios/Angles   │ dimensionless       │ Shape ratios, angles, circularity,  │
+ * │                 │                     │ skewness, kurtosis (no units)        │
+ * ├─────────────────┼─────────────────────┼─────────────────────────────────────────┤
+ * │ Intensity       │ 0-255 (pixel values)│ Raw intensity values (no conversion)  │
+ * │                 │                     │ but integrated density scales with area│
+ * ├─────────────────┼─────────────────────┼─────────────────────────────────────────┤
+ * │ Counts          │ integer             │ Neighbor counts, indices (no units)  │
+ * └─────────────────┴─────────────────────┴─────────────────────────────────────────┘
+ *
+ * ╔══════════════════════════════════════════════════════════════════════════════╗
+ * ║                        DETAILED FEATURE SPECIFICATIONS                         ║
+ * ╚══════════════════════════════════════════════════════════════════════════════╝
+ *
+ * **Spatial Features (All Convertible):**
+ * - vessel_distance:          μm (distance to nearest vessel)
+ * - closest_vessel:           string (ROI name identifier)
+ * - neighbor_count:           integer (number of nearby ROIs)
+ * - closest_neighbor_distance: μm (distance to nearest neighboring ROI)
+ * - closest_neighbor:         string (ROI name identifier)
+ *
+ * **Basic Geometric Features (Mixed Units):**
+ * - area:                     μm² (area in square micrometers)  ❌ CONVERTED
+ * - x, y:                     px (centroid coordinates in pixels) ❌ UNCHANGED
+ * - xm, ym:                   px (center of mass coordinates) ❌ UNCHANGED
+ * - perim:                    μm (perimeter in micrometers) ❌ CONVERTED
+ * - bx, by, width, height:    px (bounding box coordinates) ❌ UNCHANGED
+ *
+ * **Shape Features (Mixed Units):**
+ * - major, minor:             μm (ellipse axes lengths in microns) ❌ CONVERTED
+ * - angle:                    ° (degrees, dimensionless)
+ * - circ:                     dimensionless (circularity ratio)
+ * - feret, minferet:          μm (feret diameters in microns) ❌ CONVERTED
+ * - feretx, ferety:           px (feret coordinates) ❌ UNCHANGED
+ * - feretangle:               ° (feret angle, degrees)
+ * - ar:                       dimensionless (aspect ratio)
+ * - round:                    dimensionless (roundness ratio)
+ * - solidity:                 dimensionless (solidity ratio)
+ *
+ * **Intensity Features (Mixed Units):**_arrançado
+ * - intden:                   μm²·intensity (integrated density) ❌ SCALED
+ * - mean, stddev, mode:       intensity units (0-255)
+ * - min, max, median:         intensity units (0-255)
+ * - skew, kurt:              dimensionless (moment statistics)
+ *
+ * **H&E Channel Features (Mixed Units):**
+ * - hema_*, eosin_*:         intensity units (0-255) - Raw channel intensities
+ * - (All statistical moments: mean, stddev, mode, min, max, median, skew, kurt)
+ *
+ * ╭────────────────────────────────────────────────────────────────────────────╮
+ * │                      SCALE CONVERSION BEHAVIOR                                │
+ * ╰────────────────────────────────────────────────────────────────────────────╯
+ *
+ *  ■ Physical Features: Scale-Aware → Features convert based on pixel:meter ratio
+ *       → 10px at 2px/μm = 5μm   |   → 10px at 10px/μm = 1μm
+ *
+ *  ■ Intensity Features: Scale-Independent → Values remain in original range
+ *       → Pixel intensity (0-255) is preserved regardless of physical scale
+ *
+ *  ■ Coordinate Features: Pixel-Based → Maintain reference frame consistency
+ *       → Position measurements stay in pixel coordinates
  *
  * @author Ultra-Fast SCHELI-Compatible Implementation for SciPathJ
- * @version 2.0.0 - Ultra-Fast Implementation
+ * @version 2.0.0 - Ultra-Fast Implementation with Micrometer Scaling
  * @since 1.0.0
  */
 public class FeatureExtraction {
@@ -108,6 +182,11 @@ public class FeatureExtraction {
         this.cellROIs = cellROIs != null ? cellROIs : Collections.emptyList();
         this.settings = settings != null ? settings : FeatureExtractionSettings.createDefault();
         this.mainSettings = mainSettings != null ? mainSettings : com.scipath.scipathj.infrastructure.config.MainSettings.createDefault();
+
+        // Validate that settings are properly injected
+        if (mainSettings == null) {
+            LOGGER.warn("MainSettings not provided, using default settings.");
+        }
 
         LOGGER.info("Ultra-Fast FeatureExtraction initialized for image: {} ({} vessels, {} nuclei, {} cytoplasm, {} cells)",
                 this.imageFileName, this.vesselROIs.size(), this.nucleusROIs.size(), this.cytoplasmROIs.size(), this.cellROIs.size());
@@ -324,14 +403,18 @@ public class FeatureExtraction {
         try {
             // Vessel distance calculation using spatial grid
             SpatialResult vesselResult = calculateVesselDistanceOptimized(roi);
-            features.put("vessel_distance", vesselResult.distance);
+            // Vessel distance calculation using spatial grid (converted to micrometers)
+            double vesselDistanceInMicrometers = mainSettings.pixelsToMicrometers(vesselResult.distance);
+            features.put("vessel_distance", vesselDistanceInMicrometers);
             // Store the actual vessel name as string (SCHELI compatible)
             features.put("closest_vessel", vesselResult.name != null ? vesselResult.name : "N/A");
 
             // Neighbor analysis using spatial grid
             SpatialResult neighborResult = calculateNeighborDataOptimized(roi, roiType);
-            features.put("neighbor_count", neighborResult.distance); // Using distance field for count
-            features.put("closest_neighbor_distance", neighborResult.extraData); // Using extraData for distance
+            features.put("neighbor_count", neighborResult.distance); // Count remains unchanged
+            // Neighbor analysis using spatial grid (converted to micrometers)
+            double neighborDistanceInMicrometers = mainSettings.pixelsToMicrometers(neighborResult.extraData);
+            features.put("closest_neighbor_distance", neighborDistanceInMicrometers);
             // Store the actual neighbor name as string (SCHELI compatible)
             features.put("closest_neighbor", neighborResult.name != null ? neighborResult.name : "N/A");
 
@@ -348,26 +431,35 @@ public class FeatureExtraction {
 
     /**
      * Add basic features using direct ImageJ data.
-     * Keep features in pixel units for classification compatibility.
+     * Convert features to micrometers for classifier compatibility.
      */
     private void addBasicFeaturesOptimized(UserROI roi, ImageStatistics stats, Map<String, Object> features) {
-        features.put("area", stats.area);
+        // area_pixels found in formulas, but we should convert to micrometers² for classifier compatibility
+        // For area: μm² = px² / (pixels_per_μm)²
+        double pixelsPerMicrometer = mainSettings.pixelsPerMicrometer();
+        double areaInSquareMicrometers = stats.area / (pixelsPerMicrometer * pixelsPerMicrometer);
+        features.put("area", areaInSquareMicrometers);
+
+        // Keep coordinates in pixels (as they're used for spatial relationships)
         features.put("x", stats.xCentroid);
         features.put("y", stats.yCentroid);
         features.put("xm", stats.xCenterOfMass);
         features.put("ym", stats.yCenterOfMass);
         features.put("bx", (double) stats.roiX);
         features.put("by", (double) stats.roiY);
+
         features.put("width", (double) stats.roiWidth);
         features.put("height", (double) stats.roiHeight);
 
-        // Perimeter using ImageJ's optimized calculation
+        // Perimeter using ImageJ's optimized calculation (linear measure: μm = px / pixels_per_μm)
         Roi imageJRoi = roi.getImageJRoi();
         if (imageJRoi != null) {
-            features.put("perim", imageJRoi.getLength());
+            double perimeterInMicrometers = mainSettings.pixelsToMicrometers(imageJRoi.getLength());
+            features.put("perim", perimeterInMicrometers);
         } else {
             double perimeter = 2.0 * (roi.getWidth() + roi.getHeight());
-            features.put("perim", perimeter);
+            double perimeterInMicrometers = mainSettings.pixelsToMicrometers(perimeter);
+            features.put("perim", perimeterInMicrometers);
         }
     }
 
@@ -376,28 +468,30 @@ public class FeatureExtraction {
      */
     private void addShapeFeaturesOptimized(UserROI roi, Roi imageJRoi, ImageStatistics stats, Map<String, Object> features) {
         try {
-            // Ellipse parameters from ImageJ
-            features.put("major", stats.major);
-            features.put("minor", stats.minor);
+            // Ellipse parameters converted to micrometers
+            features.put("major", mainSettings.pixelsToMicrometers(stats.major));
+            features.put("minor", mainSettings.pixelsToMicrometers(stats.minor));
             features.put("angle", stats.angle);
 
-            // Circularity using pre-computed values
-            double perimeter = imageJRoi.getLength();
-            features.put("circ", (4.0 * Math.PI * stats.area) / (perimeter * perimeter));
+            // Circularity using pre-computed values (dimensionless: always scale-independent)
+            // Fiji uses area and perimeter in pixels, so we should use pixel units for consistency
+            double perimeterInPixels = imageJRoi.getLength();
+            features.put("circ", (4.0 * Math.PI * stats.area) / (perimeterInPixels * perimeterInPixels));
 
-            // Feret measurements using ImageJ's optimized function
+            // Feret measurements converted to micrometers
             double[] feretValues = imageJRoi.getFeretValues();
-            features.put("feret", feretValues[0]);
-            features.put("feretx", feretValues[3]);
-            features.put("ferety", feretValues[4]);
+            features.put("feret", mainSettings.pixelsToMicrometers(feretValues[0]));
+            features.put("feretx", feretValues[3]); // Keep coordinates in pixels
+            features.put("ferety", feretValues[4]); // Keep coordinates in pixels
             features.put("feretangle", feretValues[1]);
-            features.put("minferet", feretValues[2]);
+            features.put("minferet", mainSettings.pixelsToMicrometers(feretValues[2]));
 
-            // Aspect ratio and roundness
+            // Aspect ratio and roundness (dimensionless, so no conversion needed)
             features.put("ar", stats.major / stats.minor);
             features.put("round", stats.minor / stats.major);
 
-            // Solidity using optimized convex hull calculation
+            // Solidity using optimized convex hull calculation (dimensionless)
+            // Calculate using pixel areas but convert results properly
             features.put("solidity", calculateSolidityOptimized(imageJRoi, stats.area));
 
         } catch (Exception e) {
@@ -420,9 +514,16 @@ public class FeatureExtraction {
 
     /**
      * Add intensity features from pre-computed statistics (ultra-fast).
+     * Convert area and integrated density to micrometers² for classifier compatibility.
      */
     private void addIntensityFeaturesOptimized(ImageStatistics stats, Map<String, Object> features) {
-        features.put("intden", stats.area * stats.mean);
+        // Area in μm²: px² / (pixels_per_μm)², then integrated density: area_μm² × mean
+        double pixelsPerMicrometer = mainSettings.pixelsPerMicrometer();
+        double areaInSquareMicrometers = stats.area / (pixelsPerMicrometer * pixelsPerMicrometer);
+        double integratedDensityInSquareMicrometers = areaInSquareMicrometers * stats.mean;
+        features.put("intden", integratedDensityInSquareMicrometers);
+
+        // Intensity values (mean, stddev, etc.) remain unchanged as they're brightness values
         features.put("mean", stats.mean);
         features.put("stddev", stats.stdDev);
         features.put("mode", (double) stats.mode);

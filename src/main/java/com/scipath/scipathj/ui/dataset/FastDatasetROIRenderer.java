@@ -233,7 +233,9 @@ public class FastDatasetROIRenderer {
         }
         // Priority 3: Use ROI's display color if set (from class assignment)
         else if (roi.getDisplayColor() != null) {
-            return roi.getDisplayColor();
+            Color color = roi.getDisplayColor();
+            // Make border fully opaque
+            return new Color(color.getRed(), color.getGreen(), color.getBlue());
         }
         // Priority 4: Fall back to default color
         else {

@@ -36,12 +36,20 @@ public class DataReorder {
     private static void initializeFeatureMapping() {
         // Spatial features
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_Vessel Distance", "vessel_distance");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_Closest Vessel", "closest_vessel");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_Neighbor Count", "neighbor_count");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_Closest Neighbor Distance", "closest_neighbor_distance");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_Closest Neighbor", "closest_neighbor");
 
         // Nucleus basic features
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_Area", "area");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_X", "x");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_Y", "y");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_XM", "xm");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_YM", "ym");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_Perim.", "perim");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_BX", "bx");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_BY", "by");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_Width", "width");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_Height", "height");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_Major", "major");
@@ -50,6 +58,8 @@ public class DataReorder {
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_Circ.", "circ");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_IntDen", "intden");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_Feret", "feret");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_FeretX", "feretx");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_FeretY", "ferety");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_FeretAngle", "feretangle");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_MinFeret", "minferet");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_AR", "ar");
@@ -85,9 +95,22 @@ public class DataReorder {
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_Eosin_Skew", "eosin_skew");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Nucleus_Eosin_Kurt", "eosin_kurt");
 
-        // Cytoplasm features - same pattern
+        // Cytoplasm spatial features
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_Vessel Distance", "vessel_distance");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_Closest Vessel", "closest_vessel");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_Neighbor Count", "neighbor_count");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_Closest Neighbor Distance", "closest_neighbor_distance");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_Closest Neighbor", "closest_neighbor");
+
+        // Cytoplasm basic features
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_Area", "area");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_X", "x");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_Y", "y");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_XM", "xm");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_YM", "ym");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_Perim.", "perim");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_BX", "bx");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_BY", "by");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_Width", "width");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_Height", "height");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_Major", "major");
@@ -96,6 +119,8 @@ public class DataReorder {
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_Circ.", "circ");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_IntDen", "intden");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_Feret", "feret");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_FeretX", "feretx");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_FeretY", "ferety");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_FeretAngle", "feretangle");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_MinFeret", "minferet");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_AR", "ar");
@@ -129,9 +154,22 @@ public class DataReorder {
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_Eosin_Skew", "eosin_skew");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cytoplasm_Eosin_Kurt", "eosin_kurt");
 
-        // Cell features - same pattern
+        // Cell spatial features
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_Vessel Distance", "vessel_distance");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_Closest Vessel", "closest_vessel");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_Neighbor Count", "neighbor_count");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_Closest Neighbor Distance", "closest_neighbor_distance");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_Closest Neighbor", "closest_neighbor");
+
+        // Cell basic features
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_Area", "area");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_X", "x");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_Y", "y");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_XM", "xm");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_YM", "ym");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_Perim.", "perim");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_BX", "bx");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_BY", "by");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_Width", "width");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_Height", "height");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_Major", "major");
@@ -140,6 +178,8 @@ public class DataReorder {
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_Circ.", "circ");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_IntDen", "intden");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_Feret", "feret");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_FeretX", "feretx");
+        SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_FeretY", "ferety");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_FeretAngle", "feretangle");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_MinFeret", "minferet");
         SCHELI_TO_FEATURE_EXTRACTOR_MAP.put("Cell_AR", "ar");

@@ -36,6 +36,7 @@ public class VesselSegmentation {
   private final String imageFileName;
   private final ROIManager roiManager;
   private final VesselSegmentationSettings settings;
+  private final com.scipath.scipathj.infrastructure.config.MainSettings mainSettings;
 
   /**
    * Constructor for VesselSegmentation with default settings.
@@ -46,30 +47,34 @@ public class VesselSegmentation {
    * @param imageFileName The filename of the image for ROI association
    */
   public VesselSegmentation(
-      ConfigurationManager configurationManager, ImagePlus originalImage, String imageFileName) {
-    this(
-        configurationManager,
-        originalImage,
-        imageFileName,
-        configurationManager.loadVesselSegmentationSettings(),
-        ROIManager.getInstance());
-  }
+       ConfigurationManager configurationManager,
+       ImagePlus originalImage,
+       String imageFileName) {
+     this(
+         configurationManager,
+         originalImage,
+         imageFileName,
+         configurationManager.loadVesselSegmentationSettings(),
+         configurationManager.loadMainSettings(),
+         ROIManager.getInstance());
+   }
 
-  /**
-   * Constructor for VesselSegmentation with custom settings following Dependency Injection principles.
-   *
-   * @param configurationManager The configuration manager instance
-   * @param originalImage The original image to segment
-   * @param imageFileName The filename of the image for ROI association
-   * @param settings Custom vessel segmentation settings
-   */
-  public VesselSegmentation(
-      ConfigurationManager configurationManager,
-      ImagePlus originalImage,
-      String imageFileName,
-      VesselSegmentationSettings settings) {
-    this(configurationManager, originalImage, imageFileName, settings, ROIManager.getInstance());
-  }
+   /**
+    * Constructor for VesselSegmentation with custom settings following Dependency Injection principles.
+    *
+    * @param configurationManager The configuration manager instance
+    * @param originalImage The original image to segment
+    * @param imageFileName The filename of the image for ROI association
+    * @param settings Custom vessel segmentation settings
+    */
+   public VesselSegmentation(
+       ConfigurationManager configurationManager,
+       ImagePlus originalImage,
+       String imageFileName,
+       VesselSegmentationSettings settings) {
+     this(configurationManager, originalImage, imageFileName, settings,
+          configurationManager.loadMainSettings(), ROIManager.getInstance());
+   }
 
   /**
    * Full constructor with all dependencies injected.
@@ -78,22 +83,25 @@ public class VesselSegmentation {
    * @param originalImage The original image to segment
    * @param imageFileName The filename of the image for ROI association
    * @param settings Custom vessel segmentation settings
+   * @param mainSettings The main settings for scale handling
    * @param roiManager The ROI manager instance
    */
   public VesselSegmentation(
-      ConfigurationManager configurationManager,
-      ImagePlus originalImage,
-      String imageFileName,
-      VesselSegmentationSettings settings,
-      ROIManager roiManager) {
-    this.originalImage = originalImage;
-    this.imageFileName = imageFileName;
-    this.roiManager = roiManager;
-    this.settings =
-        settings != null ? settings : configurationManager.loadVesselSegmentationSettings();
+       ConfigurationManager configurationManager,
+       ImagePlus originalImage,
+       String imageFileName,
+       VesselSegmentationSettings settings,
+       com.scipath.scipathj.infrastructure.config.MainSettings mainSettings,
+       ROIManager roiManager) {
+     this.originalImage = originalImage;
+     this.imageFileName = imageFileName;
+     this.roiManager = roiManager;
+     this.mainSettings = mainSettings;
+     this.settings =
+         settings != null ? settings : configurationManager.loadVesselSegmentationSettings();
 
-    LOGGER.info("VesselSegmentation initialized for image: {}", imageFileName);
-  }
+     LOGGER.info("VesselSegmentation initialized for image: {}", imageFileName);
+   }
 
   /**
    * Perform vessel segmentation on the image using default threshold.
@@ -298,10 +306,15 @@ public class VesselSegmentation {
   }
 
   /**
-   * Check if vessel area meets size requirements.
+   * Check if vessel area meets size requirements with proper scale conversion.
    */
   private boolean isValidVesselSize(double area) {
-    return area >= settings.minRoiSize() && area <= settings.maxRoiSize();
+    // Convert pixel area to scaled units for comparison
+    double areaInScaledUnits = mainSettings.pixelsToMicrometers(area);
+    double minSizeInScaledUnits = mainSettings.pixelsToMicrometers(settings.minRoiSize());
+    double maxSizeInScaledUnits = mainSettings.pixelsToMicrometers(settings.maxRoiSize());
+
+    return areaInScaledUnits >= minSizeInScaledUnits && areaInScaledUnits <= maxSizeInScaledUnits;
   }
 
   /**

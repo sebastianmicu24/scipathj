@@ -178,6 +178,48 @@ public record VesselSegmentationSettings(
   }
 
   /**
+   * Get the minimum ROI size formatted with scale unit.
+   *
+   * @param mainSettings The main settings containing scale information
+   * @return Formatted string with scale unit
+   */
+  public String getMinRoiSizeWithUnit(com.scipath.scipathj.infrastructure.config.MainSettings mainSettings) {
+    return mainSettings.formatPixelsWithUnit(minRoiSize);
+  }
+
+  /**
+   * Get the maximum ROI size formatted with scale unit.
+   *
+   * @param mainSettings The main settings containing scale information
+   * @return Formatted string with scale unit
+   */
+  public String getMaxRoiSizeWithUnit(com.scipath.scipathj.infrastructure.config.MainSettings mainSettings) {
+    return mainSettings.formatPixelsWithUnit(maxRoiSize);
+  }
+
+  /**
+   * Convert a scaled size value to pixels using the provided scale settings.
+   *
+   * @param scaledSize The size in scaled units
+   * @param mainSettings The main settings containing scale information
+   * @return The size converted to pixels
+   */
+  public static double scaledSizeToPixels(double scaledSize, com.scipath.scipathj.infrastructure.config.MainSettings mainSettings) {
+    return mainSettings.micrometersToPixels(scaledSize);
+  }
+
+  /**
+   * Convert a pixel size to scaled units using the provided scale settings.
+   *
+   * @param pixelSize The size in pixels
+   * @param mainSettings The main settings containing scale information
+   * @return The size converted to scaled units
+   */
+  public static double pixelsToScaledSize(double pixelSize, com.scipath.scipathj.infrastructure.config.MainSettings mainSettings) {
+    return mainSettings.pixelsToMicrometers(pixelSize);
+  }
+
+  /**
    * Get a string representation of current settings.
    *
    * @return String representation of settings

@@ -226,7 +226,41 @@ public class CytoplasmROI extends UserROI {
   }
 
   /**
-   * Gets detailed information about this cytoplasm.
+   * Gets detailed information about this cytoplasm in scaled units.
+   *
+   * @param mainSettings The main settings containing scale information
+   * @return formatted information string
+   */
+  public String getCytoplasmInfo(com.scipath.scipathj.infrastructure.config.MainSettings mainSettings) {
+    StringBuilder info = new StringBuilder();
+    info.append(String.format("Cytoplasm: %s\n", getName()));
+    double areaInUnits = mainSettings.pixelsToMicrometers(cytoplasmArea);
+    String unit = mainSettings.scaleUnit();
+    info.append(String.format("Area: %.1f %s²\n", areaInUnits, unit));
+    info.append(String.format("Segmentation: %s\n", segmentationMethod));
+
+    if (meanIntensity > 0) {
+      info.append(String.format("Mean Intensity: %.2f ± %.2f\n", meanIntensity, stdIntensity));
+    }
+
+    if (associatedNucleus != null) {
+      info.append(String.format("Associated Nucleus: %s\n", associatedNucleus.getName()));
+      double distance = getDistanceToNucleus();
+      if (distance >= 0) {
+        double distanceInUnits = mainSettings.pixelsToMicrometers(distance);
+        info.append(String.format("Distance to Nucleus: %.1f %s\n", distanceInUnits, unit));
+      }
+    }
+
+    if (parentCell != null) {
+      info.append(String.format("Parent Cell: %s\n", parentCell.getName()));
+    }
+
+    return info.toString();
+  }
+
+  /**
+   * Gets detailed information about this cytoplasm (backward compatibility).
    *
    * @return formatted information string
    */

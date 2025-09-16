@@ -1,5 +1,7 @@
 package com.scipath.scipathj.ui.dataset;
 
+import com.scipath.scipathj.infrastructure.roi.CellROI;
+import com.scipath.scipathj.infrastructure.roi.NucleusROI;
 import com.scipath.scipathj.infrastructure.roi.UserROI;
 import java.awt.*;
 import java.awt.event.KeyAdapter;
@@ -172,6 +174,28 @@ public class NewDatasetROIOverlay extends JComponent implements ProgressiveROILo
     public int getROICount() {
         return allROIs.size();
     }
+
+    /**
+     * Get classification counts for ROIs.
+     * Counts CELL type ROIs: assigned cells by their class, unassigned cells as "Unclassified".
+     * Avoids double-counting (since each cell is linked to a nucleus).
+     */
+    public java.util.Map<String, Integer> getClassificationCounts() {
+        java.util.Map<String, Integer> counts = new java.util.HashMap<>();
+        for (UserROI roi : allROIs) {
+            if (roi.getType() == UserROI.ROIType.CELL) {
+                String className = roi.getAssignedClass();
+                if (className == null || className.isEmpty()) {
+                    // Count unassigned cells as "Unclassified"
+                    counts.put("Unclassified", counts.getOrDefault("Unclassified", 0) + 1);
+                } else {
+                    // Count assigned cells by their class
+                    counts.put(className, counts.getOrDefault(className, 0) + 1);
+                }
+            }
+        }
+        return counts;
+    }
     
     /**
      * Clear all ROIs.
@@ -295,19 +319,88 @@ public class NewDatasetROIOverlay extends JComponent implements ProgressiveROILo
     }
     
     private String assignClassToROI(UserROI roi, String className) {
-        // Assign the class to the ROI
+        // Assign the class to the ROI and its linked ROIs
+        assignClassWithLinking(roi, className);
+
+        // Force a repaint to show the color change
+        repaint();
+
+        return className;
+    }
+
+    /**
+     * Assign class to ROI with bidirectional linking between nucleus and cell.
+     */
+    private void assignClassWithLinking(UserROI roi, String className) {
+        // Always assign to the clicked ROI
         roi.setAssignedClass(className);
-        
-        // Update the ROI's display color based on the class
         Color classColor = classColors.get(className);
         if (classColor != null) {
             roi.setDisplayColor(classColor);
         }
-        
-        // Force a repaint to show the color change
-        repaint();
-        
-        return className;
+
+        // Handle bidirectional linking by finding linked ROI
+        UserROI linkedROI = findLinkedROI(roi);
+        if (linkedROI != null) {
+            linkedROI.setAssignedClass(className);
+            if (classColor != null) {
+                linkedROI.setDisplayColor(classColor);
+            }
+            LOGGER.debug("Linked '{}' -> '{}' with class '{}'",
+                        roi.getName(), linkedROI.getName(), className);
+        }
+    }
+
+    /**
+     * Find the linked ROI for bidirectional assignment.
+     * Links nucleus to cell and vice versa by matching numbers in names.
+     */
+    private UserROI findLinkedROI(UserROI roi) {
+        String roiName = roi.getName();
+        if (roiName == null || !roiName.contains("_")) {
+            LOGGER.debug("ROI '{}' has no '_' for linking", roiName);
+            return null;
+        }
+
+        // Extract number from name (e.g., "Nucleus_5" -> 5, "Cell_12" -> 12)
+        String[] parts = roiName.split("_");
+        if (parts.length < 2) {
+            LOGGER.debug("ROI '{}' split gives {} parts, expected >=2", roiName, parts.length);
+            return null;
+        }
+
+        String numberPart = parts[parts.length - 1]; // Take the last part after underscore
+        String targetName;
+        UserROI.ROIType targetType;
+
+        if (roi.getType() == UserROI.ROIType.NUCLEUS) {
+            // Find cell with matching number
+            targetName = "Cell_" + numberPart;
+            targetType = UserROI.ROIType.CELL;
+        }
+        else if (roi.getType() == UserROI.ROIType.CELL) {
+            // Find nucleus with matching number
+            targetName = "Nucleus_" + numberPart;
+            targetType = UserROI.ROIType.NUCLEUS;
+        }
+        else {
+            LOGGER.debug("ROI '{}' type {} not linkable", roiName, roi.getType());
+            return null;
+        }
+
+        LOGGER.debug("Looking for linked ROI: '{}' of type {}", targetName, targetType);
+
+        // Search through all ROIs for the matching name and type
+        for (UserROI candidate : allROIs) {
+            if (candidate.getType() == targetType &&
+                targetName.equals(candidate.getName())) {
+                LOGGER.debug("Found linked ROI: '{}' for '{}'", candidate.getName(), roiName);
+                return candidate;
+            }
+        }
+
+        LOGGER.debug("No linked ROI found for '{}', searched for '{}'", roiName, targetName);
+        return null;
     }
     
     /**

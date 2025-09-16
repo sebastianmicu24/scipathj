@@ -56,8 +56,8 @@ public record NuclearSegmentationSettings(
   public static final boolean DEFAULT_VERBOSE = false;
   public static final boolean DEFAULT_SHOW_CSBDEEP_PROGRESS = false;
   public static final boolean DEFAULT_SHOW_PROB_AND_DIST = false;
-  public static final double DEFAULT_MIN_NUCLEUS_SIZE = 10.0;
-  public static final double DEFAULT_MAX_NUCLEUS_SIZE = 1000.0;
+    public static final double DEFAULT_MIN_NUCLEUS_SIZE = 5.0;  // 5μm
+    public static final double DEFAULT_MAX_NUCLEUS_SIZE = 50.0; // 50μm
 
   /**
    * Creates a new NuclearSegmentationSettings with validation.

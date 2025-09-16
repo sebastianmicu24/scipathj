@@ -174,14 +174,17 @@ public class CellROI extends UserROI {
   }
 
   /**
-   * Gets detailed information about this cell.
+   * Gets detailed information about this cell in scaled units.
    *
+   * @param mainSettings The main settings containing scale information
    * @return formatted information string
    */
-  public String getCellInfo() {
+  public String getCellInfo(com.scipath.scipathj.infrastructure.config.MainSettings mainSettings) {
     StringBuilder info = new StringBuilder();
     info.append(String.format("Cell: %s\n", getName()));
-    info.append(String.format("Total Area: %.1f pixels\n", cellArea));
+    double cellAreaInUnits = mainSettings.pixelsToMicrometers(cellArea);
+    String unit = mainSettings.scaleUnit();
+    info.append(String.format("Total Area: %.1f %s²\n", cellAreaInUnits, unit));
     info.append(String.format("Segmentation: %s\n", segmentationMethod));
 
     if (associatedNucleus != null) {
@@ -189,16 +192,42 @@ public class CellROI extends UserROI {
     }
 
     if (associatedCytoplasm != null) {
-      info.append(
-          String.format("Cytoplasm Area: %.1f pixels\n", associatedCytoplasm.getCytoplasmArea()));
-    }
+       double cytoplasmAreaInUnits = mainSettings.pixelsToMicrometers(associatedCytoplasm.getCytoplasmArea());
+       info.append(String.format("Cytoplasm Area: %.1f %s²\n", cytoplasmAreaInUnits, unit));
+     }
 
-    if (isComplete()) {
-      info.append(String.format("N/C Ratio: %.3f\n", nucleusToCytoplasmRatio));
-    }
+     if (isComplete()) {
+       info.append(String.format("N/C Ratio: %.3f\n", nucleusToCytoplasmRatio));
+     }
 
-    return info.toString();
-  }
+     return info.toString();
+   }
+
+   /**
+    * Gets detailed information about this cell (backward compatibility).
+    *
+    * @return formatted information string
+    */
+   public String getCellInfo() {
+     StringBuilder info = new StringBuilder();
+     info.append(String.format("Cell: %s\n", getName()));
+     info.append(String.format("Total Area: %.1f pixels\n", cellArea));
+     info.append(String.format("Segmentation: %s\n", segmentationMethod));
+
+     if (associatedNucleus != null) {
+       info.append(String.format("Nucleus Area: %.1f pixels\n", associatedNucleus.getNucleusArea()));
+     }
+
+     if (associatedCytoplasm != null) {
+       info.append(String.format("Cytoplasm Area: %.1f pixels\n", associatedCytoplasm.getCytoplasmArea()));
+     }
+
+     if (isComplete()) {
+       info.append(String.format("N/C Ratio: %.3f\n", nucleusToCytoplasmRatio));
+     }
+
+     return info.toString();
+   }
 
   @Override
   public ROIType getType() {
