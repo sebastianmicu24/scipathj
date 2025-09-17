@@ -1,4 +1,5 @@
 package com.scipath.scipathj.analysis.pipeline;
+import com.scipath.scipathj.analysis.config.ClassificationSettings;
 
 import com.scipath.scipathj.infrastructure.config.ConfigurationManager;
 import com.scipath.scipathj.analysis.config.CytoplasmSegmentationSettings;
@@ -45,6 +46,7 @@ import org.slf4j.LoggerFactory;
 public class AnalysisPipeline {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(AnalysisPipeline.class);
+   private final ClassificationSettings classificationSettings;
 
   private final ConfigurationManager configurationManager;
   private final VesselSegmentationSettings vesselSettings;
@@ -85,6 +87,7 @@ public class AnalysisPipeline {
          configurationManager.loadNuclearSegmentationSettings(),
          configurationManager.loadCytoplasmSegmentationSettings(),
          configurationManager.loadFeatureExtractionSettings(),
+         configurationManager.loadClassificationSettings(),
          mainSettings,
          roiManager);
    }
@@ -107,6 +110,7 @@ public class AnalysisPipeline {
       final NuclearSegmentationSettings nuclearSettings,
       final CytoplasmSegmentationSettings cytoplasmSettings,
       final FeatureExtractionSettings featureExtractionSettings,
+      final ClassificationSettings classificationSettings,
       final MainSettings mainSettings,
       final ROIManager roiManager) {
     // Defensive copying to prevent exposure of internal representation
@@ -115,6 +119,7 @@ public class AnalysisPipeline {
     this.nuclearSettings = nuclearSettings;
     this.cytoplasmSettings = cytoplasmSettings;
     this.featureExtractionSettings = featureExtractionSettings; // Settings objects are immutable by design
+    this.classificationSettings = classificationSettings; // Settings objects are immutable by design
     this.mainSettings = mainSettings; // MainSettings is immutable by design
     this.roiManager = roiManager; // ROIManager is a service object, not data
   }
@@ -343,7 +348,13 @@ public class AnalysisPipeline {
 
       // Step 5: Cell Classification using XGBoost
       LOGGER.info("Starting cell classification for image: {}", fileName);
-      CellClassification cellClassification = new CellClassification(fileName, extractedFeatures);
+      CellClassification cellClassification = new CellClassification(
+          fileName,
+          extractedFeatures,
+          classificationSettings.modelPath(),
+          classificationSettings.selectedFeaturesPath(),
+          classificationSettings.labelMappingPath(),
+          classificationSettings.classDetailsPath());
       java.util.Map<String, CellClassification.ClassificationResult> classificationResults = cellClassification.classifyCells();
 
       // Store classification results in the ROI manager for tooltip display

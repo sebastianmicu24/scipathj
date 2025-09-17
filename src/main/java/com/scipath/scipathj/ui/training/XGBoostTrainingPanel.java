@@ -836,8 +836,105 @@ public class XGBoostTrainingPanel extends JPanel {
     private void startTraining() {
         if (validateAndSaveSettings()) {
             // Start training directly with the panel settings
-            trainingController.startTrainingWithSettings(settings, jsonFile, outputDir);
+            SwingWorker<Void, String> trainingWorker = new SwingWorker<Void, String>() {
+                @Override
+                protected Void doInBackground() throws Exception {
+                    // Start training in background thread
+                    trainingController.startTrainingWithSettings(settings, jsonFile, outputDir);
+                    return null;
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        get(); // Check for exceptions
+                        onTrainingCompleted();
+                    } catch (Exception e) {
+                        handleTrainingError(e);
+                    }
+                }
+            };
+
+            trainingWorker.execute();
         }
+    }
+
+    /**
+     * Handle successful training completion by creating ZIP bundle.
+     */
+    private void onTrainingCompleted() {
+        try {
+            String zipPath = createModelZipBundle();
+            JOptionPane.showMessageDialog(this,
+                "Training completed successfully!\n\nModel bundle created: " + zipPath + "\n\nYou can now use this ZIP in the Classification Settings dialog.",
+                "Training Complete", JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this,
+                "Training completed but failed to create ZIP bundle: " + e.getMessage(),
+                "ZIP Creation Error", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    /**
+     * Handle training error.
+     */
+    private void handleTrainingError(Exception e) {
+        JOptionPane.showMessageDialog(this,
+            "Training failed: " + e.getMessage(),
+            "Training Error", JOptionPane.ERROR_MESSAGE);
+    }
+
+    /**
+     * Create a ZIP bundle containing all model files.
+     */
+    private String createModelZipBundle() throws java.io.IOException {
+        String zipFileName = "xgboost_model_" + System.currentTimeMillis() + ".zip";
+        java.nio.file.Path zipPath = java.nio.file.Paths.get(outputDir.getAbsolutePath(), zipFileName);
+
+        try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(
+                java.nio.file.Files.newOutputStream(zipPath))) {
+
+            // Files to include in the bundle
+            java.util.List<String> filesToInclude = java.util.Arrays.asList(
+                "xgboost_model.json",
+                "selected_features.txt",
+                "xgboost_label_mapping.properties",
+                "class_details.json",
+                "training_config.txt",
+                "evaluation_results.txt"
+            );
+
+            for (String fileName : filesToInclude) {
+                java.nio.file.Path filePath = java.nio.file.Paths.get(outputDir.getAbsolutePath(), fileName);
+                if (java.nio.file.Files.exists(filePath)) {
+                    addFileToZip(zos, filePath, fileName);
+                } else {
+                    System.out.println("File not found, skipping: " + fileName);
+                }
+            }
+        }
+
+        System.out.println("Model ZIP bundle created: " + zipPath.toString());
+        return zipPath.toString();
+    }
+
+    /**
+     * Add a file to the ZIP archive.
+     */
+    private void addFileToZip(java.util.zip.ZipOutputStream zos, java.nio.file.Path filePath, String entryName)
+            throws java.io.IOException {
+        java.util.zip.ZipEntry zipEntry = new java.util.zip.ZipEntry(entryName);
+        zos.putNextEntry(zipEntry);
+
+        try (java.io.InputStream fis = java.nio.file.Files.newInputStream(filePath)) {
+            byte[] buffer = new byte[1024];
+            int length;
+            while ((length = fis.read(buffer)) >= 0) {
+                zos.write(buffer, 0, length);
+            }
+        }
+
+        zos.closeEntry();
     }
 
 

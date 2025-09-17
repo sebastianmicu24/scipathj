@@ -1,5 +1,6 @@
 package com.scipath.scipathj.infrastructure.config;
 
+import com.scipath.scipathj.analysis.config.ClassificationSettings;
 import com.scipath.scipathj.analysis.config.CytoplasmSegmentationSettings;
 import com.scipath.scipathj.analysis.config.FeatureExtractionSettings;
 import com.scipath.scipathj.analysis.config.NuclearSegmentationSettings;
@@ -35,6 +36,7 @@ public class ConfigurationManager {
   private static final String NUCLEAR_SETTINGS_FILE = "nuclear_segmentation.properties";
   private static final String CYTOPLASM_SETTINGS_FILE = "cytoplasm_segmentation.properties";
   private static final String FEATURE_EXTRACTION_SETTINGS_FILE = "feature_extraction.properties";
+   private static final String CLASSIFICATION_SETTINGS_FILE = "classification.properties";
   private static final String MAIN_SETTINGS_FILE = "main_settings.properties";
 
   /**
@@ -278,6 +280,41 @@ public class ConfigurationManager {
         FEATURE_EXTRACTION_SETTINGS_FILE,
         "SciPathJ Feature Extraction Settings",
         this::createFeatureExtractionProperties,
+        settings);
+  }
+
+  /**
+   * Loads classification settings from the configuration file.
+   *
+   * @return The loaded classification settings, or default settings if file doesn't exist
+   */
+  public ClassificationSettings loadClassificationSettings() {
+    Path settingsFile = Paths.get(CONFIG_DIR, CLASSIFICATION_SETTINGS_FILE);
+
+    if (!Files.exists(settingsFile)) {
+      return ClassificationSettings.createDefault();
+    }
+
+    try (InputStream input = Files.newInputStream(settingsFile)) {
+      Properties properties = new Properties();
+      properties.load(input);
+      return loadClassificationProperties(properties);
+    } catch (IOException e) {
+      LOGGER.error("Error loading classification settings: {}", e.getMessage());
+      return ClassificationSettings.createDefault();
+    }
+  }
+
+  /**
+   * Save classification settings to the properties file.
+   *
+   * @param settings The settings object to save
+   */
+  public void saveClassificationSettings(ClassificationSettings settings) {
+    saveSettings(
+        CLASSIFICATION_SETTINGS_FILE,
+        "SciPathJ Classification Settings",
+        this::createClassificationProperties,
         settings);
   }
 
@@ -856,5 +893,30 @@ public class ConfigurationManager {
       String propertyKey = regionType + "." + entry.getKey();
       properties.setProperty(propertyKey, String.valueOf(entry.getValue()));
     }
+  }
+
+  // === CLASSIFICATION SETTINGS PROPERTY HANDLERS ===
+
+  private ClassificationSettings loadClassificationProperties(Properties properties) {
+    String modelPath = getStringProperty(
+        properties, "modelPath", ClassificationSettings.DEFAULT_MODEL_PATH);
+    String selectedFeaturesPath = getStringProperty(
+        properties, "selectedFeaturesPath", ClassificationSettings.DEFAULT_SELECTED_FEATURES_PATH);
+    String labelMappingPath = getStringProperty(
+        properties, "labelMappingPath", ClassificationSettings.DEFAULT_LABEL_MAPPING_PATH);
+    String classDetailsPath = getStringProperty(
+        properties, "classDetailsPath", ClassificationSettings.DEFAULT_CLASS_DETAILS_PATH);
+
+    return new ClassificationSettings(
+        modelPath, selectedFeaturesPath, labelMappingPath, classDetailsPath);
+  }
+
+  private Properties createClassificationProperties(ClassificationSettings settings) {
+    Properties properties = new Properties();
+    properties.setProperty("modelPath", settings.modelPath());
+    properties.setProperty("selectedFeaturesPath", settings.selectedFeaturesPath());
+    properties.setProperty("labelMappingPath", settings.labelMappingPath());
+    properties.setProperty("classDetailsPath", settings.classDetailsPath());
+    return properties;
   }
 }

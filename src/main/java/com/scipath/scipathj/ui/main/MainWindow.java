@@ -563,7 +563,7 @@ public class MainWindow extends JFrame {
   /**
    * Switch to XGBoost training panel.
    */
-  private void switchToXGBoostTraining() {
+  public void switchToXGBoostTraining() {
       cardLayout.show(mainContentPanel, "XGBOOST_TRAINING");
       
       // Show back button

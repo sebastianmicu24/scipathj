@@ -170,7 +170,7 @@ public class PipelineRecapPanel extends JPanel {
           dialog = new FeatureExtractionSettingsDialog(parentFrame);
           break;
         case 5: // Cell Classification
-          dialog = new ClassificationSettingsDialog(parentFrame);
+          dialog = new ClassificationSettingsDialog(parentFrame, configurationManager);
           break;
         case 6: // Final Analysis
           dialog = new FinalAnalysisSettingsDialog(parentFrame);

@@ -49,12 +49,18 @@ public class CellClassification {
    private String csvSeparator = ";"; // EU format by default
    private char decimalSeparator = ',';
 
-   // Model paths
-   private static final String MODEL_DIR = "/models/2D/";
-   private static final String MODEL_PATH = MODEL_DIR + "xgboost_model.json";
-   private static final String SELECTED_FEATURES_PATH = MODEL_DIR + "selected_features.txt";
-   private static final String LABEL_MAPPING_PATH = MODEL_DIR + "xgboost_label_mapping.properties";
-   private static final String CLASS_DETAILS_PATH = MODEL_DIR + "class_details.json";
+   // Default model directory and filenames
+   private static final String DEFAULT_MODEL_DIR = "/models/2D/";
+   private static final String DEFAULT_MODEL_PATH = DEFAULT_MODEL_DIR + "xgboost_model.json";
+   private static final String DEFAULT_SELECTED_FEATURES_PATH = DEFAULT_MODEL_DIR + "selected_features.txt";
+   private static final String DEFAULT_LABEL_MAPPING_PATH = DEFAULT_MODEL_DIR + "xgboost_label_mapping.properties";
+   private static final String DEFAULT_CLASS_DETAILS_PATH = DEFAULT_MODEL_DIR + "class_details.json";
+
+   // Instance-level model paths (can be overridden via constructor)
+   private final String modelPath;
+   private final String selectedFeaturesPath;
+   private final String labelMappingPath;
+   private final String classDetailsPath;
 
    private final String imageFileName;
    private final Map<String, Map<String, Object>> features;
@@ -80,8 +86,38 @@ public class CellClassification {
    */
   public CellClassification(
       final String imageFileName, final Map<String, Map<String, Object>> features) {
+    // Delegate to the full constructor using defaults
+    this(imageFileName, features, null, null, null, null);
+  }
+
+  /**
+   * Full constructor which allows specifying custom model/supporting file paths.
+   *
+   * If any of the path parameters are null, the corresponding default resource path
+   * under /models/2D/ will be used.
+   *
+   * @param imageFileName The filename of the image
+   * @param features Previously extracted features for all ROIs
+   * @param modelPath Path to the XGBoost model file (absolute filesystem path or resource path)
+   * @param selectedFeaturesPath Path to selected_features.txt (absolute or resource)
+   * @param labelMappingPath Path to xgboost_label_mapping.properties (absolute or resource)
+   * @param classDetailsPath Path to class_details.json (absolute or resource)
+   */
+  public CellClassification(
+      final String imageFileName,
+      final Map<String, Map<String, Object>> features,
+      final String modelPath,
+      final String selectedFeaturesPath,
+      final String labelMappingPath,
+      final String classDetailsPath) {
+
     this.imageFileName = imageFileName;
     this.features = features != null ? features : new HashMap<>();
+
+    this.modelPath = modelPath != null ? modelPath : DEFAULT_MODEL_PATH;
+    this.selectedFeaturesPath = selectedFeaturesPath != null ? selectedFeaturesPath : DEFAULT_SELECTED_FEATURES_PATH;
+    this.labelMappingPath = labelMappingPath != null ? labelMappingPath : DEFAULT_LABEL_MAPPING_PATH;
+    this.classDetailsPath = classDetailsPath != null ? classDetailsPath : DEFAULT_CLASS_DETAILS_PATH;
 
     LOGGER.info("CellClassification initialized for image: {} with XGBoost classifier", imageFileName);
 
@@ -97,10 +133,35 @@ public class CellClassification {
           // Load the XGBoost model
           loadXGBoostModel();
 
-          // Load supporting files
-          loadSelectedFeatures();
-          loadLabelMapping();
+          // Load supporting files with fallback handling for missing files
+          boolean hasSelectedFeatures = false;
+          boolean hasLabelMapping = false;
+
+          try {
+              loadSelectedFeatures();
+              hasSelectedFeatures = !loadedSelectedFeatureNames.isEmpty();
+          } catch (Exception e) {
+              LOGGER.warn("Selected features file not found or invalid, attempting to auto-detect features: {}", e.getMessage());
+          }
+
+          try {
+              loadLabelMapping();
+              hasLabelMapping = !xgbIndexToClassId.isEmpty();
+          } catch (Exception e) {
+              LOGGER.warn("Label mapping file not found or invalid, using default mapping: {}", e.getMessage());
+          }
+
+          // Load class details (this handles missing files gracefully)
           loadClassDetails();
+
+          // Generate defaults if essential files are missing
+          if (!hasSelectedFeatures) {
+              generateDefaultFeatureList();
+          }
+
+          if (!hasLabelMapping) {
+              generateDefaultLabelMapping();
+          }
 
           LOGGER.info("XGBoost classifier initialized successfully");
       } catch (Exception e) {
@@ -113,21 +174,25 @@ public class CellClassification {
    */
   private void loadXGBoostModel() throws XGBoostError, IOException {
       try {
-          String modelResourcePath = MODEL_PATH;
-          var modelResource = getClass().getResource(modelResourcePath);
-
-          if (modelResource == null) {
-              throw new IOException("XGBoost model file not found in resources: " + modelResourcePath);
-          }
-
-          File modelFile = new File(modelResource.getFile());
+          String configuredPath = this.modelPath;
+  
+          // First try absolute/filesystem path
+          File modelFile = new File(configuredPath);
           if (!modelFile.exists()) {
-              throw new IOException("XGBoost model file not found: " + modelResourcePath);
+              // Fall back to resource on classpath
+              var modelResource = getClass().getResource(configuredPath);
+              if (modelResource == null) {
+                  throw new IOException("XGBoost model file not found (filesystem or resources): " + configuredPath);
+              }
+              modelFile = new File(modelResource.getFile());
+              if (!modelFile.exists()) {
+                  throw new IOException("XGBoost model file not found: " + configuredPath);
+              }
           }
-
+  
           booster = XGBoost.loadModel(modelFile.getAbsolutePath());
           LOGGER.info("XGBoost model loaded successfully from: {}", modelFile.getAbsolutePath());
-
+  
       } catch (Exception e) {
           LOGGER.error("Error loading XGBoost model: {}", e.getMessage());
           throw e;
@@ -139,27 +204,29 @@ public class CellClassification {
    */
   private void loadSelectedFeatures() throws IOException {
       try {
-          String featuresResourcePath = SELECTED_FEATURES_PATH;
-          var featuresResource = getClass().getResource(featuresResourcePath);
-
-          if (featuresResource == null) {
-              throw new IOException("Selected features file not found in resources: " + featuresResourcePath);
-          }
-
-          File featuresFile = new File(featuresResource.getFile());
+          String configuredPath = this.selectedFeaturesPath;
+  
+          File featuresFile = new File(configuredPath);
           if (!featuresFile.exists()) {
-              throw new IOException("Selected features file not found: " + featuresResourcePath);
+              var featuresResource = getClass().getResource(configuredPath);
+              if (featuresResource == null) {
+                  throw new IOException("Selected features file not found (filesystem or resources): " + configuredPath);
+              }
+              featuresFile = new File(featuresResource.getFile());
+              if (!featuresFile.exists()) {
+                  throw new IOException("Selected features file not found: " + configuredPath);
+              }
           }
-
+  
           loadedSelectedFeatureNames = Files.readAllLines(Paths.get(featuresFile.getAbsolutePath()), StandardCharsets.UTF_8);
           loadedSelectedFeatureNames.removeIf(String::isEmpty);
-
+  
           if (loadedSelectedFeatureNames.isEmpty()) {
-              throw new IOException("Selected features file is empty: " + featuresResourcePath);
+              throw new IOException("Selected features file is empty: " + configuredPath);
           }
-
+  
           LOGGER.info("Loaded {} selected feature names from: {}", loadedSelectedFeatureNames.size(), featuresFile.getAbsolutePath());
-
+  
       } catch (Exception e) {
           LOGGER.error("Error loading selected features: {}", e.getMessage());
           throw new IOException("Failed to load selected features", e);
@@ -171,23 +238,25 @@ public class CellClassification {
    */
   private void loadLabelMapping() throws IOException {
       try {
-          String mappingResourcePath = LABEL_MAPPING_PATH;
-          var mappingResource = getClass().getResource(mappingResourcePath);
-
-          if (mappingResource == null) {
-              throw new IOException("Label mapping file not found in resources: " + mappingResourcePath);
-          }
-
-          File mappingFile = new File(mappingResource.getFile());
+          String configuredPath = this.labelMappingPath;
+  
+          File mappingFile = new File(configuredPath);
           if (!mappingFile.exists()) {
-              throw new IOException("Label mapping file not found: " + mappingResourcePath);
+              var mappingResource = getClass().getResource(configuredPath);
+              if (mappingResource == null) {
+                  throw new IOException("Label mapping file not found (filesystem or resources): " + configuredPath);
+              }
+              mappingFile = new File(mappingResource.getFile());
+              if (!mappingFile.exists()) {
+                  throw new IOException("Label mapping file not found: " + configuredPath);
+              }
           }
-
+  
           Properties props = new Properties();
           try (FileReader reader = new FileReader(mappingFile)) {
               props.load(reader);
           }
-
+  
           xgbIndexToClassId.clear();
           for (String originalLabelStr : props.stringPropertyNames()) {
               try {
@@ -198,9 +267,9 @@ public class CellClassification {
                   LOGGER.warn("Could not parse mapping entry: {} = {}", originalLabelStr, props.getProperty(originalLabelStr));
               }
           }
-
+  
           LOGGER.info("Loaded label mapping for {} classes from: {}", xgbIndexToClassId.size(), mappingFile.getAbsolutePath());
-
+  
       } catch (Exception e) {
           LOGGER.error("Error loading label mapping: {}", e.getMessage());
           throw new IOException("Failed to load label mapping", e);
@@ -212,48 +281,50 @@ public class CellClassification {
    */
   private void loadClassDetails() throws IOException {
       try {
-          String jsonResourcePath = CLASS_DETAILS_PATH;
-          var jsonResource = getClass().getResource(jsonResourcePath);
-
-          if (jsonResource == null) {
-              LOGGER.warn("Class details JSON file not found in resources: {}. Using default class names.", jsonResourcePath);
-              return;
-          }
-
-          File jsonFile = new File(jsonResource.getFile());
+          String configuredPath = this.classDetailsPath;
+  
+          File jsonFile = new File(configuredPath);
           if (!jsonFile.exists()) {
-              LOGGER.warn("Class details JSON file not found: {}. Using default class names.", jsonResourcePath);
-              return;
+              var jsonResource = getClass().getResource(configuredPath);
+              if (jsonResource == null) {
+                  LOGGER.warn("Class details JSON file not found (filesystem or resources): {}. Using default class names.", configuredPath);
+                  return;
+              }
+              jsonFile = new File(jsonResource.getFile());
+              if (!jsonFile.exists()) {
+                  LOGGER.warn("Class details JSON file not found: {}. Using default class names.", configuredPath);
+                  return;
+              }
           }
-
+  
           try (BufferedReader br = new BufferedReader(new FileReader(jsonFile))) {
               String json = br.lines().collect(Collectors.joining());
-
+  
               int classesIndex = json.indexOf("\"classes\":");
               if (classesIndex == -1) {
                   LOGGER.warn("No 'classes' section in JSON file");
                   return;
               }
-
+  
               int classesStart = json.indexOf("{", classesIndex);
               int classesEnd = findMatchingBrace(json, classesStart);
               if (classesStart == -1 || classesEnd == -1) {
                   LOGGER.warn("Malformed 'classes' section in JSON");
                   return;
               }
-
+  
               String classesContent = json.substring(classesStart + 1, classesEnd);
-
+  
               Pattern classPattern = Pattern.compile("\"([^\"]+)\"\\s*:\\s*\\{(.*?)\\}(,|$)", Pattern.DOTALL);
               Matcher classMatcher = classPattern.matcher(classesContent);
-
+  
               while (classMatcher.find()) {
                   String className = classMatcher.group(1).trim();
                   String classContent = classMatcher.group(2);
-
+  
                   Matcher idMatcher = Pattern.compile("\"id\"\\s*:\\s*([\\d.]+)").matcher(classContent);
                   Matcher colorMatcher = Pattern.compile("\"color\"\\s*:\\s*\"([^\"]+)\"").matcher(classContent);
-
+  
                   if (idMatcher.find() && colorMatcher.find()) {
                       int classId = (int) Float.parseFloat(idMatcher.group(1).trim());
                       String color = colorMatcher.group(1).trim();
@@ -261,9 +332,9 @@ public class CellClassification {
                   }
               }
           }
-
+  
           LOGGER.info("Loaded details for {} classes from JSON: {}", classIdToDetails.size(), jsonFile.getAbsolutePath());
-
+  
       } catch (Exception e) {
           LOGGER.error("Error loading class details from JSON: {}", e.getMessage());
           // Don't throw exception, continue with default names
@@ -940,6 +1011,67 @@ public class CellClassification {
           });
 
       return stats.toString();
+  }
+
+  /**
+   * Generate a default feature list when selected features file is missing.
+   * This uses common features that are typically extracted from cell images.
+   */
+  private void generateDefaultFeatureList() {
+      LOGGER.info("Generating default feature list since selected_features.txt not found");
+
+      // Common morphological features typically used in cell classification
+      List<String> defaultFeatures = List.of(
+          "Cell_Area",
+          "Cell_Perimeter",
+          "Cell_Circularity",
+          "Cell_Major_Axis",
+          "Cell_Minor_Axis",
+          "Nucleus_Area",
+          "Nucleus_Perimeter",
+          "Nucleus_Circularity",
+          "Cytoplasm_Area",
+          "Cytoplasm_Perimeter",
+          "Cytoplasm_Aspect_Ratio",
+          "Nucleus_To_Cell_Ratio",
+          "Nucleus_Eccentricity",
+          "Cytoplasm_Intensity_Mean",
+          "Cytoplasm_Intensity_Std"
+      );
+
+      loadedSelectedFeatureNames.clear();
+      loadedSelectedFeatureNames.addAll(defaultFeatures);
+
+      LOGGER.info("Generated {} default feature names for classification", defaultFeatures.size());
+  }
+
+  /**
+   * Generate a default label mapping when the mapping file is missing.
+   * This assumes a binary classification scenario by default.
+   */
+  private void generateDefaultLabelMapping() {
+      LOGGER.info("Generating default label mapping since xgboost_label_mapping.properties not found");
+
+      // Generate mapping for binary classification (0 -> Class 0, 1 -> Class 1)
+      xgbIndexToClassId.clear();
+
+      try {
+          // Try to infer number of classes from the model
+          if (booster != null) {
+              // We can try to get the number of classes from the booster
+              // For now, assume binary classification
+              xgbIndexToClassId.put(0, 0); // XGBoost class 0 maps to class ID 0
+              xgbIndexToClassId.put(1, 1); // XGBoost class 1 maps to class ID 1
+
+              LOGGER.info("Generated default label mapping with {} classes", xgbIndexToClassId.size());
+          }
+      } catch (Exception e) {
+          LOGGER.warn("Failed to generate label mapping from model, using basic mapping: {}", e.getMessage());
+
+          // Fallback to basic mapping
+          xgbIndexToClassId.put(0, 0);
+          xgbIndexToClassId.put(1, 1);
+      }
   }
 
   /**

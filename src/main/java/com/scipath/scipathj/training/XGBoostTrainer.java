@@ -313,6 +313,11 @@ public class XGBoostTrainer {
         booster.saveModel(modelPath);
         logger.info("Model saved to: {}", modelPath);
 
+        // Save supporting files needed for CellClassification
+        saveSelectedFeatures();
+        saveLabelMapping();
+        saveClassDetails();
+
         // Save additional metadata
         saveTrainingConfig();
     }
@@ -339,6 +344,85 @@ public class XGBoostTrainer {
             }
         }
         logger.info("Training configuration saved to: {}", configPath);
+    }
+
+    /**
+     * Save list of selected features used during training.
+     */
+    private void saveSelectedFeatures() throws IOException {
+        String featuresPath = Paths.get(outputDir, "selected_features.txt").toString();
+        try (PrintWriter writer = new PrintWriter(Files.newBufferedWriter(Paths.get(featuresPath)))) {
+            List<String> selectedFeatures = dataReader.getSelectedFeatureNames();
+            for (String feature : selectedFeatures) {
+                writer.println(feature);
+            }
+        }
+        logger.info("Selected features saved to: {} ({} features)", featuresPath,
+            dataReader.getSelectedFeatureNames().size());
+    }
+
+    /**
+     * Save XGBoost label mapping (original class ID -> XGBoost index).
+     */
+    private void saveLabelMapping() throws IOException {
+        String mappingPath = Paths.get(outputDir, "xgboost_label_mapping.properties").toString();
+        Properties properties = new Properties();
+
+        Map<String, Integer> classNameToIdMap = dataReader.getClassNameToIdMap();
+        for (Map.Entry<String, Integer> entry : classNameToIdMap.entrySet()) {
+            // Format: original_class_id = xgboost_index
+            properties.setProperty(entry.getValue().toString(), entry.getValue().toString());
+        }
+
+        try (PrintWriter writer = new PrintWriter(Files.newBufferedWriter(Paths.get(mappingPath)))) {
+            properties.store(writer, "SciPathJ XGBoost Label Mapping");
+        }
+        logger.info("Label mapping saved to: {} ({} classes)", mappingPath, classNameToIdMap.size());
+    }
+
+    /**
+     * Save class details including names, IDs, and colors.
+     */
+    private void saveClassDetails() throws IOException {
+        String classDetailsPath = Paths.get(outputDir, "class_details.json").toString();
+
+        // Generate colors for classes
+        String[] defaultColors = {
+            "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FECA57",
+            "#FF9FF3", "#54A0FF", "#5F27CD", "#00D2D3", "#FF9F43",
+            "#10AC84", "#EE5A24", "#0ABDE3", "#E17055", "#A29BFE"
+        };
+
+        StringBuilder jsonContent = new StringBuilder();
+        jsonContent.append("{\n");
+        jsonContent.append("  \"classes\": {\n");
+
+        Map<String, Integer> classNameToIdMap = dataReader.getClassNameToIdMap();
+        java.util.List<String> classNames = new ArrayList<>(classNameToIdMap.keySet());
+        java.util.Collections.sort(classNames, (a, b) -> Integer.compare(
+            classNameToIdMap.get(a), classNameToIdMap.get(b)));
+
+        for (int i = 0; i < classNames.size(); i++) {
+            String className = classNames.get(i);
+            int classId = classNameToIdMap.get(className);
+            String color = defaultColors[classId % defaultColors.length];
+
+            jsonContent.append("    \"").append(className).append("\": {\n");
+            jsonContent.append("      \"id\": ").append(classId).append(",\n");
+            jsonContent.append("      \"color\": \"").append(color).append("\"\n");
+            jsonContent.append("    }");
+
+            if (i < classNames.size() - 1) {
+                jsonContent.append(",");
+            }
+            jsonContent.append("\n");
+        }
+
+        jsonContent.append("  }\n");
+        jsonContent.append("}\n");
+
+        Files.write(Paths.get(classDetailsPath), jsonContent.toString().getBytes());
+        logger.info("Class details saved to: {} ({} classes)", classDetailsPath, classNameToIdMap.size());
     }
 
     private void analyzeFeatureImportance(Booster booster) {

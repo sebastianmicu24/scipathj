@@ -29,6 +29,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.scipath.scipathj.training.TrainingController;
+import com.scipath.scipathj.ui.main.MainWindow;
 
 /**
  * Modern control panel for dataset creation with enhanced class management and visual controls.
@@ -707,10 +708,17 @@ public class DatasetControlsPanel extends JPanel {
             // For now, we'll let user choose the JSON file they downloaded
             // In future, this could be enhanced to remember the last downloaded file
             java.awt.Container parent = SwingUtilities.getWindowAncestor(this);
-            TrainingController controller = new TrainingController((javax.swing.JFrame) parent);
-
-            // TODO: We could pass the expected JSON file path here if we saved it during download
-            controller.showTrainingDialog(null, null);
+            
+            // If the parent is the MainWindow, switch to the integrated XGBoost training panel.
+            if (parent instanceof MainWindow) {
+                MainWindow mainWindow = (MainWindow) parent;
+                mainWindow.switchToXGBoostTraining();
+            } else {
+                // Fallback to opening the modal TrainingDialog when no MainWindow is available.
+                TrainingController controller = new TrainingController((javax.swing.JFrame) parent);
+                // TODO: We could pass the expected JSON file path here if we saved it during download
+                controller.showTrainingDialog(null, null);
+            }
 
             LOGGER.info("XGBoost training workflow completed");
 
