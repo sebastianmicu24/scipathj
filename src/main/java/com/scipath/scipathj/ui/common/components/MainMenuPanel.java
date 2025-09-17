@@ -41,7 +41,9 @@ public class MainMenuPanel extends JPanel {
     DATASET_CREATION("dataset_creator", "Create Dataset", "Select cells and create custom classification models",
                     FontAwesomeSolid.PLUS_CIRCLE, new Color(34, 139, 34)),
     VISUALIZATION("View_Results", "Visualize Results", "View and analyze previously processed data",
-                 FontAwesomeSolid.CHART_BAR, new Color(255, 140, 0));
+                 FontAwesomeSolid.CHART_BAR, new Color(255, 140, 0)),
+    XGBoost_TRAINING("xgboost_training", "Train XGBoost Model", "Train machine learning classifiers using XGBoost",
+                    FontAwesomeSolid.COG, new Color(128, 0, 128)); // Purple color for XGBoost
 
     private final String pipelineId;
     private final String displayName;

@@ -5,6 +5,8 @@ import com.scipath.scipathj.ui.common.dialogs.AboutDialog;
 import com.scipath.scipathj.ui.common.dialogs.PreferencesDialog;
 import com.scipath.scipathj.ui.analysis.dialogs.settings.VesselSegmentationSettingsDialog;
 import com.scipath.scipathj.ui.main.MainWindow;
+import com.scipath.scipathj.training.TrainingController;
+import java.io.File;
 import java.awt.*;
 import javax.swing.*;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
@@ -103,6 +105,7 @@ public class MenuBarManager {
     return viewMenu;
   }
 
+
   /**
    * Creates the Preferences menu.
    *
@@ -195,6 +198,7 @@ public class MenuBarManager {
           JOptionPane.INFORMATION_MESSAGE);
     }
   }
+
 
   /**
    * Handles the about menu item action.

@@ -28,6 +28,7 @@ import com.scipath.scipathj.ui.utils.ImageLoader;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.scipath.scipathj.training.TrainingController;
 
 /**
  * Modern control panel for dataset creation with enhanced class management and visual controls.
@@ -77,6 +78,7 @@ public class DatasetControlsPanel extends JPanel {
     private JButton loadROIsButton;
     private JButton clearROIsButton;
     private JButton downloadTrainingDataButton;
+    private JButton trainXGBoostButton;
     private JSlider borderWidthSlider;
     private JSlider fillOpacitySlider;
     private JCheckBox showNucleiCheckBox;
@@ -250,6 +252,8 @@ public class DatasetControlsPanel extends JPanel {
         loadROIsButton = createModernButton("Load ROIs from ZIP", getSuccessColor());
         clearROIsButton = createModernButton("Clear ROIs", getDangerColor());
         downloadTrainingDataButton = createModernButton("Download Training Data", new Color(102, 102, 255)); // Dark blue
+        trainXGBoostButton = createModernButton("Train XGBoost Model", new Color(128, 0, 128)); // Purple, initially hidden
+        trainXGBoostButton.setVisible(false); // Hide until training data is downloaded
         
         // Visual controls
         borderWidthSlider = createModernSlider(1, 5, 2, 1);
@@ -329,11 +333,12 @@ public class DatasetControlsPanel extends JPanel {
     }
     
     private JPanel createFileOperationsPanel() {
-        JPanel panel = new JPanel(new GridLayout(3, 1, 5, 5));
+        JPanel panel = new JPanel(new GridLayout(4, 1, 5, 5));
         panel.setOpaque(false);
         panel.add(loadROIsButton);
         panel.add(clearROIsButton);
         panel.add(downloadTrainingDataButton);
+        panel.add(trainXGBoostButton);
         return panel;
     }
     
@@ -640,6 +645,7 @@ public class DatasetControlsPanel extends JPanel {
         loadROIsButton.addActionListener(e -> handleLoadROIs());
         clearROIsButton.addActionListener(e -> handleClearROIs());
         downloadTrainingDataButton.addActionListener(e -> handleDownloadTrainingData());
+        trainXGBoostButton.addActionListener(e -> handleTrainXGBoost());
         
         // Visual controls
         borderWidthSlider.addChangeListener(e -> applyVisualControls());
@@ -691,6 +697,31 @@ public class DatasetControlsPanel extends JPanel {
     }
 
     /**
+     * Handle the training XGBoost button click.
+     * Launches the XGBoost training interface with the previously downloaded training data.
+     */
+    private void handleTrainXGBoost() {
+        LOGGER.info("Launching XGBoost training interface...");
+
+        try {
+            // For now, we'll let user choose the JSON file they downloaded
+            // In future, this could be enhanced to remember the last downloaded file
+            java.awt.Container parent = SwingUtilities.getWindowAncestor(this);
+            TrainingController controller = new TrainingController((javax.swing.JFrame) parent);
+
+            // TODO: We could pass the expected JSON file path here if we saved it during download
+            controller.showTrainingDialog(null, null);
+
+            LOGGER.info("XGBoost training workflow completed");
+
+        } catch (Exception e) {
+            LOGGER.error("Error launching XGBoost training interface", e);
+            JOptionPane.showMessageDialog(this, "Error opening training interface: " + e.getMessage(),
+                                            "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /**
      * Handle the download training data button click.
      * Uses the existing analysis pipeline to extract features from manually classified cells.
      */
@@ -739,10 +770,18 @@ public class DatasetControlsPanel extends JPanel {
                 extractAndSaveTrainingDataUsingPipeline(outputFile);
 
                 updateStatus("Training data saved to: " + outputFile.getName());
+
+                // Show success message with next steps
                 JOptionPane.showMessageDialog(this, "Training data successfully saved using the analysis pipeline!\n" +
                         "This includes full feature extraction with H&E deconvolution.\n" +
-                        "You can now use this comprehensive JSON file to train your XGBoost classifier.",
+                        "You can now train your XGBoost classifier using the button below.",
                         "Success", JOptionPane.INFORMATION_MESSAGE);
+
+                // Show the Train XGBoost Model button
+                trainXGBoostButton.setVisible(true);
+                trainXGBoostButton.setToolTipText("Train XGBoost model using the downloaded training data");
+
+                LOGGER.info("Training XGBoost button now visible after successful data download");
             }
 
         } catch (Exception e) {

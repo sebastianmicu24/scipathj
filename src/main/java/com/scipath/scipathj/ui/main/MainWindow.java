@@ -16,6 +16,7 @@ import com.scipath.scipathj.ui.common.StatusPanel;
 import com.scipath.scipathj.ui.controllers.AnalysisController;
 import com.scipath.scipathj.ui.controllers.NavigationController;
 import com.scipath.scipathj.ui.dataset.DatasetMainPanel;
+import com.scipath.scipathj.ui.training.XGBoostTrainingPanel;
 import com.scipath.scipathj.ui.analysis.dialogs.ROIStatisticsDialog;
 import com.scipath.scipathj.ui.visualization.ResultsVisualizationPanel;
 import com.scipath.scipathj.ui.common.dialogs.settings.DisplaySettingsDialog;
@@ -53,6 +54,7 @@ public class MainWindow extends JFrame {
   private JPanel mainContentPanel;
   private MainMenuPanel mainMenuPanel;
   private DatasetMainPanel datasetCreationPanel;
+  private XGBoostTrainingPanel xgBoostTrainingPanel;
   private ResultsVisualizationPanel resultsVisualizationPanel;
   private JPanel analysisSetupPanel;
   private PipelineRecapPanel pipelineRecapPanel;
@@ -147,6 +149,7 @@ public class MainWindow extends JFrame {
   private void createMainPanels() {
     mainMenuPanel = new MainMenuPanel();
     datasetCreationPanel = new DatasetMainPanel(configurationManager.loadMainSettings());
+    xgBoostTrainingPanel = new XGBoostTrainingPanel(this);
     resultsVisualizationPanel = new ResultsVisualizationPanel();
     analysisSetupPanel = createAnalysisSetupPanel();
     imageViewPanel = createImageViewPanel();
@@ -155,6 +158,8 @@ public class MainWindow extends JFrame {
         mainMenuPanel, NavigationController.UIState.MAIN_MENU.name());
     mainContentPanel.add(
         datasetCreationPanel, NavigationController.UIState.DATASET_CREATION.name());
+    mainContentPanel.add(
+        xgBoostTrainingPanel, "XGBOOST_TRAINING");
     mainContentPanel.add(
         resultsVisualizationPanel, NavigationController.UIState.RESULTS_VISUALIZATION.name());
     mainContentPanel.add(analysisSetupPanel, NavigationController.UIState.FOLDER_SELECTION.name());
@@ -356,6 +361,10 @@ public class MainWindow extends JFrame {
                 // Results visualization - go directly to visualization panel
                 navigationController.switchToResultsVisualization();
                 break;
+              case "xgboost_training":
+                // XGBoost training - go directly to XGBoost training panel
+                switchToXGBoostTraining();
+                break;
               default:
                 LOGGER.warn("Unknown pipeline selected: {}", pipelineId);
                 break;
@@ -552,19 +561,37 @@ public class MainWindow extends JFrame {
   }
 
   /**
+   * Switch to XGBoost training panel.
+   */
+  private void switchToXGBoostTraining() {
+      cardLayout.show(mainContentPanel, "XGBOOST_TRAINING");
+      
+      // Show back button
+      statusPanel.showBackButton();
+      
+      // Hide analysis buttons (not available in XGBoost training)
+      statusPanel.hideAnalysisButtons();
+      
+      // Update status
+      statusPanel.setStatus("XGBoost training configuration");
+      
+      LOGGER.info("Switched to XGBoost training panel");
+  }
+
+  /**
    * Updates the ROI toolbar state based on current image and ROI count.
    */
   private void updateROIToolbarState() {
-    String currentImageName = getCurrentImageName();
-    if (currentImageName != null) {
-      int totalCount = roiManager.getROICount(currentImageName);
-      roiToolbar.updateROICount(totalCount);
+      String currentImageName = getCurrentImageName();
+      if (currentImageName != null) {
+          int totalCount = roiManager.getROICount(currentImageName);
+          roiToolbar.updateROICount(totalCount);
 
-      // Also update type counts
-      roiToolbar.updateROITypeCounts(getROICountsByType());
-    } else {
-      roiToolbar.updateROICount(0);
-    }
+          // Also update type counts
+          roiToolbar.updateROITypeCounts(getROICountsByType());
+      } else {
+          roiToolbar.updateROICount(0);
+      }
   }
 
   /**

@@ -69,6 +69,21 @@ public class PipelineRegistry {
               "Statistical Analysis",
               "Export Reports"
             }));
+
+    // XGBoost Training Pipeline - Now available
+    AVAILABLE_PIPELINES.add(
+        new PipelineInfo(
+            "xgboost_training",
+            "Train XGBoost Model",
+            "Train machine learning classifiers using XGBoost algorithm",
+            true,
+            new String[] {
+              "Data Loading",
+              "Feature Selection",
+              "Model Training",
+              "Evaluation",
+              "Model Export"
+            }));
   }
 
   /**
