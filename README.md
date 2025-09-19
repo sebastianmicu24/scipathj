@@ -331,17 +331,19 @@ The executable will be located at `target/scipathj-1.0.0.jar`.
     ```bash
     java -jar target/scipathj-1.0.0.jar
     ```
-2.  Choose from three main options on the main menu:
+2.  Choose from four main options on the main menu:
    - **Perform Analysis**: Run segmentation and classification on tissue images
-   - **Create Dataset**: Select cells and create custom classification models
+   - **Create Dataset**: Select cells and create custom classification datasets
    - **Visualize Results**: View and analyze previously processed data
+   - **Train XGBoost Model**: Train machine learning classifiers using XGBoost
 
 ### Main Workflow
 
-1.  **Option Selection**: Choose one of the three main functions from the main menu:
+1.  **Option Selection**: Choose one of the four main functions from the main menu:
     - **Perform Analysis**: Run comprehensive segmentation and classification
-    - **Create Dataset**: Build custom datasets with ROI management
+    - **Create Dataset**: Build custom datasets with ROI management and export training data
     - **Visualize Results**: View and analyze processed data
+    - **Train XGBoost Model**: Train custom classification models using machine learning
 
 2.  **Perform Analysis Workflow**:
     - Select a folder containing images to be analyzed
@@ -352,11 +354,13 @@ The executable will be located at `target/scipathj-1.0.0.jar`.
     - Export results and ROI data
 
 3.  **Create Dataset Workflow**:
-    - Select ROI ZIP files for loading existing annotations
-    - Choose image folders for processing
-    - Create and manage classification classes
-    - Process large datasets (5,000+ ROIs supported)
-    - Export structured datasets for machine learning
+    - **Setup Phase**: Select ROI ZIP files and corresponding image folders
+    - **Classification Phase**: Interactive cell clicking to assign classes
+    - **Class Management**: Create and manage custom classification classes with colors
+    - **Feature Extraction**: Extract morphological and textural features using analysis pipeline
+    - **Training Data Export**: Export structured JSON datasets for machine learning
+    - **Integrated Training**: Direct integration with XGBoost training workflow
+    - **Performance**: Process large datasets (5,000+ ROIs) with optimized loading
 
 4.  **Visualize Results Workflow**:
     - Load previously processed analysis results
@@ -365,9 +369,18 @@ The executable will be located at `target/scipathj-1.0.0.jar`.
     - Access statistical analysis tools and feature visualization
     - Export high-quality visualizations with metadata
 
+5.  **Train XGBoost Model Workflow**:
+    - **Data Import**: Load training data from JSON files (created in Dataset workflow)
+    - **Feature Selection**: Choose relevant features for model training
+    - **Hyperparameter Configuration**: Adjust learning rate, tree depth, regularization
+    - **Class Balancing**: Automatic detection and handling of class imbalance
+    - **Model Training**: XGBoost training with progress monitoring and evaluation
+    - **Model Export**: Save complete model bundles with metadata for deployment
+    - **Integration**: Trained models can be used in analysis workflow for classification
+
 ## Main Functions
 
-SciPathJ provides three main functions accessible from the main menu:
+SciPathJ provides four main functions accessible from the main menu:
 
 ### 1. Perform Analysis
 **Status: Available**
@@ -400,10 +413,39 @@ Advanced tools for creating custom classification datasets with streamlined work
 - **🎯 Smart ROI Display**: Z-order management with cells on top for optimal interaction
 - **🔍 Intelligent Filtering**: Selective loading reduces memory usage by 50-70%
 - **📈 Class Management**: Dynamic class creation and management via [`DatasetClassManager`](src/main/java/com/scipath/scipathj/ui/dataset/DatasetClassManager.java:1)
+- **🔬 Feature Extraction**: Full morphological and textural feature extraction using analysis pipeline
+- **💾 Training Data Export**: Export structured JSON datasets with features, labels, and class metadata
+- **🤝 XGBoost Integration**: Direct workflow integration with training functionality
 - **🛡️ Robust Error Handling**: Comprehensive validation and corrupted file recovery
 - **💾 Modular Architecture**: Clean separation of concerns with [`DatasetMainPanel`](src/main/java/com/scipath/scipathj/ui/dataset/DatasetMainPanel.java:1) orchestration
 
-### 3. Visualize Results
+### 3. Train XGBoost Model
+**Status: Available** - *Complete Machine Learning Training Pipeline*
+
+Professional machine learning model training with comprehensive feature set:
+
+- **📊 Training Data Import**: Load JSON datasets created from dataset creation workflow
+- **🎛️ Feature Selection**: Interactive selection of morphological, textural, and color features
+- **⚙️ Hyperparameter Tuning**: Comprehensive XGBoost parameter configuration
+  - Learning rate, max depth, number of trees
+  - Regularization parameters (L1/L2)
+  - Subsampling and column sampling ratios
+- **⚖️ Class Balancing**: Automatic detection and correction of class imbalance
+- **📈 Training Monitoring**: Real-time progress tracking with detailed logging
+- **🧪 Model Evaluation**: Comprehensive evaluation with accuracy, precision, recall metrics
+- **📦 Model Bundles**: Complete model packages with metadata, feature lists, and class mappings
+- **🎨 Class Visualization**: Color-coded class management with training data preservation
+- **🔄 Integration**: Trained models can be loaded in analysis workflow for classification
+- **🛠️ Advanced Features**: Feature importance analysis, class distribution monitoring
+
+**Training Workflow:**
+1. **Data Selection**: Choose JSON training data file
+2. **Feature Configuration**: Select relevant features for training
+3. **Parameter Tuning**: Adjust hyperparameters for optimal performance
+4. **Training Execution**: Monitor progress with detailed feedback
+5. **Model Export**: Save complete model bundle for deployment
+
+### 4. Visualize Results
 **Status: Available** - *Enhanced with ROI System v2.0*
 
 Advanced visualization tools with the new ROI architecture:

@@ -53,10 +53,8 @@ import org.slf4j.LoggerFactory;
  *
  * **Spatial Features (All Convertible):**
  * - vessel_distance:          μm (distance to nearest vessel)
- * - closest_vessel:           string (ROI name identifier)
  * - neighbor_count:           integer (number of nearby ROIs)
  * - closest_neighbor_distance: μm (distance to nearest neighboring ROI)
- * - closest_neighbor:         string (ROI name identifier)
  *
  * **Basic Geometric Features (Mixed Units):**
  * - area:                     μm² (area in square micrometers)  ❌ CONVERTED
@@ -125,11 +123,11 @@ public class FeatureExtraction {
     
     private static final int ALL_MEASUREMENTS = BASIC_MEASUREMENTS | INTENSITY_MEASUREMENTS;
 
-    // Pre-computed feature names in SCHELI order
+    // Pre-computed feature names in SCHELI order (removed closest_vessel and closest_neighbor as they're not used for modeling)
     private static final String[] FEATURE_NAMES = {
-        "vessel_distance", "closest_vessel", "neighbor_count", "closest_neighbor_distance", "closest_neighbor",
+        "vessel_distance", "neighbor_count", "closest_neighbor_distance",
         "area", "x", "y", "xm", "ym", "perim", "bx", "by", "width", "height",
-        "major", "minor", "angle", "circ", "intden", "feret", "feretx", "ferety", "feretangle", "minferet", 
+        "major", "minor", "angle", "circ", "intden", "feret", "feretx", "ferety", "feretangle", "minferet",
         "ar", "round", "solidity", "mean", "stddev", "mode", "min", "max", "median", "skew", "kurt",
         "hema_mean", "hema_stddev", "hema_mode", "hema_min", "hema_max", "hema_median", "hema_skew", "hema_kurt",
         "eosin_mean", "eosin_stddev", "eosin_mode", "eosin_min", "eosin_max", "eosin_median", "eosin_skew", "eosin_kurt"
@@ -406,8 +404,6 @@ public class FeatureExtraction {
             // Vessel distance calculation using spatial grid (converted to micrometers)
             double vesselDistanceInMicrometers = mainSettings.pixelsToMicrometers(vesselResult.distance);
             features.put("vessel_distance", vesselDistanceInMicrometers);
-            // Store the actual vessel name as string (SCHELI compatible)
-            features.put("closest_vessel", vesselResult.name != null ? vesselResult.name : "N/A");
 
             // Neighbor analysis using spatial grid
             SpatialResult neighborResult = calculateNeighborDataOptimized(roi, roiType);
@@ -415,17 +411,13 @@ public class FeatureExtraction {
             // Neighbor analysis using spatial grid (converted to micrometers)
             double neighborDistanceInMicrometers = mainSettings.pixelsToMicrometers(neighborResult.extraData);
             features.put("closest_neighbor_distance", neighborDistanceInMicrometers);
-            // Store the actual neighbor name as string (SCHELI compatible)
-            features.put("closest_neighbor", neighborResult.name != null ? neighborResult.name : "N/A");
 
         } catch (Exception e) {
             LOGGER.debug("Error in spatial features: {}", e.getMessage());
-            // Add default values
+            // Add default values (excluding closest_vessel and closest_neighbor)
             features.put("vessel_distance", -1.0);
-            features.put("closest_vessel", "N/A");
             features.put("neighbor_count", 0.0);
             features.put("closest_neighbor_distance", -1.0);
-            features.put("closest_neighbor", "N/A");
         }
     }
 

@@ -24,7 +24,7 @@ public class DatasetClassificationPanel extends JPanel {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DatasetClassificationPanel.class);
     
-    // Main components - using new streamlined architecture
+    // Main components - using streamlined architecture with legacy controls integration
     private SimpleImageGallery imageGallery;
     private DatasetImageViewer datasetImageViewer;
     private DatasetControlsPanel controlsPanel;
@@ -65,7 +65,7 @@ public class DatasetClassificationPanel extends JPanel {
         // Create streamlined dataset image viewer with zoom/pan
         datasetImageViewer = new DatasetImageViewer();
         
-        // Create integrated controls panel
+        // Create integrated controls panel (legacy integration)
         controlsPanel = new DatasetControlsPanel();
         
         // Set minimum size for controls panel to prevent color square compression
@@ -128,7 +128,6 @@ public class DatasetClassificationPanel extends JPanel {
             }
         });
         
-        // Controls panel listeners
         // Controls panel listeners
         controlsPanel.addControlListener(new DatasetControlsPanel.ControlListener() {
             @Override

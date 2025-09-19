@@ -295,8 +295,9 @@ public class TrainingDialog extends JDialog {
         // If we have JSON file selected, try to preview features
         if (jsonFile != null && jsonFile.exists()) {
             try {
-                // Create a temporary reader to detect features
-                JSONDataReader tempReader = new JSONDataReader(jsonFile, null);
+                // Create a temporary reader to detect features using new architecture
+                com.scipath.scipathj.training.data.TrainingDataReader tempReader =
+                    new com.scipath.scipathj.training.data.TrainingDataReader(jsonFile);
                 java.util.List<String> features = tempReader.getFeatureNames();
 
                 if (features.isEmpty()) {

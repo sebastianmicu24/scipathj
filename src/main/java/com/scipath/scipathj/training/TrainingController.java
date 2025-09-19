@@ -1,5 +1,8 @@
 package com.scipath.scipathj.training;
 
+import com.scipath.scipathj.training.core.ModelTrainingService;
+import com.scipath.scipathj.training.model.TrainingConfiguration;
+import com.scipath.scipathj.training.model.TrainingResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import javax.swing.*;
@@ -19,7 +22,7 @@ public class TrainingController {
 
     private final JFrame parentWindow;
     private TrainingSettings settings;
-    private XGBoostTrainer trainer;
+    private XGBoostTrainer trainer; // Keep legacy temporarily for compatibility
     private SwingWorker<Void, String> trainingWorker;
 
     /**
@@ -172,7 +175,7 @@ public class TrainingController {
                 publish("Initializing XGBoost trainer...");
 
                 try {
-                    // Initialize trainer
+                    // Initialize trainer (keeping legacy for now)
                     trainer = new XGBoostTrainer(jsonFile, settings, outputDirPath);
 
                     publish("Starting model training...");
@@ -209,11 +212,7 @@ public class TrainingController {
 
                 try {
                     get(); // Check for exceptions
-                    JOptionPane.showMessageDialog(parentWindow,
-                        "XGBoost model training completed successfully!\n" +
-                        "Model and results saved to:\n" + outputDirPath,
-                        "Training Complete", JOptionPane.INFORMATION_MESSAGE);
-
+                   
                 } catch (Exception ex) {
                     String errorMessage = "Training failed: " + ex.getMessage();
                     logger.error("Training failed", ex);

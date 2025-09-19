@@ -884,16 +884,16 @@ public class DatasetControlsPanel extends JPanel {
                 case NUCLEUS:
                     nucleusROIs.add(roi);
                     String nucleusClassName = roi.getAssignedClass();
-                    // Include classified nuclei
-                    if (nucleusClassName != null && !nucleusClassName.trim().isEmpty()) {
+                    // Include classified nuclei - exclude "Unclassified" placeholder ROIs
+                    if (nucleusClassName != null && !nucleusClassName.trim().isEmpty() && !"Unclassified".equals(nucleusClassName)) {
                         classifiedNuclei.add(roi);
                     }
                     break;
                 case CYTOPLASM:
                     cytoplasmROIs.add(roi);
                     String cytoplasmClassName = roi.getAssignedClass();
-                    // Include classified cytoplasm
-                    if (cytoplasmClassName != null && !cytoplasmClassName.trim().isEmpty()) {
+                    // Include classified cytoplasm - exclude "Unclassified" placeholder ROIs
+                    if (cytoplasmClassName != null && !cytoplasmClassName.trim().isEmpty() && !"Unclassified".equals(cytoplasmClassName)) {
                         classifiedCytoplasms.add(roi);
                         LOGGER.debug("Added CYTOPLASM ROI to classified: {} -> class '{}'", roi.getName(), cytoplasmClassName);
                     } else {
@@ -904,8 +904,8 @@ public class DatasetControlsPanel extends JPanel {
                 case CELL:
                     cellROIs.add(roi);
                     String cellClassName = roi.getAssignedClass();
-                    // Include classified cells
-                    if (cellClassName != null && !cellClassName.trim().isEmpty()) {
+                    // Include classified cells - exclude "Unclassified" placeholder ROIs
+                    if (cellClassName != null && !cellClassName.trim().isEmpty() && !"Unclassified".equals(cellClassName)) {
                         classifiedCells.add(roi);
                     }
                     break;
@@ -1197,7 +1197,29 @@ public class DatasetControlsPanel extends JPanel {
         Map<String, Object> jsonData = new LinkedHashMap<>();
         jsonData.put("timestamp", new java.util.Date().toString());
         jsonData.put("totalClassifiedCells", countTotalCells(filteredFeatures));
-        jsonData.put("classes", new ArrayList<>(classCounts.keySet()));
+
+        // Filter out "Unclassified" from classes array - only include manually classified classes
+        List<String> trainingClasses = new ArrayList<>();
+        for (String className : classCounts.keySet()) {
+            if (!"Unclassified".equals(className) && classCounts.get(className) > 0) {
+                trainingClasses.add(className);
+            }
+        }
+        jsonData.put("classes", trainingClasses);
+
+        // Include class color information for each class (hex format)
+        Map<String, String> classColorInformation = new HashMap<>();
+        for (String className : trainingClasses) {
+            if (classColors.containsKey(className)) {
+                Color color = classColors.get(className);
+                // Convert RGB to hex format (ignore alpha for hex)
+                String hexColor = String.format("#%02X%02X%02X",
+                    color.getRed(), color.getGreen(), color.getBlue());
+                classColorInformation.put(className, hexColor);
+            }
+        }
+        jsonData.put("classColors", classColorInformation);
+
         jsonData.put("classifiedROIs", filteredFeatures);
         jsonData.put("featureExtractionSettings", featureSettings.toString());
 

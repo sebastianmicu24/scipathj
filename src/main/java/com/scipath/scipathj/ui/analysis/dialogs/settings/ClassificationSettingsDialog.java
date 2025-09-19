@@ -2,10 +2,15 @@ package com.scipath.scipathj.ui.analysis.dialogs.settings;
 
 import com.scipath.scipathj.analysis.config.ClassificationSettings;
 import com.scipath.scipathj.infrastructure.config.ConfigurationManager;
+import com.scipath.scipathj.training.XGBoostModelBundle;
 import com.scipath.scipathj.ui.utils.UIConstants;
 import com.scipath.scipathj.ui.utils.UIUtils;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Map;
 import java.awt.*;
-import java.io.File;
+import java.io.*;
+import java.nio.file.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.filechooser.FileFilter;
@@ -16,22 +21,12 @@ public class ClassificationSettingsDialog extends JDialog {
   private ClassificationSettings currentSettings;
   private ConfigurationManager configManager;
 
-  // UI mode: either individual files or ZIP
-  private boolean useZipMode = true; // Default to ZIP mode for simplicity
-
   // UI components
-  private JTextField zipFileField;
-  private JButton zipBrowseButton;
-
-  // Legacy individual file fields (used when not in ZIP mode)
-  private JTextField modelPathField;
-  private JTextField selectedFeaturesPathField;
-  private JTextField labelMappingPathField;
-  private JTextField classDetailsPathField;
-
-  // Mode switching
-  private JRadioButton zipModeButton;
-  private JRadioButton individualModeButton;
+  private JTextField jsonFileField;
+  private JButton jsonBrowseButton;
+  private JPanel modelInfoPanel;
+  private JPanel previewContentPanel;
+  private XGBoostModelBundle loadedBundle;
 
   public ClassificationSettingsDialog(Frame parent) {
     super(parent, "Classification Settings", true);
@@ -48,7 +43,7 @@ public class ClassificationSettingsDialog extends JDialog {
   }
 
   private void initializeDialog() {
-    setSize(600, 450);
+    setSize(900, 700);
     setLocationRelativeTo(getParent());
 
     JPanel contentPanel = new JPanel(new BorderLayout());
@@ -57,30 +52,20 @@ public class ClassificationSettingsDialog extends JDialog {
     // Title
     JPanel titlePanel = new JPanel(new BorderLayout());
     titlePanel.setBorder(UIUtils.createPadding(0, 0, UIConstants.MEDIUM_SPACING, 0));
-    JLabel titleLabel = UIUtils.createBoldLabel("XGBoost Classification Settings", UIConstants.SUBTITLE_FONT_SIZE);
+    JLabel titleLabel = UIUtils.createBoldLabel("XGBoost Model Configuration", UIConstants.SUBTITLE_FONT_SIZE);
     titleLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
-    // Info text
-    JTextArea infoArea = new JTextArea(
-        "Configure paths to XGBoost classification model files.\n" +
-        "• Model File (.json): Required - Your trained XGBoost model\n" +
-        "• Selected Features (.txt): Optional - Auto-generated if missing\n" +
-        "• Label Mapping (.properties): Optional - Auto-generated if missing\n" +
-        "• Class Details (.json): Optional - Default names used if missing\n\n" +
-        "You can use either absolute file paths or resource paths (embedded in JAR).");
-    infoArea.setEditable(false);
-    infoArea.setOpaque(false);
-    infoArea.setFont(UIUtils.createLabel("", UIConstants.SMALL_FONT_SIZE, null).getFont());
-    infoArea.setWrapStyleWord(true);
-    infoArea.setLineWrap(true);
-
-    titlePanel.add(titleLabel, BorderLayout.NORTH);
-    titlePanel.add(infoArea, BorderLayout.CENTER);
+    titlePanel.add(titleLabel, BorderLayout.CENTER);
     contentPanel.add(titlePanel, BorderLayout.NORTH);
 
-    // Settings panel
-    JPanel settingsPanel = createSettingsPanel();
-    contentPanel.add(new JScrollPane(settingsPanel), BorderLayout.CENTER);
+    // Model selection panel
+    JPanel selectionPanel = createModelSelectionPanel();
+    contentPanel.add(selectionPanel, BorderLayout.NORTH);
+
+    // Model info panel (initially hidden)
+    modelInfoPanel = createModelInfoPanel();
+    modelInfoPanel.setVisible(false);
+    contentPanel.add(modelInfoPanel, BorderLayout.CENTER);
 
     // Button panel
     contentPanel.add(createButtonPanel(), BorderLayout.SOUTH);
@@ -109,125 +94,218 @@ public class ClassificationSettingsDialog extends JDialog {
     return UIManager.getColor("Label.disabledForeground");
   }
 
-  private JPanel createSettingsPanel() {
+  private JPanel createModelSelectionPanel() {
     JPanel panel = new JPanel(new GridBagLayout());
     GridBagConstraints gbc = new GridBagConstraints();
     gbc.insets = new Insets(UIConstants.MEDIUM_SPACING, UIConstants.MEDIUM_SPACING,
-                           UIConstants.MEDIUM_SPACING, UIConstants.MEDIUM_SPACING);
+                            UIConstants.MEDIUM_SPACING, UIConstants.MEDIUM_SPACING);
     gbc.anchor = GridBagConstraints.WEST;
 
-    // Add mode selection
-    addModeSelection(panel, gbc);
-
-    // Add spacing
-    gbc.gridy++;
-    gbc.gridx = 0;
-    gbc.gridwidth = 3;
-    panel.add(new JLabel(""), gbc);
-
-    // Add mode-specific content
-    updateModeContent(panel, gbc);
+    // Add JSON file setting
+    addJsonFileSetting(panel, gbc);
 
     return panel;
   }
 
-  private void addModeSelection(JPanel panel, GridBagConstraints gbc) {
-    // Mode selection panel
-    JPanel modePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-    modePanel.setOpaque(false);
+  private JPanel createModelInfoPanel() {
+    JPanel panel = new JPanel(new BorderLayout());
+    panel.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createLineBorder(getBorderColor(), 1),
+        new EmptyBorder(20, 20, 20, 20)
+    ));
 
-    // Radio buttons for mode selection
-    ButtonGroup modeGroup = new ButtonGroup();
-    zipModeButton = new JRadioButton("ZIP Bundle (Recommended)", useZipMode);
-    individualModeButton = new JRadioButton("Individual Files", !useZipMode);
-
-    modeGroup.add(zipModeButton);
-    modeGroup.add(individualModeButton);
-
-    // Add change listeners
-    zipModeButton.addActionListener(e -> switchToZipMode());
-    individualModeButton.addActionListener(e -> switchToIndividualMode());
-
-    modePanel.add(zipModeButton);
-    modePanel.add(individualModeButton);
-
-    // Add help text
-    modePanel.add(new JLabel("<html><div style='width: 400px; color: #666; font-style: italic;'>ZIP bundles contain all model files in one convenient package</div></html>"));
-
-    gbc.gridy = 0;
-    gbc.gridx = 0;
-    gbc.gridwidth = 3;
-    panel.add(modePanel, gbc);
-  }
-
-  private void switchToZipMode() {
-    if (!useZipMode) {
-      useZipMode = true;
-      // Re-create the settings panel to show ZIP mode
-      updateDialogLayout();
-    }
-  }
-
-  private void switchToIndividualMode() {
-    if (useZipMode) {
-      useZipMode = false;
-      // Re-create the settings panel to show individual files mode
-      updateDialogLayout();
-    }
-  }
-
-  private void updateDialogLayout() {
-    // Remove current content panel
-    getContentPane().removeAll();
-
-    // Re-create and add new content
-    JPanel contentPanel = new JPanel(new BorderLayout());
-    contentPanel.setBorder(UIUtils.createPadding(UIConstants.LARGE_SPACING));
-
-    // Re-create title panel
-    JPanel titlePanel = new JPanel(new BorderLayout());
-    titlePanel.setBorder(UIUtils.createPadding(0, 0, UIConstants.MEDIUM_SPACING, 0));
-    JLabel titleLabel = UIUtils.createBoldLabel("XGBoost Classification Settings", UIConstants.SUBTITLE_FONT_SIZE);
+    // Title
+    JLabel titleLabel = UIUtils.createBoldLabel("Model Preview", UIConstants.LARGE_FONT_SIZE);
     titleLabel.setHorizontalAlignment(SwingConstants.CENTER);
+    panel.add(titleLabel, BorderLayout.NORTH);
 
-    JTextArea infoArea = new JTextArea(
-        useZipMode ? "Configure XGBoost classification using a ZIP bundle.\nThe ZIP should contain: xgboost_model.json, selected_features.txt, etc." :
-                     "Configure XGBoost classification using individual files.\nYou can use either absolute file paths or resource paths (embedded in JAR).");
-    infoArea.setEditable(false);
-    infoArea.setOpaque(false);
-    infoArea.setFont(UIUtils.createLabel("", UIConstants.SMALL_FONT_SIZE, null).getFont());
-    infoArea.setWrapStyleWord(true);
-    infoArea.setLineWrap(true);
-    infoArea.setRows(2);
+    // Create empty content panel that can be populated later
+    previewContentPanel = new JPanel();
+    previewContentPanel.setLayout(new BoxLayout(previewContentPanel, BoxLayout.Y_AXIS));
+    previewContentPanel.setOpaque(false);
+    previewContentPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
 
-    titlePanel.add(titleLabel, BorderLayout.NORTH);
-    titlePanel.add(infoArea, BorderLayout.CENTER);
-    contentPanel.add(titlePanel, BorderLayout.NORTH);
+    // Create placeholder content
+    JLabel placeholderLabel = new JLabel("No model bundle selected");
+    placeholderLabel.setHorizontalAlignment(SwingConstants.CENTER);
+    placeholderLabel.setForeground(getTextSecondaryColor());
+    previewContentPanel.add(placeholderLabel);
 
-    // Create new settings panel
-    JPanel settingsPanel = createSettingsPanel();
-    contentPanel.add(new JScrollPane(settingsPanel), BorderLayout.CENTER);
-    contentPanel.add(createButtonPanel(), BorderLayout.SOUTH);
-    add(contentPanel);
+    JScrollPane scrollPane = new JScrollPane(previewContentPanel);
+    scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+    scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+    scrollPane.setBorder(null);
+    scrollPane.setPreferredSize(new Dimension(-1, 280));
+    panel.add(scrollPane, BorderLayout.CENTER);
 
-    // Refresh the dialog
-    revalidate();
-    repaint();
-    pack();
-    setLocationRelativeTo(getParent());
+    return panel;
   }
 
-  private void updateModeContent(JPanel panel, GridBagConstraints gbc) {
-    if (useZipMode) {
-      // ZIP mode: single file selection
-      addZipFileSetting(panel, gbc);
+  private void displayModelPreview(XGBoostModelBundle bundle) {
+    if (modelInfoPanel == null || previewContentPanel == null) return;
+
+    // Clear existing content
+    previewContentPanel.removeAll();
+
+    // Title and description
+    if (bundle.modelInfo != null) {
+      if (bundle.modelInfo.title != null && !bundle.modelInfo.title.trim().isEmpty()) {
+        JLabel titleLabel = new JLabel(bundle.modelInfo.title);
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        titleLabel.setForeground(getPrimaryColor());
+        titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        previewContentPanel.add(titleLabel);
+      }
+
+      if (bundle.modelInfo.description != null && !bundle.modelInfo.description.trim().isEmpty()) {
+        JLabel descLabel = new JLabel("<html><div style='width: 400px;'>" + bundle.modelInfo.description + "</div></html>");
+        descLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        descLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        descLabel.setBorder(new EmptyBorder(5, 0, 15, 0));
+        previewContentPanel.add(descLabel);
+      }
+    }
+
+    // Classes with colors
+    if (bundle.labelMetadata != null && bundle.labelMetadata.classDetails != null && !bundle.labelMetadata.classDetails.isEmpty()) {
+      JLabel classesHeader = new JLabel("Available Classes:");
+      classesHeader.setFont(new Font("Segoe UI", Font.BOLD, 14));
+      classesHeader.setAlignmentX(Component.LEFT_ALIGNMENT);
+      classesHeader.setBorder(new EmptyBorder(0, 0, 8, 0));
+      previewContentPanel.add(classesHeader);
+
+      JPanel classesPanel = new JPanel();
+      classesPanel.setLayout(new BoxLayout(classesPanel, BoxLayout.Y_AXIS));
+      classesPanel.setOpaque(false);
+      classesPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+      for (Map.Entry<Integer, XGBoostModelBundle.ClassDetail> entry : bundle.labelMetadata.classDetails.entrySet()) {
+        XGBoostModelBundle.ClassDetail classDetail = entry.getValue();
+        Color classColor = Color.decode(classDetail.color);
+
+        JPanel classPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 2));
+        classPanel.setOpaque(false);
+
+        // Color square
+        JPanel colorSquare = new JPanel();
+        colorSquare.setPreferredSize(new Dimension(20, 20));
+        colorSquare.setBackground(classColor);
+        colorSquare.setBorder(BorderFactory.createLineBorder(Color.DARK_GRAY, 1));
+        classPanel.add(colorSquare);
+
+        // Class name and ID
+        String classText = classDetail.name;
+        if (classDetail.id >= 0) {
+          classText += " (ID: " + classDetail.id + ")";
+        }
+        JLabel classNameLabel = new JLabel(classText);
+        classNameLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        classPanel.add(classNameLabel);
+
+        classesPanel.add(classPanel);
+      }
+
+      previewContentPanel.add(classesPanel);
+      previewContentPanel.add(Box.createVerticalStrut(15));
+    }
+
+    // Performance metrics
+    if (bundle.evaluationResults != null && bundle.evaluationResults.overallMetrics != null && !bundle.evaluationResults.overallMetrics.isEmpty()) {
+      JLabel metricsHeader = new JLabel("Performance Metrics:");
+      metricsHeader.setFont(new Font("Segoe UI", Font.BOLD, 14));
+      metricsHeader.setAlignmentX(Component.LEFT_ALIGNMENT);
+      metricsHeader.setBorder(new EmptyBorder(0, 0, 8, 0));
+      previewContentPanel.add(metricsHeader);
+
+      JPanel metricsPanel = new JPanel(new GridLayout(0, 2, 15, 5));
+      metricsPanel.setOpaque(false);
+      metricsPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+      for (Map.Entry<String, Double> entry : bundle.evaluationResults.overallMetrics.entrySet()) {
+        // Format metric name (capitalize first letter, replace underscores)
+        String metricName = entry.getKey().replace("_", " ").toLowerCase();
+        metricName = metricName.substring(0, 1).toUpperCase() + metricName.substring(1);
+
+        JLabel nameLabel = new JLabel(metricName + ":");
+        nameLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        nameLabel.setForeground(getTextSecondaryColor());
+
+        String valueStr = String.format("%.3f", entry.getValue());
+        if (metricName.toLowerCase().contains("accuracy")) {
+          valueStr = String.format("%.1f%%", entry.getValue() * 100);
+        }
+
+        JLabel valueLabel = new JLabel(valueStr);
+        valueLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        valueLabel.setForeground(getSuccessColor());
+
+        metricsPanel.add(nameLabel);
+        metricsPanel.add(valueLabel);
+      }
+
+      previewContentPanel.add(metricsPanel);
+    }
+
+    // Refresh the panel
+    previewContentPanel.revalidate();
+    previewContentPanel.repaint();
+    modelInfoPanel.setVisible(true);
+    
+    // Force the entire dialog to refresh
+    this.revalidate();
+    this.repaint();
+    
+    // Debug logging
+    System.out.println("Model preview displayed successfully for: " +
+        (bundle.modelInfo != null ? bundle.modelInfo.title : "Unknown model"));
+  }
+
+  private void addModelInfoRow(JPanel panel, GridBagConstraints gbc, String label, String value) {
+    JLabel labelComp = new JLabel(label);
+    labelComp.setFont(new Font("Segoe UI", Font.BOLD, 12));
+    labelComp.setForeground(getPrimaryColor());
+
+    String displayValue = value != null && !value.isEmpty() ? value : "Not specified";
+    JLabel valueComp = new JLabel(displayValue);
+    valueComp.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+
+    panel.add(labelComp, gbc);
+    gbc.gridx = 1;
+    panel.add(valueComp, gbc);
+  }
+
+  /**
+   * Safely format a numeric value that might be Integer, Double, or other types
+   * @param value The object value to format
+   * @param format The printf format string
+   * @return Formatted string or "N/A" if not a number
+   */
+  private String formatNumberValue(Object value, String format) {
+    if (value instanceof Number) {
+      return String.format(format, ((Number) value).doubleValue());
+    } else if (value instanceof String && !"N/A".equals(value)) {
+      try {
+        // Try to parse as number
+        double num = Double.parseDouble((String) value);
+        return String.format(format, num);
+      } catch (NumberFormatException e) {
+        return "N/A";
+      }
     } else {
-      // Individual files mode
-      addIndividualFileSettings(panel, gbc);
+      return "N/A";
     }
   }
 
-  private void addZipFileSetting(JPanel panel, GridBagConstraints gbc) {
+  private JButton createSaveButton() {
+    JButton saveButton = UIUtils.createStandardButton("Save Model Configuration", null);
+    saveButton.setPreferredSize(new Dimension(200, 30));
+    saveButton.addActionListener(e -> saveSettings());
+    return saveButton;
+  }
+
+
+
+  private void addJsonFileSetting(JPanel panel, GridBagConstraints gbc) {
     gbc.gridy = 2;
     gbc.gridx = 0;
     gbc.gridwidth = 3;
@@ -245,17 +323,17 @@ public class ClassificationSettingsDialog extends JDialog {
     headerPanel.setLayout(new BoxLayout(headerPanel, BoxLayout.Y_AXIS));
     headerPanel.setOpaque(false);
 
-    FontIcon icon = FontIcon.of(org.kordamp.ikonli.fontawesome5.FontAwesomeSolid.FILE_ARCHIVE,
+    FontIcon icon = FontIcon.of(org.kordamp.ikonli.fontawesome5.FontAwesomeSolid.FILE_CODE,
                                 20, getPrimaryColor());
     JPanel labelWithIcon = new JPanel(new FlowLayout(FlowLayout.LEFT));
     labelWithIcon.setOpaque(false);
-    labelWithIcon.add(new JLabel("Select XGBoost Model ZIP Bundle"));
+    labelWithIcon.add(new JLabel("Select XGBoost Model JSON Bundle"));
     labelWithIcon.add(new JLabel("<html>&nbsp;&nbsp;</html>")); // Spacing
     labelWithIcon.add(new JLabel(icon));
     headerPanel.add(labelWithIcon);
 
     // Description
-    JLabel descLabel = new JLabel("<html><div style='width: 450px; color: #666;'>Choose a ZIP file containing all XGBoost model components. This ZIP file should include xgboost_model.json, selected_features.txt, and other supporting files.</div></html>");
+    JLabel descLabel = new JLabel("<html><div style='width: 450px; color: #666;'>Choose a JSON file containing the complete XGBoost model bundle. This single JSON file includes the trained model, feature metadata, label mappings, and all configuration.</div></html>");
     descLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
     descLabel.setForeground(getTextSecondaryColor());
     descLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -268,174 +346,73 @@ public class ClassificationSettingsDialog extends JDialog {
     JPanel inputPanel = new JPanel(new BorderLayout(12, 0));
     inputPanel.setOpaque(false);
 
-    zipFileField = new JTextField();
-    zipFileField.setPreferredSize(new Dimension(400, 40));
-    zipFileField.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-    zipFileField.setBorder(BorderFactory.createCompoundBorder(
+    jsonFileField = new JTextField();
+    jsonFileField.setPreferredSize(new Dimension(400, 40));
+    jsonFileField.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+    jsonFileField.setBorder(BorderFactory.createCompoundBorder(
         BorderFactory.createLineBorder(getBorderColor(), 1),
         new EmptyBorder(8, 12, 8, 12)
     ));
 
-    zipBrowseButton = UIUtils.createStandardButton("Browse ZIP Files...", null);
-    zipBrowseButton.setPreferredSize(new Dimension(140, 40));
-    zipBrowseButton.addActionListener(e -> browseForZipFile());
+    jsonBrowseButton = UIUtils.createStandardButton("Browse JSON Files...", null);
+    jsonBrowseButton.setPreferredSize(new Dimension(140, 40));
+    jsonBrowseButton.addActionListener(e -> browseForJsonFile());
 
-    inputPanel.add(zipFileField, BorderLayout.CENTER);
-    inputPanel.add(zipBrowseButton, BorderLayout.EAST);
+    inputPanel.add(jsonFileField, BorderLayout.CENTER);
+    inputPanel.add(jsonBrowseButton, BorderLayout.EAST);
 
     zipPanel.add(inputPanel, BorderLayout.CENTER);
 
     panel.add(zipPanel, gbc);
   }
 
-  private void addIndividualFileSettings(JPanel panel, GridBagConstraints gbc) {
-    // Reset row counter for individual mode
-    gbc.gridy = 2;
 
-    // Add original individual file settings
-    addFileSettingRow(panel, gbc, "XGBoost Model File (.json):",
-                      currentSettings.modelPath(), modelPathField = new JTextField(),
-                      "XGBoost model file in JSON format (Required)");
-
-    addFileSettingRow(panel, gbc, "Selected Features File (.txt):",
-                      currentSettings.selectedFeaturesPath(), selectedFeaturesPathField = new JTextField(),
-                      "Text file containing selected feature names (Optional - Auto-generated if missing)");
-
-    addFileSettingRow(panel, gbc, "Label Mapping File (.properties):",
-                      currentSettings.labelMappingPath(), labelMappingPathField = new JTextField(),
-                      "Properties file mapping XGBoost indices to class IDs (Optional - Auto-generated if missing)");
-
-    addFileSettingRow(panel, gbc, "Class Details File (.json):",
-                      currentSettings.classDetailsPath(), classDetailsPathField = new JTextField(),
-                      "JSON file containing class names, IDs, and colors (Optional - Defaults used if missing)");
-  }
-
-  private void browseForZipFile() {
+  private void browseForJsonFile() {
     JFileChooser fileChooser = new JFileChooser();
-    fileChooser.setDialogTitle("Select XGBoost Model ZIP Bundle");
+    fileChooser.setDialogTitle("Select XGBoost Model JSON Bundle");
     fileChooser.setAcceptAllFileFilterUsed(true);
 
-    // Set ZIP file filter
+    // Set JSON file filter
     fileChooser.setFileFilter(new javax.swing.filechooser.FileFilter() {
       @Override
       public boolean accept(java.io.File f) {
         return f.isDirectory() ||
-               f.getName().toLowerCase().endsWith(".zip") ||
-               f.getName().toLowerCase().endsWith(".gz");
+               f.getName().toLowerCase().endsWith(".json");
       }
 
       @Override
       public String getDescription() {
-        return "ZIP Archives (*.zip, *.gz)";
+        return "JSON Bundles (*.json)";
       }
     });
 
     if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
       java.io.File selectedFile = fileChooser.getSelectedFile();
-      zipFileField.setText(selectedFile.getAbsolutePath());
-    }
-  }
+      jsonFileField.setText(selectedFile.getAbsolutePath());
 
-  private void addFileSettingRow(JPanel panel, GridBagConstraints gbc,
-                                String labelText, String currentValue,
-                                JTextField textField, String tooltip) {
-
-    // Label
-    gbc.gridx = 0;
-    gbc.gridwidth = 1;
-    gbc.anchor = GridBagConstraints.WEST;
-    JLabel label = UIUtils.createLabel(labelText, UIConstants.NORMAL_FONT_SIZE, null);
-    label.setToolTipText(tooltip);
-    panel.add(label, gbc);
-
-    // Text field
-    gbc.gridx = 1;
-    gbc.fill = GridBagConstraints.HORIZONTAL;
-    gbc.weightx = 1.0;
-    textField.setText(currentValue);
-    textField.setToolTipText(tooltip);
-    panel.add(textField, gbc);
-
-    // Browse button
-    gbc.gridx = 2;
-    gbc.fill = GridBagConstraints.NONE;
-    gbc.weightx = 0.0;
-    JButton browseButton = UIUtils.createSmallButton("Browse...", null);
-    browseButton.addActionListener(e -> browseForFile(textField, getFileFilterForLabel(labelText)));
-    browseButton.setToolTipText("Browse for file");
-    panel.add(browseButton, gbc);
-
-    // Next row
-    gbc.gridy++;
-  }
-
-  private void browseForFile(JTextField textField, FileFilter fileFilter) {
-    JFileChooser fileChooser = new JFileChooser();
-
-    // Set current directory to the text field value if it's an absolute path
-    String currentPath = textField.getText();
-    if (currentPath != null && !currentPath.isEmpty()) {
-      File currentFile = new File(currentPath);
-      if (currentFile.exists()) {
-        fileChooser.setCurrentDirectory(currentFile.getParentFile());
-        fileChooser.setSelectedFile(currentFile);
-      } else if (currentPath.startsWith("/")) {
-        // Resource path, start from project root
-        fileChooser.setCurrentDirectory(new File("."));
+      // Load and display model information
+      try {
+        System.out.println("Loading bundle from: " + selectedFile.getAbsolutePath());
+        loadedBundle = loadBundleInfo(selectedFile.getAbsolutePath());
+        if (loadedBundle != null) {
+          System.out.println("Bundle loaded successfully, displaying preview...");
+          displayModelPreview(loadedBundle);
+        } else {
+          System.out.println("Bundle is null, cannot display preview");
+        }
+      } catch (Exception e) {
+        JOptionPane.showMessageDialog(this,
+            "Selected file is not a valid XGBoost model bundle:\n" + e.getMessage(),
+            "Invalid Bundle", JOptionPane.ERROR_MESSAGE);
+        loadedBundle = null;
+        modelInfoPanel.setVisible(false);
       }
     }
-
-    if (fileFilter != null) {
-      fileChooser.setFileFilter(fileFilter);
-    }
-
-    int result = fileChooser.showOpenDialog(this);
-    if (result == JFileChooser.APPROVE_OPTION) {
-      File selectedFile = fileChooser.getSelectedFile();
-      textField.setText(selectedFile.getAbsolutePath());
-    }
   }
 
-  private FileFilter getFileFilterForLabel(String labelText) {
-    if (labelText.contains(".json")) {
-      return new FileFilter() {
-        @Override
-        public boolean accept(File f) {
-          return f.isDirectory() || f.getName().toLowerCase().endsWith(".json");
-        }
 
-        @Override
-        public String getDescription() {
-          return "JSON Files (*.json)";
-        }
-      };
-    } else if (labelText.contains(".txt")) {
-      return new FileFilter() {
-        @Override
-        public boolean accept(File f) {
-          return f.isDirectory() || f.getName().toLowerCase().endsWith(".txt");
-        }
 
-        @Override
-        public String getDescription() {
-          return "Text Files (*.txt)";
-        }
-      };
-    } else if (labelText.contains(".properties")) {
-      return new FileFilter() {
-        @Override
-        public boolean accept(File f) {
-          return f.isDirectory() || f.getName().toLowerCase().endsWith(".properties");
-        }
 
-        @Override
-        public String getDescription() {
-          return "Properties Files (*.properties)";
-        }
-      };
-    }
-    return null;
-  }
 
   private JPanel createButtonPanel() {
     JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -457,31 +434,46 @@ public class ClassificationSettingsDialog extends JDialog {
 
   private void saveSettings() {
     try {
-      ClassificationSettings newSettings = new ClassificationSettings(
-          modelPathField.getText().trim(),
-          selectedFeaturesPathField.getText().trim(),
-          labelMappingPathField.getText().trim(),
-          classDetailsPathField.getText().trim()
-      );
+      String jsonPath = jsonFileField.getText().trim();
+      if (jsonPath.isEmpty() || !Files.exists(Paths.get(jsonPath)) || !jsonPath.endsWith(".json")) {
+        // Use defaults - no custom JSON bundle selected
+        ClassificationSettings newSettings = ClassificationSettings.createDefault();
+        configManager.saveClassificationSettings(newSettings);
+        JOptionPane.showMessageDialog(this,
+            "Using default classifiers. No custom JSON bundle selected.",
+            "Settings Saved", JOptionPane.INFORMATION_MESSAGE);
+      } else {
+        // Validate JSON bundle exists and can be loaded
+        if (!isValidJsonBundle(jsonPath)) {
+          JOptionPane.showMessageDialog(this,
+              "Selected file is not a valid XGBoost model bundle or cannot be loaded.\nPlease select a JSON file created by SciPathJ's training process.",
+              "Invalid Bundle", JOptionPane.ERROR_MESSAGE);
+          return;
+        }
 
-      // Validate the settings
-      newSettings.validate();
+        // Create settings pointing to the JSON bundle
+        // Create settings with the JSON bundle path as the model path
+        // The classification system will detect this is a JSON bundle and load appropriately
+        ClassificationSettings newSettings = ClassificationSettings.withCustomModel(jsonPath);
+        newSettings.validate();
+        configManager.saveClassificationSettings(newSettings);
 
-      // Save to configuration manager
-      configManager.saveClassificationSettings(newSettings);
-
-      // Show success message
-      JOptionPane.showMessageDialog(this,
-          "Classification settings saved successfully!\n\n" + getConfigurationInfo(newSettings),
-          "Settings Saved", JOptionPane.INFORMATION_MESSAGE);
-
-      // Close dialog
+        // Load basic info from the bundle for display
+        try {
+          XGBoostModelBundle bundle = loadBundleInfo(jsonPath);
+          JOptionPane.showMessageDialog(this,
+              "JSON bundle validated and settings saved successfully!\n\n" +
+              "Title: " + bundle.modelInfo.title + "\n" +
+              "Description: " + bundle.modelInfo.description + "\n" +
+              "File: " + new File(jsonPath).getName(),
+              "Settings Saved", JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception e) {
+          JOptionPane.showMessageDialog(this,
+              "JSON bundle loaded and settings saved successfully!\n\n" + getConfigurationInfo(newSettings),
+              "Settings Saved", JOptionPane.INFORMATION_MESSAGE);
+        }
+      }
       dispose();
-
-    } catch (IllegalArgumentException e) {
-      JOptionPane.showMessageDialog(this,
-          "Invalid settings: " + e.getMessage(),
-          "Validation Error", JOptionPane.ERROR_MESSAGE);
     } catch (Exception e) {
       JOptionPane.showMessageDialog(this,
           "Error saving settings: " + e.getMessage(),
@@ -489,21 +481,139 @@ public class ClassificationSettingsDialog extends JDialog {
     }
   }
 
+  /**
+   * Validate that the selected file is a valid XGBoost model bundle
+   */
+  private boolean isValidJsonBundle(String jsonPath) {
+    try {
+      XGBoostModelBundle bundle = loadBundleInfo(jsonPath);
+      return bundle != null &&
+             bundle.xgboostModel != null &&
+             bundle.xgboostModel.modelJson != null &&
+             !bundle.xgboostModel.modelJson.trim().isEmpty();
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  /**
+   * Load basic bundle information for validation/display
+   */
+  private XGBoostModelBundle loadBundleInfo(String jsonPath) throws IOException {
+    try {
+      // Log what we're trying to load
+      java.util.logging.Logger logger = java.util.logging.Logger.getLogger("XGBoostSettings");
+      logger.info("Attempting to load XGBoost bundle from: " + jsonPath);
+
+      File bundleFile = new File(jsonPath);
+      if (!bundleFile.exists()) {
+        throw new IOException("Bundle file does not exist: " + jsonPath);
+      }
+      logger.info("Bundle file exists, size: " + bundleFile.length() + " bytes");
+
+      ObjectMapper mapper = new ObjectMapper();
+
+      // Configure ObjectMapper with comprehensive error handling
+      mapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS, false);
+      mapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_AS_NULL, true);
+      mapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.ACCEPT_FLOAT_AS_INT, true);
+      mapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+      logger.info("Starting JSON deserialization...");
+
+      // First try to read as raw JSON to see the structure
+      try {
+        com.fasterxml.jackson.databind.JsonNode rootNode = mapper.readTree(bundleFile);
+
+        // Collect root field names manually for compatibility
+        java.util.List<String> rootKeys = new java.util.ArrayList<>();
+        java.util.Iterator<String> fieldIterator = rootNode.fieldNames();
+        while (fieldIterator.hasNext()) {
+          rootKeys.add(fieldIterator.next());
+        }
+
+        logger.info("Successfully read JSON structure. Root keys: " + java.lang.String.join(", ", rootKeys));
+
+        // Check specific fields that might cause issues
+        if (rootNode.has("training_config") && rootNode.get("training_config").has("hyperparameters")) {
+          com.fasterxml.jackson.databind.JsonNode hyperparams = rootNode.get("training_config").get("hyperparameters");
+          logger.info("Found hyperparameters section with " + hyperparams.size() + " parameters");
+
+          // List the hyperparameters and their types
+          java.util.Iterator<String> fieldNames = hyperparams.fieldNames();
+          while (fieldNames.hasNext()) {
+            String paramName = fieldNames.next();
+            com.fasterxml.jackson.databind.JsonNode paramValue = hyperparams.get(paramName);
+            logger.info("  Parameter '" + paramName + "' type: " + paramValue.getNodeType() + " value: " + paramValue.toString());
+          }
+        }
+      } catch (Exception e) {
+        logger.warning("Failed to read JSON structure: " + e.getMessage());
+      }
+
+      // Now try the full deserialization
+      logger.info("Attempting full XGBoostModelBundle deserialization...");
+      XGBoostModelBundle bundle = mapper.readValue(bundleFile, XGBoostModelBundle.class);
+
+      // Handle backwards compatibility - copy root-level fields to nested structure if present
+      if (bundle.modelInfo == null) {
+        bundle.modelInfo = new XGBoostModelBundle.ModelInfo();
+      }
+      
+      if (bundle.modelTitle != null && !bundle.modelTitle.trim().isEmpty()) {
+        bundle.modelInfo.title = bundle.modelTitle;
+      }
+      if (bundle.modelDescription != null && !bundle.modelDescription.trim().isEmpty()) {
+        bundle.modelInfo.description = bundle.modelDescription;
+      }
+      if (bundle.modelVersion != null && !bundle.modelVersion.trim().isEmpty()) {
+        bundle.modelInfo.version = bundle.modelVersion;
+      }
+
+      logger.info("Successfully loaded XGBoost bundle for: " + (bundle.modelInfo != null ? bundle.modelInfo.title : "Unknown"));
+      return bundle;
+
+    } catch (ClassCastException e) {
+      // This is likely the Integer/Double casting error
+      java.util.logging.Logger logger = java.util.logging.Logger.getLogger("XGBoostSettings");
+      logger.severe("ClassCastException during bundle loading: " + e.getMessage());
+      logger.severe("Exception type: " + e.getClass().getName());
+      logger.severe("Stack trace: ");
+
+      // Log the full stack trace
+      StringWriter sw = new StringWriter();
+      PrintWriter pw = new PrintWriter(sw);
+      e.printStackTrace(pw);
+      logger.severe(sw.toString());
+
+      // Re-throw as IOException with more details
+      throw new IOException("Failed to parse XGBoost bundle - class casting error: " + e.getMessage() +
+                           ". This usually indicates mixed Integer/Double types in hyperparameters or other fields.", e);
+
+    } catch (Exception e) {
+      java.util.logging.Logger logger = java.util.logging.Logger.getLogger("XGBoostSettings");
+      logger.severe("Unexpected error during bundle loading: " + e.getMessage());
+      logger.severe("Exception type: " + e.getClass().getName());
+
+      // Log the full stack trace
+      StringWriter sw = new StringWriter();
+      PrintWriter pw = new PrintWriter(sw);
+      e.printStackTrace(pw);
+      logger.severe(sw.toString());
+
+      throw new IOException("Failed to load XGBoost bundle: " + e.getMessage(), e);
+    }
+  }
+
   private void resetToDefaults() {
     int confirm = JOptionPane.showConfirmDialog(this,
-        "Are you sure you want to reset all settings to defaults?",
+        "Are you sure you want to reset to default classifiers?",
         "Confirm Reset", JOptionPane.YES_NO_OPTION);
 
     if (confirm == JOptionPane.YES_OPTION) {
-      ClassificationSettings defaultSettings = ClassificationSettings.createDefault();
-
-      modelPathField.setText(defaultSettings.modelPath());
-      selectedFeaturesPathField.setText(defaultSettings.selectedFeaturesPath());
-      labelMappingPathField.setText(defaultSettings.labelMappingPath());
-      classDetailsPathField.setText(defaultSettings.classDetailsPath());
-
+      jsonFileField.setText("");
       JOptionPane.showMessageDialog(this,
-          "Settings reset to defaults. Click 'Save & Close' to apply.",
+          "Reset to defaults. Click 'Save & Close' to apply.",
           "Reset Complete", JOptionPane.INFORMATION_MESSAGE);
     }
   }

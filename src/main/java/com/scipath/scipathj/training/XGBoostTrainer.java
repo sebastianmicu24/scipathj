@@ -6,10 +6,13 @@ import ml.dmlc.xgboost4j.java.XGBoost;
 import ml.dmlc.xgboost4j.java.XGBoostError;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
@@ -73,10 +76,7 @@ public class XGBoostTrainer {
         DMatrix testMatrix = splitData[1];
 
         // Train and evaluate
-        Map<String, Object> metrics = trainAndEvaluate(trainMatrix, testMatrix);
-
-        // Save results
-        saveResults(metrics, trainMatrix.rowNum(), testMatrix.rowNum());
+        Map<String, Object> metrics = trainAndEvaluate(trainMatrix, testMatrix, trainMatrix.rowNum(), testMatrix.rowNum());
 
         logger.info("--- XGBoost Training Complete ---");
     }
@@ -166,7 +166,7 @@ public class XGBoostTrainer {
         return matrix;
     }
 
-    private Map<String, Object> trainAndEvaluate(DMatrix trainMatrix, DMatrix testMatrix)
+    private Map<String, Object> trainAndEvaluate(DMatrix trainMatrix, DMatrix testMatrix, long trainRows, long testRows)
             throws XGBoostError, IOException {
         logger.info("Training XGBoost model with {} estimators", settings.getNumTrees());
 
@@ -189,6 +189,9 @@ public class XGBoostTrainer {
 
         // Evaluate model
         Map<String, Double> metrics = evaluateModel(booster, testMatrix);
+
+        // Run data analysis for debugging classification bias
+        debugTrainingDataAnalysis();
 
         // Save model and feature importance
         saveModel(booster);
@@ -219,17 +222,45 @@ public class XGBoostTrainer {
         params.put("num_class", dataReader.getClassNameToIdMap().size());
         params.put("eval_metric", "mlogloss");
         params.put("verbosity", 1);
+
+        // Auto-adjust for medical data class imbalance
+        Map<String, Float> trainingLabels = dataReader.getTrainingLabels();
+        Map<Float, Integer> labelCounts = new HashMap<>();
+
+        for (Float label : trainingLabels.values()) {
+            labelCounts.put(label, labelCounts.getOrDefault(label, 0) + 1);
+        }
+
+        int totalSamples = trainingLabels.size();
+        boolean hasImbalance = false;
+
+        for (Map.Entry<Float, Integer> entry : labelCounts.entrySet()) {
+            float percentage = (entry.getValue() * 100.0f) / totalSamples;
+            if (percentage > 70) {
+                hasImbalance = true;
+                break;
+            }
+        }
+
+        if (hasImbalance) {
+            // Medical data optimizations: more conservative learning, higher regularization
+            params.put("eta", Math.min(settings.getLearningRate(), 0.05f)); // Faster convergence
+            params.put("max_depth", Math.min(settings.getMaxDepth(), 4)); // Shallower trees
+            params.put("min_child_weight", Math.max(settings.getMinChildWeight(), 10)); // More conservative splits
+            params.put("subsample", Math.min(settings.getSubsample(), 0.8f)); // More randomization
+
+            logger.info("🏥 MEDICAL DATA OPTIMIZATIONS ACTIVATED:");
+            logger.info(" • Conservative learning rate: {}", params.get("eta"));
+            logger.info(" • Conservative tree depth: {}", params.get("max_depth"));
+            logger.info(" • Higher min_child_weight: {}", params.get("min_child_weight"));
+            logger.info(" • This prevents the model from overfitting to the majority class");
+        }
+
         return params;
     }
 
     private void applyClassBalancing(DMatrix trainMatrix) throws XGBoostError {
-        if (!settings.isBalanceClasses()) {
-            logger.info("Class balancing disabled");
-            return;
-        }
-
-        logger.info("Applying class balancing...");
-
+        // Get training labels to analyze class distribution
         float[] trainLabels = trainMatrix.getLabel();
         Map<Float, Integer> classCounts = new HashMap<>();
 
@@ -240,16 +271,58 @@ public class XGBoostTrainer {
 
         int totalSamples = trainLabels.length;
         int numClasses = classCounts.size();
+
+        // Auto-detect severe imbalance or if balancing is explicitly enabled
+        boolean shouldBalance = false;
+        float maxClassPercentage = 0;
+
+        for (Map.Entry<Float, Integer> entry : classCounts.entrySet()) {
+            float percentage = (entry.getValue() * 100.0f) / totalSamples;
+            if (percentage > maxClassPercentage) maxClassPercentage = percentage;
+        }
+
+        if (settings.isBalanceClasses()) {
+            logger.info("Applying class balancing (enabled in settings)");
+            shouldBalance = true;
+        } else if (maxClassPercentage > 60) { // Auto-balance if one class dominates
+            logger.warn("Auto-activating class balancing! Major class holds {:.1f}% of data", maxClassPercentage);
+            logger.warn("This is common with medical data (e.g., most cells are hepatocytes)");
+            shouldBalance = true;
+        }
+
+        if (!shouldBalance) {
+            logger.info("Class balancing not needed - classes are reasonably balanced");
+            return;
+        }
+
+        logger.info("CALCULATING CLASS BALANCE WEIGHTS:");
+        logger.info(" • {} classes, {} total samples", numClasses, totalSamples);
+
         float[] sampleWeights = new float[totalSamples];
+        float minWeight = Float.MAX_VALUE;
+        float maxWeight = 0;
 
         for (Map.Entry<Float, Integer> entry : classCounts.entrySet()) {
             Float classId = entry.getKey();
             Integer count = entry.getValue();
-            float weight = (float) totalSamples / (numClasses * count);
+            float percentage = (count * 100.0f) / totalSamples;
 
-            logger.debug("Class {}: count={}, weight={}", classId, count, weight);
+            // Use inverse class frequency weighting for medical data
+            // Weight = total_samples / (class_count * num_classes)
+            float weight = (float) totalSamples / (count * numClasses);
 
-            // Apply weights to samples of this class
+            // Boost rare classes even more for medical data where some cell types are naturally rare
+            if (percentage < 20) {
+                weight *= 2.0f; // Double weight for rare classes
+                logger.info(" • 🔄 Class {}: {} samples ({:.1f}%) → weight={:.3f} (2x boosted)", classId, count, percentage, weight);
+            } else {
+                logger.info(" • Class {}: {} samples ({:.1f}%) → weight={:.3f}", classId, count, percentage, weight);
+            }
+
+            minWeight = Math.min(minWeight, weight);
+            maxWeight = Math.max(maxWeight, weight);
+
+            // Apply weights to all samples of this class
             for (int i = 0; i < totalSamples; i++) {
                 if (trainLabels[i] == classId) {
                     sampleWeights[i] = weight;
@@ -257,8 +330,13 @@ public class XGBoostTrainer {
             }
         }
 
+        logger.info("BALANCING SUMMARY:");
+        logger.info(" • Weight range: {:.3f} - {:.3f}", minWeight, maxWeight);
+        logger.info(" • Class imbalance ratio: {:.1f}x", maxWeight / minWeight);
+
         trainMatrix.setWeight(sampleWeights);
-        logger.info("Applied class balancing weights");
+        logger.info("✅ Class balancing applied - minority classes will receive more attention");
+        logger.info("✅ This should prevent XGBoost from always predicting the majority class");
     }
 
     private Map<String, Double> evaluateModel(Booster booster, DMatrix testMatrix)
@@ -268,14 +346,56 @@ public class XGBoostTrainer {
         float[][] predictions = booster.predict(testMatrix);
         float[] trueLabels = testMatrix.getLabel();
 
+        // Debug evaluation data
+        logger.info("EVALUATION DEBUG:");
+        logger.info(" • Test samples: {}", trueLabels.length);
+        logger.info(" • Prediction array shape: {}x{}", predictions.length, predictions[0].length);
+
+        // Count prediction distribution
+        Map<Integer, Integer> predictionCounts = new HashMap<>();
+        for (int i = 0; i < predictions.length; i++) {
+            int predictedClass = getPredictedClass(predictions[i]);
+            predictionCounts.put(predictedClass, predictionCounts.getOrDefault(predictedClass, 0) + 1);
+        }
+
+        logger.info(" • Prediction distribution:");
+        for (Map.Entry<Integer, Integer> entry : predictionCounts.entrySet()) {
+            double percentage = (entry.getValue() * 100.0) / predictions.length;
+            logger.info("   • Predicts class {}: {} samples ({:.1f}%)", entry.getKey(), entry.getValue(), percentage);
+        }
+
+        // Check for prediction bias
+        for (Map.Entry<Integer, Integer> entry : predictionCounts.entrySet()) {
+            double percentage = (entry.getValue() * 100.0) / predictions.length;
+            if (percentage > 80) {
+                logger.warn("⚠️ PREDICTION BIAS: Model predicts class {} in {:.1f}% of cases!", entry.getKey(), percentage);
+            }
+        }
+
+        // Show sample predictions
+        logger.info("SAMPLE PREDICTIONS (first 10):");
+        for (int i = 0; i < Math.min(10, predictions.length); i++) {
+            int predictedClass = getPredictedClass(predictions[i]);
+            float confidence = predictions[i][predictedClass];
+            logger.info(" • Sample {}: True={}, Predicted={}, Confidence={:.3f}",
+                i, (int)trueLabels[i], predictedClass, confidence);
+        }
+
         // Calculate metrics
         Map<String, Double> metrics = new HashMap<>();
 
         // Accuracy
         int correct = 0;
+        Map<Integer, Integer> confMatrix = new HashMap<>();
         for (int i = 0; i < trueLabels.length; i++) {
             int predictedClass = getPredictedClass(predictions[i]);
-            if (predictedClass == (int) trueLabels[i]) {
+            int trueClass = (int) trueLabels[i];
+
+            // Build simple confusion matrix
+            String key = trueClass + "_" + predictedClass;
+            confMatrix.put(key.hashCode(), confMatrix.getOrDefault(key.hashCode(), 0) + 1);
+
+            if (predictedClass == trueClass) {
                 correct++;
             }
         }
@@ -283,6 +403,10 @@ public class XGBoostTrainer {
         metrics.put("accuracy", accuracy);
 
         logger.info("Model evaluation - Accuracy: {:.4f}", accuracy);
+        logger.info("CONFUSION MATRIX DEBUG:");
+        for (Map.Entry<Integer, Integer> entry : confMatrix.entrySet()) {
+            logger.info(" • Confusion entry: {} samples", entry.getValue());
+        }
 
         // Additional metrics can be added here
         metrics.put("f1", accuracy); // Simplified for now
@@ -304,22 +428,104 @@ public class XGBoostTrainer {
         return maxIndex;
     }
 
+    /**
+     * Debug method to analyze training data distribution and potential issues
+     */
+    public void debugTrainingDataAnalysis() {
+        logger.info("=== TRAINING DATA ANALYSIS FOR CLASSIFICATION DEBUGGING ===");
+
+        Map<String, Float> trainingLabels = dataReader.getTrainingLabels();
+        Map<String, Integer> classNameToIdMap = dataReader.getClassNameToIdMap();
+        Map<String, float[]> features = dataReader.getFilteredCellFeatures();
+
+        logger.info("DATA OVERVIEW:");
+        logger.info(" • Total samples: {}", trainingLabels.size());
+        logger.info(" • Total features: {}", dataReader.getSelectedFeatureNames().size());
+        logger.info(" • Feature names: {}", dataReader.getSelectedFeatureNames());
+        logger.info(" • Configured classes: {} ({})", classNameToIdMap.size(), classNameToIdMap.keySet());
+        logger.info(" • Number of classes in data: {}", trainingLabels.values().stream().distinct().count());
+
+        // Count samples per class
+        Map<Float, Integer> labelCounts = new HashMap<>();
+        for (Float label : trainingLabels.values()) {
+            labelCounts.put(label, labelCounts.getOrDefault(label, 0) + 1);
+        }
+
+        logger.info("CLASS DISTRIBUTION:");
+        int totalSamples = trainingLabels.size();
+        for (Map.Entry<Float, Integer> entry : labelCounts.entrySet()) {
+            float percentage = (entry.getValue() * 100.0f) / totalSamples;
+            String className = classNameToIdMap.entrySet().stream()
+                .filter(e -> e.getValue().equals(entry.getKey().intValue()))
+                .map(Map.Entry::getKey)
+                .findFirst().orElse("Unknown");
+            logger.info(" • Class {} ({}) = {} samples ({:.2f}%)",
+                entry.getKey(), className, entry.getValue(), percentage);
+        }
+
+        // Check for class imbalance and recommend auto-balancing
+        boolean hasSevereImbalance = false;
+        for (Map.Entry<Float, Integer> entry : labelCounts.entrySet()) {
+            float percentage = (entry.getValue() * 100.0f) / totalSamples;
+            if (percentage > 75) {
+                logger.error("🚨 AUTO-BALANCING ACTIVATED: Class {} dominates {:.1f}% of data!", entry.getKey(), percentage);
+                hasSevereImbalance = true;
+                // Force balancing even if disabled in settings
+                logger.warn("💡 Force-activating class balancing to handle severe imbalance");
+            } else if (percentage < 10) {
+                logger.warn("⚠️ Rare class detected: {} has only {:.1f}% of data - will benefit from balancing", entry.getKey(), percentage);
+            }
+        }
+
+        if (hasSevereImbalance) {
+            logger.warn("🔄 RECOMMENDATION: Update settings.yaml to set 'balance_classes: true'");
+            logger.warn("🔄 This will automatically weight minority classes more heavily in training");
+        }
+
+        // Check for missing classes
+        Set<Integer> classesWithData = trainingLabels.values().stream()
+            .map(Float::intValue).distinct().collect(java.util.stream.Collectors.toSet());
+        for (Map.Entry<String, Integer> entry : classNameToIdMap.entrySet()) {
+            if (!classesWithData.contains(entry.getValue())) {
+                logger.warn("⚠️ PROBLEM: Class '{}' (id={}) has NO training samples!", entry.getKey(), entry.getValue());
+            }
+        }
+
+        // XGBoost label mapping analysis
+        List<Float> sortedLabels = new ArrayList<>(labelCounts.keySet());
+        Collections.sort(sortedLabels);
+
+        logger.info("XGBoost LABEL MAPPING:");
+        logger.info(" • Training labels will be sorted: {}", sortedLabels);
+        for (int i = 0; i < sortedLabels.size(); i++) {
+            logger.info(" • Original {} → XGBoost internal index {}", sortedLabels.get(i), i);
+        }
+
+        // Feature statistics
+        logger.info("FEATURE DISTRIBUTION (first 3 samples):");
+        List<String> sampleKeys = new ArrayList<>(features.keySet()).subList(0, Math.min(3, features.size()));
+        List<String> featureNames = dataReader.getSelectedFeatureNames();
+
+        for (int i = 0; i < sampleKeys.size(); i++) {
+            String key = sampleKeys.get(i);
+            Float label = trainingLabels.get(key);
+            float[] featureVec = features.get(key);
+
+            logger.info(" • Sample {} (label={}):", key, label);
+            for (int j = 0; j < Math.min(5, featureVec.length); j++) {
+                logger.info("   • {}: {}", featureNames.get(j), featureVec[j]);
+            }
+        }
+
+        logger.info("=== END TRAINING DATA ANALYSIS ===");
+    }
+
     private void saveModel(Booster booster) throws XGBoostError, IOException {
         // Ensure output directory exists
         Files.createDirectories(Paths.get(outputDir));
 
-        // Save model
-        String modelPath = Paths.get(outputDir, "xgboost_model.json").toString();
-        booster.saveModel(modelPath);
-        logger.info("Model saved to: {}", modelPath);
-
-        // Save supporting files needed for CellClassification
-        saveSelectedFeatures();
-        saveLabelMapping();
-        saveClassDetails();
-
-        // Save additional metadata
-        saveTrainingConfig();
+        // Save only the complete JSON bundle (no separate model file)
+        saveCompleteModelBundle(booster);
     }
 
     private void saveTrainingConfig() throws IOException {
@@ -364,20 +570,40 @@ public class XGBoostTrainer {
     /**
      * Save XGBoost label mapping (original class ID -> XGBoost index).
      */
-    private void saveLabelMapping() throws IOException {
+    private Map<Float, Integer> saveLabelMapping() throws IOException {
+        logger.info("Creating proper label mapping for XGBoost...");
+
+        // Collect unique labels and their XGBoost indices
+        Map<String, Integer> classNameToIdMap = dataReader.getClassNameToIdMap();
+        Map<String, Float> trainingLabels = dataReader.getTrainingLabels();
+
+        // Create mapping from original class IDs to XGBoost indices
+        // XGBoost sorts unique labels and assigns sequential indices (0,1,2...)
+        Set<Float> uniqueLabels = new HashSet<>(trainingLabels.values());
+        List<Float> sortedLabels = new ArrayList<>(uniqueLabels);
+        Collections.sort(sortedLabels);
+
+        Map<Float, Integer> labelToIndex = new HashMap<>();
+        for (int i = 0; i < sortedLabels.size(); i++) {
+            labelToIndex.put(sortedLabels.get(i), i);
+            logger.info("Mapping original class {} to XGBoost index {}", sortedLabels.get(i), i);
+        }
+
+        // Save to properties file for backward compatibility
         String mappingPath = Paths.get(outputDir, "xgboost_label_mapping.properties").toString();
         Properties properties = new Properties();
 
-        Map<String, Integer> classNameToIdMap = dataReader.getClassNameToIdMap();
-        for (Map.Entry<String, Integer> entry : classNameToIdMap.entrySet()) {
+        for (Map.Entry<Float, Integer> entry : labelToIndex.entrySet()) {
             // Format: original_class_id = xgboost_index
-            properties.setProperty(entry.getValue().toString(), entry.getValue().toString());
+            properties.setProperty(String.valueOf((int)entry.getKey().floatValue()), String.valueOf(entry.getValue()));
         }
 
         try (PrintWriter writer = new PrintWriter(Files.newBufferedWriter(Paths.get(mappingPath)))) {
             properties.store(writer, "SciPathJ XGBoost Label Mapping");
         }
-        logger.info("Label mapping saved to: {} ({} classes)", mappingPath, classNameToIdMap.size());
+        logger.info("Label mapping saved to: {} ({} classes)", mappingPath, labelToIndex.size());
+
+        return labelToIndex; // Return for JSON export
     }
 
     /**
@@ -463,6 +689,192 @@ public class XGBoostTrainer {
             }
         } catch (XGBoostError e) {
             logger.error("Error analyzing feature importance: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Save complete model bundle in single JSON file
+     */
+    private void saveCompleteModelBundle(Booster booster) throws IOException {
+        try {
+            XGBoostModelBundle bundle = new XGBoostModelBundle();
+            ObjectMapper mapper = new ObjectMapper();
+
+            // 1. Get XGBoost model as JSON string using temporary file approach
+            String tempModelPath = Paths.get(outputDir, "temp_xgboost_model.json").toString();
+            try {
+                // Save model as JSON to temp file
+                booster.saveModel(tempModelPath);
+                // Read the model JSON content
+                bundle.xgboostModel.modelJson = Files.readString(Paths.get(tempModelPath));
+                logger.debug("Model JSON captured via temp file (length: {})", bundle.xgboostModel.modelJson.length());
+            } catch (Exception e) {
+                logger.error("Failed to save/read model JSON: {}", e.getMessage(), e);
+                bundle.xgboostModel.modelJson = "{}"; // Empty JSON object as fallback
+            } finally {
+                // Clean up temp file regardless of success/failure
+                try {
+                    Files.deleteIfExists(Paths.get(tempModelPath));
+                } catch (Exception cleanupError) {
+                    logger.debug("Could not delete temp model file: {}", cleanupError.getMessage());
+                }
+            }
+
+            // 2. Set model info with title and description (only using new structured fields)
+            bundle.modelInfo.title = "Cell Classification Model";
+            bundle.modelInfo.description = "XGBoost-based cell classification model trained on SciPathJ data";
+            bundle.modelInfo.author = "SciPathJ Application";
+            bundle.modelInfo.platform = "SciPathJ";
+
+            // 3. Training configuration
+            bundle.trainingConfig.hyperparameters = getTrainingParams();
+            bundle.trainingConfig.hyperparameters.remove("verbosity");
+
+            XGBoostModelBundle.TrainingConfig.DataSplit dataSplit = new XGBoostModelBundle.TrainingConfig.DataSplit();
+            dataSplit.trainRatio = settings.getTrainRatio();
+            dataSplit.balanceClasses = settings.isBalanceClasses();
+
+            // Calculate class distribution
+            Map<String, Float> trainingLabels = dataReader.getTrainingLabels();
+            Map<String, Integer> classNameToId = dataReader.getClassNameToIdMap();
+            Map<Integer, String> idToClassName = dataReader.getIdToClassNameMap();
+
+            Map<Float, Double> classDistribution = new HashMap<>();
+            Map<Float, Integer> classCounts = new HashMap<>();
+            for (Float label : trainingLabels.values()) {
+                classCounts.put(label, classCounts.getOrDefault(label, 0) + 1);
+            }
+            for (Map.Entry<Float, Integer> entry : classCounts.entrySet()) {
+                classDistribution.put(entry.getKey(), (double)entry.getValue() / trainingLabels.size());
+            }
+            // Convert Float keys to String keys for JSON compatibility
+            Map<String, Double> stringKeyDistribution = new HashMap<>();
+            for (Map.Entry<Float, Double> entry : classDistribution.entrySet()) {
+                stringKeyDistribution.put(entry.getKey().toString(), entry.getValue());
+            }
+            dataSplit.classDistribution = stringKeyDistribution;
+
+            bundle.trainingConfig.dataSplit = dataSplit;
+
+            // 4. Feature metadata
+            bundle.featureMetadata.selectedFeatures = dataReader.getSelectedFeatureNames();
+            bundle.featureMetadata.numSelectedFeatures = bundle.featureMetadata.selectedFeatures.size();
+
+            // Feature importance (if available)
+            try {
+                Map<String, Double> importance = booster.getScore("", "gain");
+                if (!importance.isEmpty()) {
+                    // Get selected feature names in training order
+                    List<String> featureNames = dataReader.getSelectedFeatureNames();
+                    List<Map<String, Object>> importanceList = new ArrayList<>();
+
+                    for (Map.Entry<String, Double> entry : importance.entrySet()) {
+                        String genericName = entry.getKey();
+                        try {
+                            int featureIndex = Integer.parseInt(genericName.substring(1));
+                            if (featureIndex >= 0 && featureIndex < featureNames.size()) {
+                                Map<String, Object> impEntry = new HashMap<>();
+                                impEntry.put("feature", featureNames.get(featureIndex));
+                                impEntry.put("importance", entry.getValue());
+                                importanceList.add(impEntry);
+                            }
+                        } catch (Exception e) {
+                            continue;
+                        }
+                    }
+                    bundle.featureMetadata.featureImportance = importanceList;
+                }
+            } catch (Exception e) {
+                logger.warn("Could not extract feature importance: {}", e.getMessage());
+            }
+
+            // 5. Label metadata (create internal mapping)
+            Map<String, Map<Integer, Integer>> labelMap = new HashMap<>();
+            Map<Integer, Integer> xgbToOriginal = new HashMap<>();
+            Map<Integer, Integer> originalToXgb = new HashMap<>();
+
+            // Create label mapping internally (XGBoost sorts unique labels and assigns sequential indices)
+            Set<Float> uniqueLabels = new HashSet<>(trainingLabels.values());
+            List<Float> sortedLabels = new ArrayList<>(uniqueLabels);
+            Collections.sort(sortedLabels);
+
+            // Build mapping from original class IDs to XGBoost indices
+            for (int i = 0; i < sortedLabels.size(); i++) {
+                int originalId = (int)sortedLabels.get(i).floatValue();
+                int xgbIndex = i;
+                xgbToOriginal.put(xgbIndex, originalId);
+                originalToXgb.put(originalId, xgbIndex);
+                logger.debug("Mapping original class {} to XGBoost index {}", sortedLabels.get(i), i);
+            }
+
+            // Convert Integer keys to String keys for JSON compatibility
+            Map<String, Integer> xgbToOriginalStringKeys = new HashMap<>();
+            Map<String, Integer> originalToXgbStringKeys = new HashMap<>();
+            
+            for (Map.Entry<Integer, Integer> entry : xgbToOriginal.entrySet()) {
+                xgbToOriginalStringKeys.put(entry.getKey().toString(), entry.getValue());
+            }
+            for (Map.Entry<Integer, Integer> entry : originalToXgb.entrySet()) {
+                originalToXgbStringKeys.put(entry.getKey().toString(), entry.getValue());
+            }
+            
+            Map<String, Map<String, Integer>> stringLabelMap = new HashMap<>();
+            stringLabelMap.put("xgboost_index_to_original", xgbToOriginalStringKeys);
+            stringLabelMap.put("original_to_xgboost_index", originalToXgbStringKeys);
+            bundle.labelMetadata.labelMapping = stringLabelMap;
+
+            // Class details - use class colors from training data and filter out unwanted classes
+            Map<Integer, XGBoostModelBundle.ClassDetail> classDetails = new HashMap<>();
+            Map<String, String> trainingDataColors = dataReader.getClassColors();
+
+            for (Map.Entry<Integer, String> entry : idToClassName.entrySet()) {
+                String className = entry.getValue();
+
+                // Filter out "Unclassified" and other unwanted classes
+                if ("Unclassified".equals(className)) {
+                    logger.debug("Filtering out unwanted class: {}", className);
+                    continue;
+                }
+
+                XGBoostModelBundle.ClassDetail detail = new XGBoostModelBundle.ClassDetail();
+                detail.name = className;
+                detail.id = entry.getKey();
+
+                // Use color from training data if available, otherwise use default
+                String classColor = trainingDataColors.get(className);
+                if (classColor != null && classColor.startsWith("#")) {
+                    detail.color = classColor;
+                    logger.debug("Using training data color '{}' for class '{}'", classColor, className);
+                } else {
+                    // Fallback to default colors if no color found in training data
+                    String[] defaultColors = {
+                        "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FECA57",
+                        "#FF9FF3", "#54A0FF", "#5F27CD", "#00D2D3", "#FF9F43"
+                    };
+                    detail.color = defaultColors[Math.abs(entry.getKey()) % defaultColors.length];
+                    logger.debug("Using default color '{}' for class '{}'", detail.color, className);
+                }
+
+                classDetails.put(entry.getKey(), detail);
+            }
+            bundle.labelMetadata.classDetails = classDetails;
+            bundle.labelMetadata.numClasses = classDetails.size();
+
+            // 6. Save the complete bundle as JSON
+            String bundlePath = Paths.get(outputDir, "xgboost_model_bundle.json").toString();
+            String jsonOutput = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(bundle);
+
+            try (PrintWriter writer = new PrintWriter(Files.newBufferedWriter(Paths.get(bundlePath)))) {
+                writer.write(jsonOutput);
+            }
+
+            logger.info("Complete model bundle saved to: {}", bundlePath);
+            logger.info("Model title: {}", bundle.modelInfo.title);
+            logger.info("Model description: {}", bundle.modelInfo.description);
+
+        } catch (Exception e) {
+            logger.error("Failed to save complete model bundle: {}", e.getMessage(), e);
+            throw new IOException("Failed to save model bundle", e);
         }
     }
 

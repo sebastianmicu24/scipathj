@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -23,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.scipath.scipathj.analysis.pipeline.DataReorder;
+import com.scipath.scipathj.training.XGBoostModelBundle;
 
 /**
  * Step 5 of the analysis pipeline: Cell Classification using XGBoost.
@@ -43,6 +45,9 @@ public class CellClassification {
    private Map<Integer, Integer> xgbIndexToClassId = new HashMap<>();
    private List<String> loadedSelectedFeatureNames = new ArrayList<>();
    private Map<Integer, ClassDetails> classIdToDetails = new HashMap<>();
+
+   // Flag to track if a JSON bundle was successfully loaded
+   private boolean loadedFromJSONBundle = false;
 
    // Decimal format configuration
    private static final String FLOAT_FORMAT_PATTERN = "#.######";
@@ -133,7 +138,26 @@ public class CellClassification {
           // Load the XGBoost model
           loadXGBoostModel();
 
-          // Load supporting files with fallback handling for missing files
+          // If a JSON bundle was loaded, we already have all necessary data
+          if (loadedFromJSONBundle) {
+              LOGGER.info("Skipping individual file loading - all data loaded from JSON bundle");
+              
+              // Only generate defaults if the bundle didn't provide essential data
+              if (loadedSelectedFeatureNames.isEmpty()) {
+                  LOGGER.warn("JSON bundle missing features, generating defaults");
+                  generateDefaultFeatureList();
+              }
+              
+              if (xgbIndexToClassId.isEmpty()) {
+                  LOGGER.warn("JSON bundle missing label mapping, generating defaults");
+                  generateDefaultLabelMapping();
+              }
+              
+              LOGGER.info("XGBoost classifier initialized successfully from JSON bundle");
+              return;
+          }
+
+          // Load supporting files with fallback handling for missing files (only if not from bundle)
           boolean hasSelectedFeatures = false;
           boolean hasLabelMapping = false;
 
@@ -170,33 +194,222 @@ public class CellClassification {
   }
 
   /**
-   * Load the pre-trained XGBoost model.
+   * Load the pre-trained XGBoost model, trying JSON bundle first, then falling back to individual files.
    */
   private void loadXGBoostModel() throws XGBoostError, IOException {
       try {
           String configuredPath = this.modelPath;
-  
-          // First try absolute/filesystem path
-          File modelFile = new File(configuredPath);
-          if (!modelFile.exists()) {
-              // Fall back to resource on classpath
-              var modelResource = getClass().getResource(configuredPath);
-              if (modelResource == null) {
-                  throw new IOException("XGBoost model file not found (filesystem or resources): " + configuredPath);
-              }
-              modelFile = new File(modelResource.getFile());
-              if (!modelFile.exists()) {
-                  throw new IOException("XGBoost model file not found: " + configuredPath);
-              }
+
+          // Try to load as JSON bundle first
+          if (tryLoadFromJSONBundle(configuredPath)) {
+              loadedFromJSONBundle = true;
+              LOGGER.info("XGBoost model loaded from JSON bundle");
+              return;
           }
-  
-          booster = XGBoost.loadModel(modelFile.getAbsolutePath());
-          LOGGER.info("XGBoost model loaded successfully from: {}", modelFile.getAbsolutePath());
-  
+
+          // Fallback to individual files approach
+          loadedFromJSONBundle = false;
+          LOGGER.info("Falling back to loading individual model files");
+          loadXGBoostModelFromFiles(configuredPath);
+
       } catch (Exception e) {
           LOGGER.error("Error loading XGBoost model: {}", e.getMessage());
           throw e;
       }
+  }
+
+  /**
+   * Try to load the complete model bundle from JSON file.
+   * Returns true if successful, false if should fall back to individual files.
+   */
+  private boolean tryLoadFromJSONBundle(String modelPath) throws IOException, XGBoostError {
+      try {
+          // First, try to load the file directly as a JSON bundle
+          if (modelPath.endsWith(".json")) {
+              File modelFile = new File(modelPath);
+              if (modelFile.exists()) {
+                  // Try to determine if this is a bundle by checking its structure
+                  if (isJSONBundle(modelFile)) {
+                      LOGGER.info("Detected JSON bundle file: {}", modelPath);
+                      return loadFromJSONBundle(modelPath);
+                  }
+              }
+          }
+
+          // Check if this is already a JSON bundle file (legacy naming)
+          if (modelPath.endsWith("bundle.json")) {
+              return loadFromJSONBundle(modelPath);
+          }
+
+          // Try to find a bundle file in the same directory
+          if (modelPath.endsWith(".json")) {
+              String bundlePath = modelPath.replace("xgboost_model.json", "xgboost_model_bundle.json");
+              File bundleFile = new File(bundlePath);
+              if (bundleFile.exists()) {
+                  return loadFromJSONBundle(bundlePath);
+              }
+
+              // Try both filesystem and resources
+              var bundleResource = getClass().getResource(bundlePath);
+              if (bundleResource != null) {
+                  return loadFromJSONBundle(bundleResource.getFile());
+              }
+          }
+
+          // Try common bundle location
+          String bundlePath = modelPath.replace("xgboost_model.json", "xgboost_model_bundle.json");
+          File bundleFile = new File(bundlePath);
+          if (bundleFile.exists()) {
+              return loadFromJSONBundle(bundlePath);
+          }
+
+          return false; // No bundle found, will try individual files
+
+      } catch (Exception e) {
+          LOGGER.warn("Failed to load from JSON bundle, attempting individual files: {}", e.getMessage());
+          return false;
+      }
+  }
+
+  /**
+   * Check if a JSON file is a complete model bundle by examining its structure
+   */
+  private boolean isJSONBundle(File jsonFile) {
+      try {
+          ObjectMapper mapper = new ObjectMapper();
+          com.fasterxml.jackson.databind.JsonNode rootNode = mapper.readTree(jsonFile);
+          
+          // Check for key bundle fields
+          boolean hasXGBoostModel = rootNode.has("xgboost_model");
+          boolean hasLabelMetadata = rootNode.has("label_metadata");
+          boolean hasFeatureMetadata = rootNode.has("feature_metadata");
+          
+          // Must have at least the XGBoost model to be considered a bundle
+          return hasXGBoostModel && (hasLabelMetadata || hasFeatureMetadata);
+          
+      } catch (Exception e) {
+          LOGGER.debug("Failed to parse JSON structure, assuming not a bundle: {}", e.getMessage());
+          return false;
+      }
+  }
+
+  /**
+   * Load model from JSON bundle file.
+   */
+  private boolean loadFromJSONBundle(String bundlePath) throws IOException, XGBoostError {
+      try {
+          LOGGER.info("Attempting to load model bundle from: {}", bundlePath);
+
+          File bundleFile = new File(bundlePath);
+          if (!bundleFile.exists()) {
+              var bundleResource = getClass().getResource(bundlePath);
+              if (bundleResource == null) {
+                  return false;
+              }
+              bundleFile = new File(bundleResource.getFile());
+          }
+
+          ObjectMapper mapper = new ObjectMapper();
+          // Configure ObjectMapper to handle mixed Integer/Double types flexibly
+          mapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS, false);
+          mapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_AS_NULL, true);
+          mapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.ACCEPT_FLOAT_AS_INT, true);
+          XGBoostModelBundle bundle = mapper.readValue(bundleFile, XGBoostModelBundle.class);
+
+          // Extract embedded XGBoost model JSON and load it
+          if (bundle.xgboostModel == null || bundle.xgboostModel.modelJson == null) {
+              LOGGER.warn("No XGBoost model data found in bundle");
+              return false;
+          }
+
+          // Create temporary file with the embedded model
+          File tempModelFile = File.createTempFile("xgboost_model", ".json");
+          Files.write(tempModelFile.toPath(), bundle.xgboostModel.modelJson.getBytes());
+          tempModelFile.deleteOnExit();
+
+          booster = XGBoost.loadModel(tempModelFile.getAbsolutePath());
+          tempModelFile.delete();
+
+          // Load metadata from bundle
+          if (bundle.labelMetadata != null && bundle.labelMetadata.labelMapping != null) {
+              @SuppressWarnings("unchecked")
+              Map<String, Integer> xgbToOriginalString = (Map<String, Integer>) bundle.labelMetadata.labelMapping.get("xgboost_index_to_original");
+              if (xgbToOriginalString != null) {
+                  xgbIndexToClassId.clear();
+                  // Convert string keys back to integers
+                  for (Map.Entry<String, Integer> entry : xgbToOriginalString.entrySet()) {
+                      try {
+                          Integer xgbIndex = Integer.parseInt(entry.getKey());
+                          xgbIndexToClassId.put(xgbIndex, entry.getValue());
+                      } catch (NumberFormatException e) {
+                          LOGGER.warn("Invalid XGBoost index key: {}", entry.getKey());
+                      }
+                  }
+                  LOGGER.info("Loaded label mapping from JSON bundle: {} mappings", xgbIndexToClassId.size());
+              }
+
+              if (bundle.labelMetadata.classDetails != null) {
+                  classIdToDetails.clear();
+                  for (Map.Entry<Integer, XGBoostModelBundle.ClassDetail> entry : bundle.labelMetadata.classDetails.entrySet()) {
+                      ClassDetails classDetail = new ClassDetails(
+                          entry.getValue().name,
+                          entry.getValue().id,
+                          entry.getValue().color
+                      );
+                      classIdToDetails.put(entry.getKey(), classDetail);
+                      LOGGER.info("Loaded class detail from bundle: ID {} -> Name '{}' Color '{}'",
+                          entry.getKey(), entry.getValue().name, entry.getValue().color);
+                  }
+                  LOGGER.info("Loaded class details from JSON bundle: {} classes", classIdToDetails.size());
+                  LOGGER.info("Bundle class details map contents: {}",
+                      classIdToDetails.entrySet().stream()
+                          .collect(java.util.stream.Collectors.toMap(
+                              java.util.Map.Entry::getKey,
+                              e -> e.getValue().name)));
+              }
+          }
+
+          if (bundle.featureMetadata != null && bundle.featureMetadata.selectedFeatures != null) {
+              loadedSelectedFeatureNames.clear();
+              loadedSelectedFeatureNames.addAll(bundle.featureMetadata.selectedFeatures);
+              LOGGER.info("Loaded selected features from JSON bundle: {} features", loadedSelectedFeatureNames.size());
+          }
+
+          // Log model information
+          if (bundle.modelInfo != null) {
+              LOGGER.info("Model Title: {}", bundle.modelInfo.title);
+              LOGGER.info("Model Description: {}", bundle.modelInfo.description);
+              LOGGER.info("Model Version: {}", bundle.modelInfo.version);
+          }
+
+          return true;
+
+      } catch (Exception e) {
+          LOGGER.warn("Failed to load from JSON bundle '{}': {}", bundlePath, e.getMessage());
+          return false;
+      }
+  }
+
+  /**
+   * Load XGBoost model using the old individual files approach (backward compatibility).
+   */
+  private void loadXGBoostModelFromFiles(String configuredPath) throws XGBoostError, IOException {
+      // First try absolute/filesystem path
+      File modelFile = new File(configuredPath);
+      if (!modelFile.exists()) {
+          // Fall back to resource on classpath
+          var modelResource = getClass().getResource(configuredPath);
+          if (modelResource == null) {
+              throw new IOException("XGBoost model file not found (filesystem or resources): " + configuredPath);
+          }
+          modelFile = new File(modelResource.getFile());
+          if (!modelFile.exists()) {
+              throw new IOException("XGBoost model file not found: " + configuredPath);
+          }
+      }
+
+      booster = XGBoost.loadModel(modelFile.getAbsolutePath());
+      LOGGER.info("XGBoost model loaded successfully from: {}", modelFile.getAbsolutePath());
   }
 
   /**
@@ -897,8 +1110,16 @@ public class CellClassification {
           int classId = xgbIndexToClassId.getOrDefault(i, i);
           String className = "Class_" + classId;
           ClassDetails classDetails = classIdToDetails.get(classId);
+          
+          // Debug logging
+          LOGGER.debug("Classification mapping: XGBoost index {} -> Class ID {} -> Class details: {}",
+              i, classId, classDetails != null ? classDetails.name : "NULL");
+          
           if (classDetails != null) {
               className = classDetails.name;
+              LOGGER.debug("Using class name '{}' from bundle/details for class ID {}", className, classId);
+          } else {
+              LOGGER.warn("No class details found for class ID {}, using default name '{}'", classId, className);
           }
           classProbabilities.put(className, (double) probabilities[i]);
       }

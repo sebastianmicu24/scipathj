@@ -39,6 +39,9 @@ public class JSONDataReader {
     // Feature masking for selection
     private Map<String, Boolean> featureEnabled = new HashMap<>();
 
+    // Class colors from training data
+    private final Map<String, String> classColors = new HashMap<>();
+
     /**
      * Constructs a new JSONDataReader.
      *
@@ -99,6 +102,19 @@ public class JSONDataReader {
                 classNameToIdMap.put(className, i);
                 idToClassNameMap.put(i, className);
                 logger.debug("Mapped class '{}' to ID {}", className, i);
+            }
+        }
+
+        // Parse class colors
+        if (root.has("classColors")) {
+            JsonNode classColorsNode = root.get("classColors");
+            Iterator<Map.Entry<String, JsonNode>> colorIterator = classColorsNode.fields();
+            while (colorIterator.hasNext()) {
+                Map.Entry<String, JsonNode> colorEntry = colorIterator.next();
+                String className = colorEntry.getKey();
+                String color = colorEntry.getValue().asText();
+                classColors.put(className, color);
+                logger.debug("Loaded class color '{}' for '{}'", color, className);
             }
         }
 
@@ -315,6 +331,18 @@ public class JSONDataReader {
 
     private void initializeFeatureSelection(List<String> featureFilter) {
         for (String featureName : featureNames) {
+            // Auto-filter out unwanted features that are not useful for modeling
+            boolean isUnwantedFeature = featureName.contains("closest_vessel") ||
+                                       featureName.contains("closest_neighbor") ||
+                                       featureName.contains("_closest_vessel") ||
+                                       featureName.contains("_closest_neighbor");
+
+            if (isUnwantedFeature) {
+                featureEnabled.put(featureName, false);
+                continue;
+            }
+
+            // Use the provided filter or enable by default if no filter specified
             boolean enabled = (featureFilter == null) || featureFilter.contains(featureName);
             featureEnabled.put(featureName, enabled);
         }
@@ -354,6 +382,15 @@ public class JSONDataReader {
      */
     public Map<Integer, String> getIdToClassNameMap() {
         return Collections.unmodifiableMap(idToClassNameMap);
+    }
+
+    /**
+     * Gets class colors from training data.
+     *
+     * @return mapping of class name to hex color
+     */
+    public Map<String, String> getClassColors() {
+        return Collections.unmodifiableMap(classColors);
     }
 
     /**

@@ -2,7 +2,7 @@ package com.scipath.scipathj.ui.training;
 
 import com.scipath.scipathj.training.TrainingController;
 import com.scipath.scipathj.training.TrainingSettings;
-import com.scipath.scipathj.training.JSONDataReader;
+import com.scipath.scipathj.training.data.TrainingDataReader;
 import com.scipath.scipathj.ui.utils.UIConstants;
 import com.scipath.scipathj.ui.utils.UIUtils;
 
@@ -753,8 +753,8 @@ public class XGBoostTrainingPanel extends JPanel {
         // If we have JSON file selected, try to preview features
         if (jsonFile != null && jsonFile.exists()) {
             try {
-                // Create a temporary reader to detect features
-                JSONDataReader tempReader = new JSONDataReader(jsonFile, null);
+                // Create a temporary reader to detect features using new architecture
+                TrainingDataReader tempReader = new TrainingDataReader(jsonFile);
                 java.util.List<String> features = tempReader.getFeatureNames();
 
                 if (features.isEmpty()) {
@@ -860,18 +860,28 @@ public class XGBoostTrainingPanel extends JPanel {
     }
 
     /**
-     * Handle successful training completion by creating ZIP bundle.
+     * Handle successful training completion by confirming JSON bundle creation.
      */
     private void onTrainingCompleted() {
         try {
-            String zipPath = createModelZipBundle();
-            JOptionPane.showMessageDialog(this,
-                "Training completed successfully!\n\nModel bundle created: " + zipPath + "\n\nYou can now use this ZIP in the Classification Settings dialog.",
-                "Training Complete", JOptionPane.INFORMATION_MESSAGE);
+            // Training was successful - the JSON bundle was already created by XGBoostTrainer
+            String jsonBundlePath = outputDir.getAbsolutePath() + "\\xgboost_model_bundle.json";
+            java.io.File bundleFile = new java.io.File(jsonBundlePath);
+
+            if (bundleFile.exists()) {
+                JOptionPane.showMessageDialog(this,
+                    "Training completed successfully!\n\nModel JSON bundle created: " + jsonBundlePath + "\n\nYou can now use this JSON bundle in the Classification Settings dialog.",
+                    "Training Complete", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                // Fallback message if JSON bundle location is different
+                JOptionPane.showMessageDialog(this,
+                    "Training completed successfully!\n\nModel JSON bundle created in: " + outputDir.getAbsolutePath() + "\n\nYou can now use the generated JSON bundle in the Classification Settings dialog.",
+                    "Training Complete", JOptionPane.INFORMATION_MESSAGE);
+            }
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this,
-                "Training completed but failed to create ZIP bundle: " + e.getMessage(),
-                "ZIP Creation Error", JOptionPane.WARNING_MESSAGE);
+                "Training completed but could not locate JSON bundle: " + e.getMessage(),
+                "Bundle Location Error", JOptionPane.WARNING_MESSAGE);
         }
     }
 
@@ -885,57 +895,14 @@ public class XGBoostTrainingPanel extends JPanel {
     }
 
     /**
-     * Create a ZIP bundle containing all model files.
+     * Get the path to the JSON bundle created by XGBoostTrainer.
      */
-    private String createModelZipBundle() throws java.io.IOException {
-        String zipFileName = "xgboost_model_" + System.currentTimeMillis() + ".zip";
-        java.nio.file.Path zipPath = java.nio.file.Paths.get(outputDir.getAbsolutePath(), zipFileName);
-
-        try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(
-                java.nio.file.Files.newOutputStream(zipPath))) {
-
-            // Files to include in the bundle
-            java.util.List<String> filesToInclude = java.util.Arrays.asList(
-                "xgboost_model.json",
-                "selected_features.txt",
-                "xgboost_label_mapping.properties",
-                "class_details.json",
-                "training_config.txt",
-                "evaluation_results.txt"
-            );
-
-            for (String fileName : filesToInclude) {
-                java.nio.file.Path filePath = java.nio.file.Paths.get(outputDir.getAbsolutePath(), fileName);
-                if (java.nio.file.Files.exists(filePath)) {
-                    addFileToZip(zos, filePath, fileName);
-                } else {
-                    System.out.println("File not found, skipping: " + fileName);
-                }
-            }
-        }
-
-        System.out.println("Model ZIP bundle created: " + zipPath.toString());
-        return zipPath.toString();
+    private String getJsonBundlePath() {
+        String jsonFileName = "xgboost_model_bundle.json";
+        java.nio.file.Path jsonPath = java.nio.file.Paths.get(outputDir.getAbsolutePath(), jsonFileName);
+        return jsonPath.toString();
     }
 
-    /**
-     * Add a file to the ZIP archive.
-     */
-    private void addFileToZip(java.util.zip.ZipOutputStream zos, java.nio.file.Path filePath, String entryName)
-            throws java.io.IOException {
-        java.util.zip.ZipEntry zipEntry = new java.util.zip.ZipEntry(entryName);
-        zos.putNextEntry(zipEntry);
-
-        try (java.io.InputStream fis = java.nio.file.Files.newInputStream(filePath)) {
-            byte[] buffer = new byte[1024];
-            int length;
-            while ((length = fis.read(buffer)) >= 0) {
-                zos.write(buffer, 0, length);
-            }
-        }
-
-        zos.closeEntry();
-    }
 
 
     /**
