@@ -2,7 +2,7 @@ package com.scipath.scipathj.ui.training;
 
 import com.scipath.scipathj.training.TrainingController;
 import com.scipath.scipathj.training.TrainingSettings;
-import com.scipath.scipathj.training.data.TrainingDataReader;
+import com.scipath.scipathj.training.JSONDataReader;
 import com.scipath.scipathj.ui.utils.UIConstants;
 import com.scipath.scipathj.ui.utils.UIUtils;
 
@@ -753,8 +753,8 @@ public class XGBoostTrainingPanel extends JPanel {
         // If we have JSON file selected, try to preview features
         if (jsonFile != null && jsonFile.exists()) {
             try {
-                // Create a temporary reader to detect features using new architecture
-                TrainingDataReader tempReader = new TrainingDataReader(jsonFile);
+                // Create a temporary reader to detect features
+                JSONDataReader tempReader = new JSONDataReader(jsonFile, null);
                 java.util.List<String> features = tempReader.getFeatureNames();
 
                 if (features.isEmpty()) {

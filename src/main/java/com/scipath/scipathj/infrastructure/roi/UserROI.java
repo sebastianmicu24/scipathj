@@ -1,6 +1,8 @@
 package com.scipath.scipathj.infrastructure.roi;
 
 import ij.gui.Roi;
+import ij.process.ImageStatistics;
+import ij.measure.Measurements;
 import java.awt.Color;
 import java.awt.Rectangle;
 import java.time.LocalDateTime;
@@ -245,6 +247,119 @@ public class UserROI {
 
   public boolean intersects(Rectangle other) {
     return bounds.intersects(other);
+  }
+
+  /**
+   * Get circularity (4π*area/perimeter²) using ImageJ measurements.
+   */
+  public double getCircularity() {
+    if (hasComplexShape()) {
+      try {
+        ij.process.ImageStatistics stats = imageJRoi.getStatistics();
+        double area = stats.area;
+        double perimeter = imageJRoi.getLength();
+        if (perimeter > 0) {
+          return (4.0 * Math.PI * area) / (perimeter * perimeter);
+        }
+      } catch (Exception e) {
+        // Fallback to basic calculation
+      }
+    }
+    // Fallback: assume rectangle solidity of 1.0 (not circular)
+    return 1.0;
+  }
+
+  /**
+   * Get major axis length using ROI bounds for fallback calculations.
+   */
+  public double getMajorAxis() {
+    // Use bounding box diagonal as approximation
+    return Math.sqrt(bounds.width * bounds.width + bounds.height * bounds.height);
+  }
+
+  /**
+   * Get minor axis length using ROI bounds for fallback calculations.
+   */
+  public double getMinorAxis() {
+    // Use minimum bounding box side as approximation
+    return Math.min(bounds.width, bounds.height);
+  }
+
+  /**
+   * Get ellipse angle (default to 0 degrees).
+   */
+  public double getAngle() {
+    // Default to 0 degrees (horizontal orientation)
+    return 0.0;
+  }
+
+  /**
+   * Get Feret diameter (maximum feret) using ImageJ measurements.
+   */
+  public double getFeretDiameter() {
+    if (hasComplexShape()) {
+      try {
+        double[] feretValues = imageJRoi.getFeretValues();
+        return feretValues[0]; // Maximum feret diameter
+      } catch (Exception e) {
+        // Fallback to bounding box diagonal
+      }
+    }
+    // Fallback: use bounding box diagonal
+    return Math.sqrt(bounds.width * bounds.width + bounds.height * bounds.height);
+  }
+
+  /**
+   * Get perimeter using ImageJ measurements.
+   */
+  public double getPerimeter() {
+    if (hasComplexShape()) {
+      try {
+        return imageJRoi.getLength();
+      } catch (Exception e) {
+        // Fallback to rectangle perimeter
+      }
+    }
+    // Fallback: rectangle perimeter
+    return 2.0 * (bounds.width + bounds.height);
+  }
+
+   /**
+   * Get solidity using ImageJ convex hull measurements.
+   */
+  public double getSolidity() {
+    if (hasComplexShape()) {
+      try {
+        ij.process.ImageStatistics stats = imageJRoi.getStatistics();
+        double area = stats.area;
+
+        // Calculate convex hull area
+        java.awt.Shape convexHull = getConvexHull();
+        if (convexHull != null && convexHull instanceof ij.gui.ShapeRoi) {
+          ij.gui.ShapeRoi convexShapeRoi = (ij.gui.ShapeRoi) convexHull;
+          double convexArea = convexShapeRoi.getStatistics().area;
+          return convexArea > 0 ? area / convexArea : 1.0;
+        }
+      } catch (Exception e) {
+        // Fallback to 1.0 (solid shape)
+      }
+    }
+    // Fallback: return 1.0 for rectangular shapes
+    return 1.0;
+  }
+
+  /**
+   * Get convex hull shape for solidity calculation.
+   */
+  private java.awt.Shape getConvexHull() {
+    if (hasComplexShape()) {
+      try {
+        return imageJRoi.getConvexHull();
+      } catch (Exception e) {
+        // Fallback to null
+      }
+    }
+    return null;
   }
 
   @Override

@@ -10,83 +10,56 @@ import java.io.IOException;
 import java.util.*;
 
 /**
- * Loads training data from JSON file and prepares feature arrays for XGBoost.
- * Simplified version of SCHELI ReadData focused only on JSON parsing.
+ * Unified JSON data reader for training data from SciPathJ's dataset export.
+ * Handles the modern JSON export format from DatasetControlsPanel with
+ * comprehensive feature extraction and training label processing.
  *
  * @author Sebastian Micu
- * @version 1.0.0
+ * @version 2.0.0
  * @since 1.0.0
  */
 public class JSONDataReader {
-
     private static final Logger logger = LoggerFactory.getLogger(JSONDataReader.class);
 
-    // All cell features organized by file:id
-    private final Map<String, float[]> allCellFeatures = new HashMap<>();
-
-    // Training labels by file:id
+    // Cell features by cell ID
+    private final Map<String, float[]> cellFeatures = new HashMap<>();
+    
+    // Training labels by cell ID
     private final Map<String, Float> trainingLabels = new HashMap<>();
-
+    
     // Class name to ID mapping
     private final Map<String, Integer> classNameToIdMap = new HashMap<>();
 
-    // Reverse mapping for evaluation
+    // ID to class name mapping
     private final Map<Integer, String> idToClassNameMap = new HashMap<>();
 
-    // All collected features ordered
-    private List<String> featureNames = new ArrayList<>();
-
-    // Feature masking for selection
-    private Map<String, Boolean> featureEnabled = new HashMap<>();
-
-    // Class colors from training data
+    // Class colors
     private final Map<String, String> classColors = new HashMap<>();
 
+    // Feature names in order
+    private List<String> featureNames = new ArrayList<>();
+
+    // Feature selection
+    private List<String> selectedFeatureNames = new ArrayList<>();
+
+    // XGBoost-compatible label mapping (original class ID -> XGBoost index)
+    private final Map<Integer, Integer> originalToXgboostIndex = new HashMap<>();
+
+    // Reverse mapping (XGBoost index -> original class ID)
+    private final Map<Integer, Integer> xgboostToOriginalId = new HashMap<>();
+
     /**
-     * Constructs a new JSONDataReader.
-     *
-     * @param jsonFile the JSON file containing training data
-     * @param featureFilter optional list of features to include (null = all)
+     * Load training data from the new simplified JSON format.
      */
     public JSONDataReader(File jsonFile, List<String> featureFilter) {
-        logger.info("Loading training data from: {}", jsonFile.getAbsolutePath());
+        logger.info("Loading unified training data from: {}", jsonFile.getAbsolutePath());
         try {
-            // First pass - collect all feature names to build complete name set
-            parseJSONFileForFeatureNames(jsonFile, featureFilter);
-            // Second pass - parse data with proper feature knowledge
             parseJSONFile(jsonFile, featureFilter);
-            logger.info("Training data loaded successfully. Features: {}, Samples: {}",
-                featureNames.size(), allCellFeatures.size());
+            logger.info("Training data loaded successfully. Features: {}, Samples: {}", 
+                       selectedFeatureNames.size(), cellFeatures.size());
         } catch (IOException e) {
             logger.error("Error loading JSON training data: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to load training data", e);
-        }
-    }
-
-    private void parseJSONFileForFeatureNames(File jsonFile, List<String> featureFilter) throws IOException {
-        ObjectMapper mapper = new ObjectMapper();
-        JsonNode root = mapper.readTree(jsonFile);
-
-        // First pass: collect feature names from actual JSON structure
-        if (root.has("classifiedROIs")) {
-            JsonNode classifiedROIs = root.get("classifiedROIs");
-            Iterator<Map.Entry<String, JsonNode>> fileIterator = classifiedROIs.fields();
-
-            boolean collected = false;
-            while (fileIterator.hasNext() && !collected) {
-                Map.Entry<String, JsonNode> fileEntry = fileIterator.next();
-                JsonNode roiData = fileEntry.getValue();
-                Iterator<Map.Entry<String, JsonNode>> roiIterator = roiData.fields();
-
-                if (roiIterator.hasNext()) {
-                    Map.Entry<String, JsonNode> roiEntry = roiIterator.next();
-                    JsonNode components = roiEntry.getValue();
-
-                    // Process first ROI to collect feature names
-                    collectFeatureNamesFromActualStructure(components);
-                    collected = true;
-                }
-            }
         }
     }
 
@@ -94,432 +67,390 @@ public class JSONDataReader {
         ObjectMapper mapper = new ObjectMapper();
         JsonNode root = mapper.readTree(jsonFile);
 
-        // Parse classes
+        // Parse feature names
+        if (root.has("featureNames")) {
+            JsonNode featureNamesNode = root.get("featureNames");
+            for (JsonNode featureName : featureNamesNode) {
+                featureNames.add(featureName.asText());
+            }
+        } else {
+            logger.warn("No featureNames found in JSON, will infer from data");
+        }
+
+        // Parse class mapping - support both new format and old classMapping fallback
         if (root.has("classes")) {
+            // New format: classes is an array of objects with {name, count, id, color}
             JsonNode classesArray = root.get("classes");
             for (int i = 0; i < classesArray.size(); i++) {
-                String className = classesArray.get(i).asText();
-                classNameToIdMap.put(className, i);
-                idToClassNameMap.put(i, className);
-                logger.debug("Mapped class '{}' to ID {}", className, i);
+                JsonNode classNode = classesArray.get(i);
+                if (classNode.isObject() && classNode.has("name")) {
+                    String className = classNode.get("name").asText();
+                    // Use class ID from JSON if available, otherwise use array index
+                    int classId = i;
+                    if (classNode.has("id") && !classNode.get("id").isNull()) {
+                        classId = classNode.get("id").asInt();
+                    }
+                    classNameToIdMap.put(className, classId);
+                    idToClassNameMap.put(classId, className);
+                    logger.debug("Mapped class '{}' to ID {} from new format", className, classId);
+
+                    // Store class color if available
+                    if (classNode.has("color") && !classNode.get("color").isNull()) {
+                        String color = classNode.get("color").asText();
+                        classColors.put(className, color);
+                        logger.debug("Stored color '{}' for class '{}'", color, className);
+                    }
+                } else if (classNode.isTextual()) {
+                    // Fallback: classes is a simple string array
+                    String className = classNode.asText();
+                    classNameToIdMap.put(className, i);
+                    idToClassNameMap.put(i, className);
+                    logger.debug("Mapped class '{}' to ID {} (old string format)", className, i);
+                }
             }
+            logger.info("Loaded classes from new format: {}", classNameToIdMap);
+
+            // Create XGBoost-compatible label mapping (original IDs -> sequential indices 0,1,2...)
+            createXGBoostLabelMapping();
+        } else if (root.has("classMapping")) {
+            // Legacy format: classMapping as object with name->id mappings
+            JsonNode classMappingNode = root.get("classMapping");
+            Iterator<Map.Entry<String, JsonNode>> fields = classMappingNode.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> entry = fields.next();
+                String className = entry.getKey();
+                int classId = entry.getValue().asInt();
+                classNameToIdMap.put(className, classId);
+                idToClassNameMap.put(classId, className);
+            }
+            logger.info("Loaded class mapping (legacy format): {}", classNameToIdMap);
+        } else {
+            logger.warn("No class information found in JSON (neither 'classes' nor 'classMapping')");
         }
 
-        // Parse class colors
-        if (root.has("classColors")) {
-            JsonNode classColorsNode = root.get("classColors");
-            Iterator<Map.Entry<String, JsonNode>> colorIterator = classColorsNode.fields();
-            while (colorIterator.hasNext()) {
-                Map.Entry<String, JsonNode> colorEntry = colorIterator.next();
-                String className = colorEntry.getKey();
-                String color = colorEntry.getValue().asText();
-                classColors.put(className, color);
-                logger.debug("Loaded class color '{}' for '{}'", color, className);
+        // Also handle legacy format class Mapping
+        if (root.has("classMapping") && classNameToIdMap.isEmpty()) {
+            JsonNode classMappingNode = root.get("classMapping");
+            Iterator<Map.Entry<String, JsonNode>> fields = classMappingNode.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> entry = fields.next();
+                String className = entry.getKey();
+                int classId = entry.getValue().asInt();
+                classNameToIdMap.put(className, classId);
+                idToClassNameMap.put(classId, className);
             }
+            logger.info("Loaded class mapping (legacy format): {}", classNameToIdMap);
+            // Create XGBoost-compatible label mapping
+            createXGBoostLabelMapping();
         }
 
-        // Parse classified ROIs
+        // Try to parse labels from the new format
         if (root.has("classifiedROIs")) {
-            JsonNode classifiedROIs = root.get("classifiedROIs");
+            parseLabelsFromClassifiedROIs(root.get("classifiedROIs"));
 
-            Iterator<Map.Entry<String, JsonNode>> fileIterator = classifiedROIs.fields();
-            while (fileIterator.hasNext()) {
-                Map.Entry<String, JsonNode> fileEntry = fileIterator.next();
-                String filename = fileEntry.getKey();
-
-                JsonNode roiData = fileEntry.getValue();
-                Iterator<Map.Entry<String, JsonNode>> roiIterator = roiData.fields();
-
-                while (roiIterator.hasNext()) {
-                    Map.Entry<String, JsonNode> roiEntry = roiIterator.next();
-                    String roiId = roiEntry.getKey();
-                    JsonNode components = roiEntry.getValue();
-
-                    processROIComponents(filename, roiId, components, featureFilter);
-                }
+            // Also extract features from the new format if no features parsed yet
+            if (cellFeatures.isEmpty()) {
+                parseFeaturesFromClassifiedROIs(root.get("classifiedROIs"), featureFilter);
             }
         }
 
-        // Initialize feature selection defaults
-        initializeFeatureSelection(featureFilter);
-    }
-
-    private void processROIComponents(String filename, String roiId, JsonNode components, List<String> featureFilter) {
-        String roiKey = filename + ":" + roiId;
-
-        // Process each component (Cell, Cytoplasm, Nucleus)
-        List<float[]> componentFeatures = new ArrayList<>();
-        String[] componentTypes = {"Cell", "Cytoplasm", "Nucleus"};
-
-        for (String componentType : componentTypes) {
-            if (components.has(componentType)) {
-                JsonNode componentData = components.get(componentType);
-
-                // Extract label from Cell component (assuming same for all components)
-                if (componentType.equals("Cell") && componentData.has("class")) {
-                    String className = componentData.get("class").asText();
-                    Integer classId = classNameToIdMap.get(className);
-                    if (classId != null) {
-                        trainingLabels.put(roiKey, classId.floatValue());
+        // Parse cell features
+        if (root.has("cellFeatures")) {
+            JsonNode cellFeaturesNode = root.get("cellFeatures");
+            Iterator<Map.Entry<String, JsonNode>> cellIterator = cellFeaturesNode.fields();
+            
+            // If feature names not set, infer from first cell
+            if (featureNames.isEmpty() && cellIterator.hasNext()) {
+                Map.Entry<String, JsonNode> firstCell = cellIterator.next();
+                JsonNode firstFeatures = firstCell.getValue();
+                Iterator<String> featureIterator = firstFeatures.fieldNames();
+                while (featureIterator.hasNext()) {
+                    featureNames.add(featureIterator.next());
+                }
+                logger.info("Inferred feature names from data: {}", featureNames);
+                
+                // Reset iterator
+                cellIterator = cellFeaturesNode.fields();
+            }
+            
+            // Apply feature filter
+            selectedFeatureNames = (featureFilter != null && !featureFilter.isEmpty()) 
+                ? new ArrayList<>(featureFilter) 
+                : new ArrayList<>(featureNames);
+            
+            // Parse all cells
+            while (cellIterator.hasNext()) {
+                Map.Entry<String, JsonNode> cellEntry = cellIterator.next();
+                String cellId = cellEntry.getKey();
+                JsonNode featuresNode = cellEntry.getValue();
+                
+                // Extract features in order
+                float[] features = new float[selectedFeatureNames.size()];
+                for (int i = 0; i < selectedFeatureNames.size(); i++) {
+                    String featureName = selectedFeatureNames.get(i);
+                    if (featuresNode.has(featureName)) {
+                        features[i] = (float) featuresNode.get(featureName).asDouble();
                     } else {
-                        logger.warn("Unknown class '{}' for ROI {}", className, roiKey);
+                        features[i] = 0.0f; // Default value for missing features
+                        logger.warn("Feature '{}' missing for cell '{}', using 0.0", featureName, cellId);
                     }
                 }
-
-                // Extract features from component with proper component-prefix filtering
-                float[] features = extractFeaturesFromComponent(componentData, featureFilter, componentType);
-                componentFeatures.add(features);
-            } else {
-                // Use zero-array for missing components
-                componentFeatures.add(new float[0]);
+                
+                cellFeatures.put(cellId, features);
             }
         }
 
-        // Concatenate features from all components
-        float[] combinedFeatures = concatenateFeatures(componentFeatures);
-        allCellFeatures.put(roiKey, combinedFeatures);
-    }
-
-    private float[] extractFeaturesFromComponent(JsonNode componentData, List<String> featureFilter, String componentType) {
-        List<Float> features = new ArrayList<>();
-
-        Iterator<Map.Entry<String, JsonNode>> fieldIterator = componentData.fields();
-        while (fieldIterator.hasNext()) {
-            Map.Entry<String, JsonNode> fieldEntry = fieldIterator.next();
-            String featureName = fieldEntry.getKey();
-            JsonNode valueNode = fieldEntry.getValue();
-
-            // Skip non-feature fields
-            if ("class".equals(featureName) || "ignore".equals(featureName)) {
-                continue;
-            }
-
-            // Apply feature filter if provided - check both prefixed and basic names
-            String prefixedFeatureName = componentType + "." + featureName;
-            if (featureFilter != null && !featureFilter.contains(featureName) && !featureFilter.contains(prefixedFeatureName)) {
-                // Also check underscore variant since that's what collectFeatureNamesWithPrefixes creates
-                String underscoreFeatureName = componentType + "_" + featureName;
-                if (!featureFilter.contains(underscoreFeatureName)) {
-                    continue;
-                }
-            }
-
-            // Convert to float
-            if (valueNode.isNumber()) {
-                features.add(valueNode.floatValue());
-            } else if (valueNode.isTextual() && "N/A".equals(valueNode.asText())) {
-                features.add(Float.NaN);
+        // Parse cell labels
+        if (root.has("cellLabels")) {
+            JsonNode cellLabelsNode = root.get("cellLabels");
+            Iterator<Map.Entry<String, JsonNode>> labelIterator = cellLabelsNode.fields();
+            while (labelIterator.hasNext()) {
+                Map.Entry<String, JsonNode> labelEntry = labelIterator.next();
+                String cellId = labelEntry.getKey();
+                float label = (float) labelEntry.getValue().asDouble();
+                trainingLabels.put(cellId, label);
             }
         }
 
-        float[] result = new float[features.size()];
-        for (int i = 0; i < features.size(); i++) {
-            result[i] = features.get(i);
-        }
-        return result;
-    }
-
-    private void collectFeatureNames(JsonNode componentData) {
-        Iterator<Map.Entry<String, JsonNode>> fieldIterator = componentData.fields();
-        while (fieldIterator.hasNext()) {
-            String featureName = fieldIterator.next().getKey();
-
-            // Skip non-feature fields
-            if (!"class".equals(featureName) && !"ignore".equals(featureName)) {
-                featureNames.add(featureName);
-            }
-        }
-        logger.debug("Collected {} feature names: {}", featureNames.size(), featureNames);
-    }
-
-    private void collectFeatureNamesFromActualStructure(JsonNode roiTypeData) {
-        logger.debug("Collecting features from JSON structure...");
-
-        // roiTypeData here represents: roiType -> features mapping
-        // e.g., { "Cell": {...}, "Cytoplasm": {...}, "Nucleus": {...} }
-
-        Iterator<Map.Entry<String, JsonNode>> roiTypeIterator = roiTypeData.fields();
-        while (roiTypeIterator.hasNext()) {
-            Map.Entry<String, JsonNode> roiTypeEntry = roiTypeIterator.next();
-            String roiType = roiTypeEntry.getKey();
-            JsonNode featureData = roiTypeEntry.getValue();
-
-            logger.debug("Processing ROI type: {} with {} fields", roiType, featureData.size());
-
-            // Extract feature names from this ROI type
-            Iterator<Map.Entry<String, JsonNode>> fieldIterator = featureData.fields();
-            while (fieldIterator.hasNext()) {
-                String featureName = fieldIterator.next().getKey();
-
-                // Skip non-feature fields
-                if (!"class".equals(featureName) && !"ignore".equals(featureName)) {
-                    String fullFeatureName = roiType + "_" + featureName;
-                    if (!featureNames.contains(fullFeatureName)) {
-                        featureNames.add(fullFeatureName);
-                        logger.debug("Added feature: {}", fullFeatureName);
-                    }
-                }
-            }
-        }
-
-        logger.debug("Collected {} total feature names: {}", featureNames.size(), featureNames);
-    }
-
-    private void collectFeatureNamesWithPrefixes(JsonNode componentData, String[] componentTypes) {
-        List<String> baseFeatures = new ArrayList<>();
-
-        // Collect basic feature names first
-        Iterator<Map.Entry<String, JsonNode>> fieldIterator = componentData.fields();
-        while (fieldIterator.hasNext()) {
-            String featureName = fieldIterator.next().getKey();
-
-            // Skip non-feature fields
-            if (!"class".equals(featureName) && !"ignore".equals(featureName)) {
-                baseFeatures.add(featureName);
-                logger.debug("Found feature: {}", featureName);
-            }
-        }
-
-        logger.debug("Base features collected: {}", baseFeatures);
-
-        // Create feature names with prefixes for each component
-        for (String componentType : componentTypes) {
-            for (String baseFeature : baseFeatures) {
-                // Add component prefix to each feature (e.g., "Cell.vessel_distance")
-                String fullFeatureName = componentType + "_" + baseFeature;
-                featureNames.add(fullFeatureName);
-            }
-        }
-        logger.debug("Collected {} feature names with prefixes: {}", featureNames.size(), featureNames);
-    }
-
-    private float[] concatenateFeatures(List<float[]> componentFeatures) {
-        int totalSize = 0;
-        for (float[] features : componentFeatures) {
-            totalSize += features.length;
-        }
-
-        float[] result = new float[totalSize];
-        int offset = 0;
-        for (float[] features : componentFeatures) {
-            if (features.length > 0) {
-                System.arraycopy(features, 0, result, offset, features.length);
-            }
-            offset += features.length;
-        }
-
-        return result;
-    }
-
-    private float[] concatenateFeaturesSimple(List<float[]> componentFeatures) {
-        int totalSize = 0;
-        for (float[] features : componentFeatures) {
-            totalSize += features.length;
-        }
-
-        float[] result = new float[totalSize];
-        int offset = 0;
-        for (float[] features : componentFeatures) {
-            if (features.length > 0) {
-                System.arraycopy(features, 0, result, offset, features.length);
-            }
-            offset += features.length;
-        }
-
-        return result;
-    }
-
-    private void initializeFeatureSelection(List<String> featureFilter) {
-        for (String featureName : featureNames) {
-            // Auto-filter out unwanted features that are not useful for modeling
-            boolean isUnwantedFeature = featureName.contains("closest_vessel") ||
-                                       featureName.contains("closest_neighbor") ||
-                                       featureName.contains("_closest_vessel") ||
-                                       featureName.contains("_closest_neighbor");
-
-            if (isUnwantedFeature) {
-                featureEnabled.put(featureName, false);
-                continue;
-            }
-
-            // Use the provided filter or enable by default if no filter specified
-            boolean enabled = (featureFilter == null) || featureFilter.contains(featureName);
-            featureEnabled.put(featureName, enabled);
-        }
+        logger.info("Loaded {} cells with {} features each", cellFeatures.size(), selectedFeatureNames.size());
+        logger.info("Feature selection: {}", selectedFeatureNames);
     }
 
     /**
-     * Gets all cell features.
-     *
-     * @return map of ROI key to feature array
+     * Parse training labels from the new format classifiedROIs section.
      */
+    private void parseLabelsFromClassifiedROIs(JsonNode classifiedROIs) {
+        logger.info("Parsing labels from classifiedROIs section...");
+
+        Iterator<Map.Entry<String, JsonNode>> fileIterator = classifiedROIs.fields();
+        int labelCount = 0;
+
+        while (fileIterator.hasNext()) {
+            Map.Entry<String, JsonNode> fileEntry = fileIterator.next();
+            JsonNode roiData = fileEntry.getValue();
+
+            Iterator<Map.Entry<String, JsonNode>> roiIterator = roiData.fields();
+            while (roiIterator.hasNext()) {
+                Map.Entry<String, JsonNode> roiEntry = roiIterator.next();
+                String cellId = roiEntry.getKey();
+                JsonNode components = roiEntry.getValue();
+
+                // Extract label from first component that has a class field
+                String[] componentTypes = {"Cell", "Cytoplasm", "Nucleus"};
+                for (String componentType : componentTypes) {
+                    if (components.has(componentType)) {
+                        JsonNode componentData = components.get(componentType);
+                        if (componentData.has("class") && !componentData.get("class").isNull()) {
+                            String className = componentData.get("class").asText();
+                            Integer classId = classNameToIdMap.get(className);
+                            if (classId != null) {
+                                // Convert to XGBoost-compatible index (0-based)
+                                Integer xgboostIndex = originalToXgboostIndex.get(classId);
+                                if (xgboostIndex != null) {
+                                    trainingLabels.put(cellId, xgboostIndex.floatValue());
+                                    labelCount++;
+                                    logger.debug("Added XGBoost label {} for cell {} (class: {} -> original ID: {}, XGBoost index: {})",
+                                        xgboostIndex, cellId, className, classId, xgboostIndex);
+                                }
+                            }
+                            break; // Found and processed, move to next ROI
+                        }
+                    }
+                }
+            }
+        }
+
+        logger.info("Parsed {} training labels from classifiedROIs", labelCount);
+    }
+
+    /**
+     * Parse feature data from the new format classifiedROIs section.
+     */
+    private void parseFeaturesFromClassifiedROIs(JsonNode classifiedROIs, List<String> featureFilter) {
+        logger.info("Parsing features from classifiedROIs section...");
+
+        // Collect all unique feature names first
+        Set<String> allFeatureNames = new HashSet<>();
+
+        Iterator<Map.Entry<String, JsonNode>> fileIterator = classifiedROIs.fields();
+        while (fileIterator.hasNext()) {
+            Map.Entry<String, JsonNode> fileEntry = fileIterator.next();
+            JsonNode roiData = fileEntry.getValue();
+
+            Iterator<Map.Entry<String, JsonNode>> roiIterator = roiData.fields();
+            while (roiIterator.hasNext()) {
+                Map.Entry<String, JsonNode> roiEntry = roiIterator.next();
+                JsonNode components = roiEntry.getValue();
+
+                // Extract feature names from each component
+                String[] componentTypes = {"Cell", "Cytoplasm", "Nucleus"};
+                for (String componentType : componentTypes) {
+                    if (components.has(componentType)) {
+                        JsonNode componentData = components.get(componentType);
+                        Iterator<Map.Entry<String, JsonNode>> fieldIterator = componentData.fields();
+                        while (fieldIterator.hasNext()) {
+                            String fieldName = fieldIterator.next().getKey();
+                            if (!"class".equals(fieldName) && !"ignore".equals(fieldName)) {
+                                allFeatureNames.add(componentType + "_" + fieldName);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Set feature names if not already set
+        if (featureNames.isEmpty()) {
+            featureNames = new ArrayList<>(allFeatureNames);
+            Collections.sort(featureNames); // Sort for consistency
+            logger.info("Collected {} feature names from new format: {}", featureNames.size(), featureNames);
+        }
+
+        // Apply feature filter
+        selectedFeatureNames = (featureFilter != null && !featureFilter.isEmpty())
+            ? new ArrayList<>(featureFilter)
+            : new ArrayList<>(featureNames);
+
+        // Parse feature data for each cell
+        fileIterator = classifiedROIs.fields(); // Reset iterator
+        int cellCount = 0;
+
+        while (fileIterator.hasNext()) {
+            Map.Entry<String, JsonNode> fileEntry = fileIterator.next();
+            JsonNode roiData = fileEntry.getValue();
+
+            Iterator<Map.Entry<String, JsonNode>> roiIterator = roiData.fields();
+            while (roiIterator.hasNext()) {
+                Map.Entry<String, JsonNode> roiEntry = roiIterator.next();
+                String cellId = roiEntry.getKey();
+                JsonNode components = roiEntry.getValue();
+
+                List<Float> featuresList = new ArrayList<>();
+
+                // Extract features from each selected feature in order
+                for (String selectedFeature : selectedFeatureNames) {
+                    boolean found = false;
+
+                    if (selectedFeature.contains("_")) {
+                        String[] parts = selectedFeature.split("_", 2);
+                        if (parts.length == 2) {
+                            String componentType = parts[0];
+                            String fieldName = parts[1];
+
+                            if (components.has(componentType)) {
+                                JsonNode componentData = components.get(componentType);
+                                if (componentData.has(fieldName) && !componentData.get(fieldName).isNull()) {
+                                    if (componentData.get(fieldName).isNumber()) {
+                                        featuresList.add((float) componentData.get(fieldName).asDouble());
+                                        found = true;
+                                    } else if (componentData.get(fieldName).isTextual() &&
+                                              "N/A".equals(componentData.get(fieldName).asText())) {
+                                        featuresList.add(Float.NaN);
+                                        found = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (!found) {
+                        featuresList.add(Float.NaN); // Use NaN for missing values
+                    }
+                }
+
+                // Convert to float array
+                float[] features = new float[featuresList.size()];
+                for (int i = 0; i < featuresList.size(); i++) {
+                    features[i] = featuresList.get(i);
+                }
+
+                cellFeatures.put(cellId, features);
+                cellCount++;
+            }
+        }
+
+        logger.info("Parsed {} cells with {} features each from classifiedROIs", cellCount, selectedFeatureNames.size());
+    }
+
+    /**
+     * Create XGBoost-compatible label mapping where original class IDs are remapped
+     * to sequential indices starting from 0 (required by XGBoost)
+     */
+    private void createXGBoostLabelMapping() {
+        logger.info("Creating XGBoost-compatible label mapping...");
+
+        // Get all unique class IDs from the loaded mapping
+        Set<Integer> uniqueClassIds = new HashSet<>(idToClassNameMap.keySet());
+        List<Integer> sortedIds = new ArrayList<>(uniqueClassIds);
+        Collections.sort(sortedIds);
+
+        // Create mapping from original class ID to XGBoost index (0, 1, 2...)
+        for (int i = 0; i < sortedIds.size(); i++) {
+            int originalId = sortedIds.get(i);
+            int xgboostIndex = i;
+
+            originalToXgboostIndex.put(originalId, xgboostIndex);
+            xgboostToOriginalId.put(xgboostIndex, originalId);
+
+            String className = idToClassNameMap.get(originalId);
+            logger.debug("XGBoost mapping: original class '{}' (ID={}) → XGBoost index {}",
+                className, originalId, xgboostIndex);
+        }
+
+        logger.info("XGBoost label mapping complete: {} classes remapped from {} to indices 0-{}",
+            sortedIds.size(), sortedIds, sortedIds.size() - 1);
+    }
+
+    // Getters for compatibility with existing XGBoost trainer
     public Map<String, float[]> getAllCellFeatures() {
-        return Collections.unmodifiableMap(allCellFeatures);
+        return cellFeatures;
     }
-
-    /**
-     * Gets training labels.
-     *
-     * @return map of ROI key to class ID
-     */
-    public Map<String, Float> getTrainingLabels() {
-        return Collections.unmodifiableMap(trainingLabels);
-    }
-
-    /**
-     * Gets class name to ID mapping.
-     *
-     * @return mapping
-     */
-    public Map<String, Integer> getClassNameToIdMap() {
-        return Collections.unmodifiableMap(classNameToIdMap);
-    }
-
-    /**
-     * Gets ID to class name mapping.
-     *
-     * @return mapping
-     */
-    public Map<Integer, String> getIdToClassNameMap() {
-        return Collections.unmodifiableMap(idToClassNameMap);
-    }
-
-    /**
-     * Gets class colors from training data.
-     *
-     * @return mapping of class name to hex color
-     */
-    public Map<String, String> getClassColors() {
-        return Collections.unmodifiableMap(classColors);
-    }
-
-    /**
-     * Gets available feature names.
-     *
-     * @return feature names list
-     */
-    public List<String> getFeatureNames() {
-        return Collections.unmodifiableList(featureNames);
-    }
-
-    /**
-     * Gets selected features based on feature selection configuration.
-     *
-     * @return list of selected feature names
-     */
-    public List<String> getSelectedFeatureNames() {
-        List<String> selected = new ArrayList<>();
-        for (String featureName : featureNames) {
-            if (featureEnabled.getOrDefault(featureName, true)) {
-                selected.add(featureName);
-            }
-        }
-        return selected;
-    }
-
-    /**
-     * Updates feature selection.
-     *
-     * @param featureName feature to update
-     * @param enabled whether feature is enabled
-     */
-    public void setFeatureEnabled(String featureName, boolean enabled) {
-        featureEnabled.put(featureName, enabled);
-    }
-
-    /**
-     * Creates filtered feature arrays based on current selection.
-     *
-     * @return map of ROI key to filtered feature array
-     */
+    
     public Map<String, float[]> getFilteredCellFeatures() {
-        Map<String, float[]> filteredFeatures = new HashMap<>();
-        List<String> selectedFeatureNames = getSelectedFeatureNames();
+        return cellFeatures; // Already filtered during parsing
+    }
 
-        if (selectedFeatureNames.isEmpty()) {
-            logger.warn("No features selected for filtering");
-            return new HashMap<>(allCellFeatures);
-        }
+    public Map<String, Float> getTrainingLabels() {
+        return trainingLabels;
+    }
 
-        logger.info("Filtering features - selected: {}, total: {}", selectedFeatureNames.size(), featureNames.size());
+    public Map<String, Integer> getClassNameToIdMap() {
+        return classNameToIdMap;
+    }
 
-        for (Map.Entry<String, float[]> entry : allCellFeatures.entrySet()) {
-            String roiKey = entry.getKey();
-            float[] allFeatures = entry.getValue();
-            float[] filtered = new float[selectedFeatureNames.size()];
+    public Map<Integer, String> getIdToClassNameMap() {
+        return idToClassNameMap;
+    }
 
-            // Since features are concatenated by component, map selected features to positions
-            int filteredIndex = 0;
-            for (String selectedFeature : selectedFeatureNames) {
-                // Find the global index of this feature in the concatenated array
-                int featureIndex = getFeatureGlobalIndex(selectedFeature);
-                if (featureIndex >= 0 && featureIndex < allFeatures.length) {
-                    filtered[filteredIndex++] = allFeatures[featureIndex];
-                } else {
-                    logger.warn("Feature '{}' not found in concatenated array (length: {})", selectedFeature, allFeatures.length);
-                }
-            }
+    public Map<String, String> getClassColors() {
+        return classColors;
+    }
 
-            filteredFeatures.put(roiKey, filtered);
-        }
+    public List<String> getSelectedFeatureNames() {
+        return selectedFeatureNames;
+    }
 
-        logger.info("Filtered features from {} to {} per sample", featureNames.size(), selectedFeatureNames.size());
-        return filteredFeatures;
+    public List<String> getFeatureNames() {
+        return featureNames;
+    }
+    
+    public List<String> getAllFeatureNames() {
+        return featureNames;
     }
 
     /**
-     * Gets the global index of a feature in the concatenated feature array.
-     *
-     * @param featureName the feature name with component prefix
-     * @return global index or -1 if not found
+     * Get the XGBoost-compatible label mapping (original class ID -> XGBoost index)
+     * @return mapping from original class IDs to XGBoost indices (0, 1, 2...)
      */
-    private int getFeatureGlobalIndex(String featureName) {
-        // Since we use underscore format (Cell_vessel_distance), find the position
-        String[] components = featureName.split("_", 2);
-        if (components.length != 2) {
-            return -1; // Invalid format
-        }
-
-        String componentType = components[0];
-        String baseFeatureName = components[1];
-        int componentIndex = getComponentIndex(componentType);
-        int featureIndex = getFeatureIndexInComponent(baseFeatureName);
-
-        if (componentIndex == -1 || featureIndex == -1) {
-            return -1;
-        }
-
-        // Calculate global index based on component position
-        return (componentIndex * getFeaturesPerComponent()) + featureIndex;
+    public Map<Integer, Integer> getOriginalToXgboostIndex() {
+        return originalToXgboostIndex;
     }
 
-    private int getComponentIndex(String componentType) {
-        switch (componentType) {
-            case "Cell": return 0;
-            case "Cytoplasm": return 1;
-            case "Nucleus": return 2;
-            default: return -1;
-        }
-    }
-
-    private int getFeatureIndexInComponent(String featureName) {
-        // Count features that belong to Cell component (first component)
-        int index = 0;
-        for (String fname : featureNames) {
-            if (fname.startsWith("Cell_")) {
-                String baseName = fname.substring(5); // Remove "Cell_" prefix
-                if (baseName.equals(featureName)) {
-                    return index;
-                }
-                index++;
-            }
-        }
-        return -1;
-    }
-
-    private int getFeaturesPerComponent() {
-        // Count how many features belong to each component (assumes equal number)
-        long cellFeatures = featureNames.stream().filter(name -> name.startsWith("Cell_")).count();
-        return (int) cellFeatures;
+    /**
+     * Get the reverse XGBoost label mapping (XGBoost index -> original class ID)
+     * @return mapping from XGBoost indices back to original class IDs
+     */
+    public Map<Integer, Integer> getXgboostToOriginalId() {
+        return xgboostToOriginalId;
     }
 }

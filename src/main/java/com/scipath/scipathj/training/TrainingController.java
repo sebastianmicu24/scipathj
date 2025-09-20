@@ -1,8 +1,5 @@
 package com.scipath.scipathj.training;
 
-import com.scipath.scipathj.training.core.ModelTrainingService;
-import com.scipath.scipathj.training.model.TrainingConfiguration;
-import com.scipath.scipathj.training.model.TrainingResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import javax.swing.*;

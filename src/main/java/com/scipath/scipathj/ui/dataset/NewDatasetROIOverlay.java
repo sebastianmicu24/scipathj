@@ -10,6 +10,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import javax.swing.JComponent;
 import org.slf4j.Logger;
@@ -34,6 +35,9 @@ public class NewDatasetROIOverlay extends JComponent implements ProgressiveROILo
     private final List<UserROI> allROIs = new CopyOnWriteArrayList<>();
     private final List<String> classNames = new ArrayList<>();
     private String selectedClassName = "Unclassified";
+
+    // Persistent storage for ROI classifications across image switches
+    private final Map<String, Map<String, String>> persistentClassifications = new java.util.LinkedHashMap<>();
     
     // Class color mapping - will be provided by controls panel
     private java.util.Map<String, Color> classColors = new java.util.HashMap<>();
@@ -90,13 +94,31 @@ public class NewDatasetROIOverlay extends JComponent implements ProgressiveROILo
     
     /**
      * Load ROIs progressively from ZIP file.
+     * Preserves classifications across image switches.
      */
     public void loadROIsFromZip(java.io.File zipFile, String imageFileName) {
+        // Save current image's classifications before switching
+        if (currentImageFileName != null && !allROIs.isEmpty()) {
+            Map<String, String> currentClasses = new java.util.HashMap<>();
+            for (UserROI roi : allROIs) {
+                String assignedClass = roi.getAssignedClass();
+                if (assignedClass != null && !assignedClass.isEmpty()) {
+                    currentClasses.put(roi.getName(), assignedClass);
+                }
+            }
+            if (!currentClasses.isEmpty()) {
+                persistentClassifications.put(currentImageFileName, currentClasses);
+                LOGGER.debug("Saved {} classifications for image: {}", currentClasses.size(), currentImageFileName);
+            }
+        }
+
         this.currentImageFileName = imageFileName;
+
+        // Clear current ROIs but keep persistent classifications
         allROIs.clear();
         renderer.clear();
         repaint();
-        
+
         loader.loadROIsProgressively(zipFile, imageFileName);
         LOGGER.info("Started progressive loading for image: {}", imageFileName);
     }
@@ -212,19 +234,36 @@ public class NewDatasetROIOverlay extends JComponent implements ProgressiveROILo
     
     @Override
     public void onBatchLoaded(List<UserROI> batch, int totalLoaded, int totalExpected) {
+        // Apply previously saved classifications to new ROIs
+        Map<String, String> savedClasses = persistentClassifications.get(currentImageFileName);
+        if (savedClasses != null && !savedClasses.isEmpty()) {
+            for (UserROI roi : batch) {
+                String savedClass = savedClasses.get(roi.getName());
+                if (savedClass != null && !savedClass.isEmpty()) {
+                    roi.setAssignedClass(savedClass);
+                    Color classColor = classColors.get(savedClass);
+                    if (classColor != null) {
+                        roi.setDisplayColor(classColor);
+                    }
+                    LOGGER.debug("Restored classification '{}' for ROI '{}'", savedClass, roi.getName());
+                }
+            }
+        }
+
         // Add new ROIs to storage
         allROIs.addAll(batch);
-        
+
         // Update renderer with new ROIs
         renderer.addROIs(batch);
-        
+
         // Trigger repaint for immediate display
         repaint();
-        
+
         // Notify listeners
         notifyProgressUpdate(totalLoaded, totalExpected);
-        
-        LOGGER.debug("Batch loaded: {} ROIs, total: {}", batch.size(), totalLoaded);
+
+        LOGGER.debug("Batch loaded: {} ROIs, total: {} (with {} saved classifications restored)",
+                    batch.size(), totalLoaded, savedClasses != null ? savedClasses.size() : 0);
     }
     
     @Override
@@ -324,6 +363,18 @@ public class NewDatasetROIOverlay extends JComponent implements ProgressiveROILo
         // Assign the class to the ROI and its linked ROIs
         assignClassWithLinking(roi, className);
 
+        // Save to persistent storage
+        if (currentImageFileName != null) {
+            persistentClassifications.computeIfAbsent(currentImageFileName, k -> new java.util.HashMap<>());
+            persistentClassifications.get(currentImageFileName).put(roi.getName(), className);
+
+            // Also save linked ROI if present
+            UserROI linkedROI = findLinkedROI(roi);
+            if (linkedROI != null) {
+                persistentClassifications.get(currentImageFileName).put(linkedROI.getName(), className);
+            }
+        }
+
         // Force a repaint to show the color change
         repaint();
 
@@ -418,6 +469,21 @@ public class NewDatasetROIOverlay extends JComponent implements ProgressiveROILo
      */
     public void setClassColor(String className, Color color) {
         classColors.put(className, color);
+    }
+
+    /**
+     * Get all persistent classifications across all images.
+     * This is used for multi-image training data export.
+     */
+    public Map<String, Map<String, String>> getAllPersistentClassifications() {
+        return new java.util.LinkedHashMap<>(persistentClassifications);
+    }
+
+    /**
+     * Get persistent classifications for the current image.
+     */
+    public Map<String, String> getCurrentImageClassifications() {
+        return currentImageFileName != null ? persistentClassifications.get(currentImageFileName) : null;
     }
     
     private void notifyROIClicked(UserROI roi, String assignedClass) {
