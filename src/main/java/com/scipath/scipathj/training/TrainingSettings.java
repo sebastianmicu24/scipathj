@@ -27,6 +27,11 @@ public class TrainingSettings {
     private float lambda = 1.0f;
     private float alpha = 0.0f;
     private float gamma = 0.0f;
+    
+    // Multi-class specific parameters
+    private String objective = "multi:softprob";  // For multi-class classification with probabilities
+    private String evalMetric = "mlogloss";       // Multi-class log loss for proper evaluation
+    private int numClasses = 2;                   // Number of classes (auto-detected)
 
     // Training parameters
     private float trainRatio = 0.7f;
@@ -89,6 +94,27 @@ public class TrainingSettings {
 
     public float getGamma() { return gamma; }
     public void setGamma(float gamma) { this.gamma = gamma; }
+    
+    // Multi-class parameters
+    
+    public String getObjective() { return objective; }
+    public void setObjective(String objective) { this.objective = objective; }
+    
+    public String getEvalMetric() { return evalMetric; }
+    public void setEvalMetric(String evalMetric) { this.evalMetric = evalMetric; }
+    
+    public int getNumClasses() { return numClasses; }
+    public void setNumClasses(int numClasses) {
+        this.numClasses = numClasses;
+        // Auto-configure objective based on number of classes
+        if (numClasses == 2) {
+            this.objective = "binary:logistic";
+            this.evalMetric = "logloss";
+        } else if (numClasses > 2) {
+            this.objective = "multi:softprob";
+            this.evalMetric = "mlogloss";
+        }
+    }
 
     // Training parameters
 

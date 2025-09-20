@@ -77,9 +77,30 @@ public class JSONDataReader {
             logger.warn("No featureNames found in JSON, will infer from data");
         }
 
-        // Parse class mapping - support both new format and old classMapping fallback
-        if (root.has("classes")) {
-            // New format: classes is an array of objects with {name, count, id, color}
+        // Parse class mapping - support comprehensive format, traditional format, and legacy fallback
+        if (root.has("classifiedROIs")) {
+            // New comprehensive format: extract class names from classifiedROIs structure
+            JsonNode classifiedROIs = root.get("classifiedROIs");
+            Iterator<Map.Entry<String, JsonNode>> classIterator = classifiedROIs.fields();
+            int classId = 0;
+            
+            while (classIterator.hasNext()) {
+                Map.Entry<String, JsonNode> classEntry = classIterator.next();
+                String className = classEntry.getKey().trim(); // Remove any whitespace
+                
+                classNameToIdMap.put(className, classId);
+                idToClassNameMap.put(classId, className);
+                logger.debug("Mapped class '{}' to ID {} from comprehensive format", className, classId);
+                classId++;
+            }
+            
+            logger.info("Loaded classes from comprehensive format: {}", classNameToIdMap);
+            
+            // Create XGBoost-compatible label mapping (original IDs -> sequential indices 0,1,2...)
+            createXGBoostLabelMapping();
+            
+        } else if (root.has("classes")) {
+            // Traditional format: classes is an array of objects with {name, count, id, color}
             JsonNode classesArray = root.get("classes");
             for (int i = 0; i < classesArray.size(); i++) {
                 JsonNode classNode = classesArray.get(i);
@@ -92,7 +113,7 @@ public class JSONDataReader {
                     }
                     classNameToIdMap.put(className, classId);
                     idToClassNameMap.put(classId, className);
-                    logger.debug("Mapped class '{}' to ID {} from new format", className, classId);
+                    logger.debug("Mapped class '{}' to ID {} from traditional format", className, classId);
 
                     // Store class color if available
                     if (classNode.has("color") && !classNode.get("color").isNull()) {
@@ -108,10 +129,11 @@ public class JSONDataReader {
                     logger.debug("Mapped class '{}' to ID {} (old string format)", className, i);
                 }
             }
-            logger.info("Loaded classes from new format: {}", classNameToIdMap);
+            logger.info("Loaded classes from traditional format: {}", classNameToIdMap);
 
             // Create XGBoost-compatible label mapping (original IDs -> sequential indices 0,1,2...)
             createXGBoostLabelMapping();
+            
         } else if (root.has("classMapping")) {
             // Legacy format: classMapping as object with name->id mappings
             JsonNode classMappingNode = root.get("classMapping");
@@ -124,35 +146,25 @@ public class JSONDataReader {
                 idToClassNameMap.put(classId, className);
             }
             logger.info("Loaded class mapping (legacy format): {}", classNameToIdMap);
-        } else {
-            logger.warn("No class information found in JSON (neither 'classes' nor 'classMapping')");
-        }
-
-        // Also handle legacy format class Mapping
-        if (root.has("classMapping") && classNameToIdMap.isEmpty()) {
-            JsonNode classMappingNode = root.get("classMapping");
-            Iterator<Map.Entry<String, JsonNode>> fields = classMappingNode.fields();
-            while (fields.hasNext()) {
-                Map.Entry<String, JsonNode> entry = fields.next();
-                String className = entry.getKey();
-                int classId = entry.getValue().asInt();
-                classNameToIdMap.put(className, classId);
-                idToClassNameMap.put(classId, className);
-            }
-            logger.info("Loaded class mapping (legacy format): {}", classNameToIdMap);
+            
             // Create XGBoost-compatible label mapping
             createXGBoostLabelMapping();
+            
+        } else {
+            logger.warn("No class information found in JSON (neither 'classifiedROIs', 'classes', nor 'classMapping')");
         }
+// Try to parse labels and features from different formats
+if (root.has("classifiedROIs")) {
+    parseLabelsFromClassifiedROIs(root.get("classifiedROIs"));
 
-        // Try to parse labels from the new format
-        if (root.has("classifiedROIs")) {
-            parseLabelsFromClassifiedROIs(root.get("classifiedROIs"));
-
-            // Also extract features from the new format if no features parsed yet
-            if (cellFeatures.isEmpty()) {
-                parseFeaturesFromClassifiedROIs(root.get("classifiedROIs"), featureFilter);
-            }
-        }
+    // Also extract features from the comprehensive format if no features parsed yet
+    if (cellFeatures.isEmpty()) {
+        parseFeaturesFromClassifiedROIs(root.get("classifiedROIs"), featureFilter);
+    }
+} else if (root.has("cellData")) {
+    // Handle the new cellData format (comprehensive_feature_extraction)
+    parseCellDataFormat(root.get("cellData"), featureFilter);
+}
 
         // Parse cell features
         if (root.has("cellFeatures")) {
@@ -217,82 +229,100 @@ public class JSONDataReader {
     }
 
     /**
-     * Parse training labels from the new format classifiedROIs section.
+     * Parse training labels from the new comprehensive format classifiedROIs section.
+     * New format: classifiedROIs -> className -> roiName -> classId -> features
      */
     private void parseLabelsFromClassifiedROIs(JsonNode classifiedROIs) {
-        logger.info("Parsing labels from classifiedROIs section...");
+        logger.info("Parsing labels from new comprehensive classifiedROIs section...");
 
-        Iterator<Map.Entry<String, JsonNode>> fileIterator = classifiedROIs.fields();
+        Iterator<Map.Entry<String, JsonNode>> classIterator = classifiedROIs.fields();
         int labelCount = 0;
 
-        while (fileIterator.hasNext()) {
-            Map.Entry<String, JsonNode> fileEntry = fileIterator.next();
-            JsonNode roiData = fileEntry.getValue();
+        while (classIterator.hasNext()) {
+            Map.Entry<String, JsonNode> classEntry = classIterator.next();
+            String className = classEntry.getKey().trim(); // Remove any whitespace
+            JsonNode roiDataByClass = classEntry.getValue();
 
-            Iterator<Map.Entry<String, JsonNode>> roiIterator = roiData.fields();
+            // Get class ID for this class name
+            Integer classId = classNameToIdMap.get(className);
+            if (classId == null) {
+                logger.warn("Unknown class name '{}' - skipping", className);
+                continue;
+            }
+
+            // Convert to XGBoost-compatible index (0-based)
+            Integer xgboostIndex = originalToXgboostIndex.get(classId);
+            if (xgboostIndex == null) {
+                logger.warn("No XGBoost mapping for class ID {} (class: {}) - skipping", classId, className);
+                continue;
+            }
+
+            // Parse all ROIs for this class
+            Iterator<Map.Entry<String, JsonNode>> roiIterator = roiDataByClass.fields();
             while (roiIterator.hasNext()) {
                 Map.Entry<String, JsonNode> roiEntry = roiIterator.next();
-                String cellId = roiEntry.getKey();
-                JsonNode components = roiEntry.getValue();
+                String roiName = roiEntry.getKey().trim();
+                JsonNode classIdData = roiEntry.getValue();
 
-                // Extract label from first component that has a class field
-                String[] componentTypes = {"Cell", "Cytoplasm", "Nucleus"};
-                for (String componentType : componentTypes) {
-                    if (components.has(componentType)) {
-                        JsonNode componentData = components.get(componentType);
-                        if (componentData.has("class") && !componentData.get("class").isNull()) {
-                            String className = componentData.get("class").asText();
-                            Integer classId = classNameToIdMap.get(className);
-                            if (classId != null) {
-                                // Convert to XGBoost-compatible index (0-based)
-                                Integer xgboostIndex = originalToXgboostIndex.get(classId);
-                                if (xgboostIndex != null) {
-                                    trainingLabels.put(cellId, xgboostIndex.floatValue());
-                                    labelCount++;
-                                    logger.debug("Added XGBoost label {} for cell {} (class: {} -> original ID: {}, XGBoost index: {})",
-                                        xgboostIndex, cellId, className, classId, xgboostIndex);
-                                }
-                            }
-                            break; // Found and processed, move to next ROI
-                        }
+                // Skip ROIs marked as ignored
+                Iterator<Map.Entry<String, JsonNode>> classIdIterator = classIdData.fields();
+                while (classIdIterator.hasNext()) {
+                    Map.Entry<String, JsonNode> classIdEntry = classIdIterator.next();
+                    String classIdKey = classIdEntry.getKey().trim();
+                    JsonNode roiFeatures = classIdEntry.getValue();
+
+                    // Check if this ROI should be ignored
+                    if (roiFeatures.has("ignore") && roiFeatures.get("ignore").asBoolean()) {
+                        logger.debug("Skipping ignored ROI: {}", roiName);
+                        continue;
                     }
+
+                    // Create unique cell ID from ROI name and class ID
+                    String cellId = roiName + "_" + classIdKey;
+                    trainingLabels.put(cellId, xgboostIndex.floatValue());
+                    labelCount++;
+                    
+                    logger.debug("Added XGBoost label {} for cell {} (class: {} -> XGBoost index: {})",
+                        xgboostIndex, cellId, className, xgboostIndex);
                 }
             }
         }
 
-        logger.info("Parsed {} training labels from classifiedROIs", labelCount);
+        logger.info("Parsed {} training labels from comprehensive classifiedROIs format", labelCount);
     }
 
     /**
-     * Parse feature data from the new format classifiedROIs section.
+     * Parse feature data from the new comprehensive format classifiedROIs section.
+     * New format: classifiedROIs -> className -> roiName -> classId -> features
      */
     private void parseFeaturesFromClassifiedROIs(JsonNode classifiedROIs, List<String> featureFilter) {
-        logger.info("Parsing features from classifiedROIs section...");
+        logger.info("Parsing features from new comprehensive classifiedROIs section...");
 
         // Collect all unique feature names first
         Set<String> allFeatureNames = new HashSet<>();
 
-        Iterator<Map.Entry<String, JsonNode>> fileIterator = classifiedROIs.fields();
-        while (fileIterator.hasNext()) {
-            Map.Entry<String, JsonNode> fileEntry = fileIterator.next();
-            JsonNode roiData = fileEntry.getValue();
+        Iterator<Map.Entry<String, JsonNode>> classIterator = classifiedROIs.fields();
+        while (classIterator.hasNext()) {
+            Map.Entry<String, JsonNode> classEntry = classIterator.next();
+            JsonNode roiDataByClass = classEntry.getValue();
 
-            Iterator<Map.Entry<String, JsonNode>> roiIterator = roiData.fields();
+            Iterator<Map.Entry<String, JsonNode>> roiIterator = roiDataByClass.fields();
             while (roiIterator.hasNext()) {
                 Map.Entry<String, JsonNode> roiEntry = roiIterator.next();
-                JsonNode components = roiEntry.getValue();
+                JsonNode classIdData = roiEntry.getValue();
 
-                // Extract feature names from each component
-                String[] componentTypes = {"Cell", "Cytoplasm", "Nucleus"};
-                for (String componentType : componentTypes) {
-                    if (components.has(componentType)) {
-                        JsonNode componentData = components.get(componentType);
-                        Iterator<Map.Entry<String, JsonNode>> fieldIterator = componentData.fields();
-                        while (fieldIterator.hasNext()) {
-                            String fieldName = fieldIterator.next().getKey();
-                            if (!"class".equals(fieldName) && !"ignore".equals(fieldName)) {
-                                allFeatureNames.add(componentType + "_" + fieldName);
-                            }
+                Iterator<Map.Entry<String, JsonNode>> classIdIterator = classIdData.fields();
+                while (classIdIterator.hasNext()) {
+                    Map.Entry<String, JsonNode> classIdEntry = classIdIterator.next();
+                    JsonNode roiFeatures = classIdEntry.getValue();
+
+                    // Extract all feature names from this ROI (exclude special fields)
+                    Iterator<Map.Entry<String, JsonNode>> fieldIterator = roiFeatures.fields();
+                    while (fieldIterator.hasNext()) {
+                        Map.Entry<String, JsonNode> field = fieldIterator.next();
+                        String fieldName = field.getKey();
+                        if (!"class".equals(fieldName) && !"ignore".equals(fieldName)) {
+                            allFeatureNames.add(fieldName);
                         }
                     }
                 }
@@ -303,7 +333,7 @@ public class JSONDataReader {
         if (featureNames.isEmpty()) {
             featureNames = new ArrayList<>(allFeatureNames);
             Collections.sort(featureNames); // Sort for consistency
-            logger.info("Collected {} feature names from new format: {}", featureNames.size(), featureNames);
+            logger.info("Collected {} feature names from comprehensive format: {}", featureNames.size(), featureNames);
         }
 
         // Apply feature filter
@@ -312,64 +342,184 @@ public class JSONDataReader {
             : new ArrayList<>(featureNames);
 
         // Parse feature data for each cell
-        fileIterator = classifiedROIs.fields(); // Reset iterator
+        classIterator = classifiedROIs.fields(); // Reset iterator
         int cellCount = 0;
 
-        while (fileIterator.hasNext()) {
-            Map.Entry<String, JsonNode> fileEntry = fileIterator.next();
-            JsonNode roiData = fileEntry.getValue();
+        while (classIterator.hasNext()) {
+            Map.Entry<String, JsonNode> classEntry = classIterator.next();
+            String className = classEntry.getKey().trim();
+            JsonNode roiDataByClass = classEntry.getValue();
 
-            Iterator<Map.Entry<String, JsonNode>> roiIterator = roiData.fields();
+            Iterator<Map.Entry<String, JsonNode>> roiIterator = roiDataByClass.fields();
             while (roiIterator.hasNext()) {
                 Map.Entry<String, JsonNode> roiEntry = roiIterator.next();
-                String cellId = roiEntry.getKey();
-                JsonNode components = roiEntry.getValue();
+                String roiName = roiEntry.getKey().trim();
+                JsonNode classIdData = roiEntry.getValue();
 
-                List<Float> featuresList = new ArrayList<>();
+                Iterator<Map.Entry<String, JsonNode>> classIdIterator = classIdData.fields();
+                while (classIdIterator.hasNext()) {
+                    Map.Entry<String, JsonNode> classIdEntry = classIdIterator.next();
+                    String classIdKey = classIdEntry.getKey().trim();
+                    JsonNode roiFeatures = classIdEntry.getValue();
 
-                // Extract features from each selected feature in order
-                for (String selectedFeature : selectedFeatureNames) {
-                    boolean found = false;
+                    // Skip ROIs marked as ignored
+                    if (roiFeatures.has("ignore") && roiFeatures.get("ignore").asBoolean()) {
+                        logger.debug("Skipping ignored ROI: {}", roiName);
+                        continue;
+                    }
 
-                    if (selectedFeature.contains("_")) {
-                        String[] parts = selectedFeature.split("_", 2);
-                        if (parts.length == 2) {
-                            String componentType = parts[0];
-                            String fieldName = parts[1];
+                    List<Float> featuresList = new ArrayList<>();
 
-                            if (components.has(componentType)) {
-                                JsonNode componentData = components.get(componentType);
-                                if (componentData.has(fieldName) && !componentData.get(fieldName).isNull()) {
-                                    if (componentData.get(fieldName).isNumber()) {
-                                        featuresList.add((float) componentData.get(fieldName).asDouble());
-                                        found = true;
-                                    } else if (componentData.get(fieldName).isTextual() &&
-                                              "N/A".equals(componentData.get(fieldName).asText())) {
-                                        featuresList.add(Float.NaN);
-                                        found = true;
-                                    }
-                                }
+                    // Extract features from each selected feature in order
+                    for (String selectedFeature : selectedFeatureNames) {
+                        boolean found = false;
+
+                        if (roiFeatures.has(selectedFeature) && !roiFeatures.get(selectedFeature).isNull()) {
+                            if (roiFeatures.get(selectedFeature).isNumber()) {
+                                featuresList.add((float) roiFeatures.get(selectedFeature).asDouble());
+                                found = true;
+                            } else if (roiFeatures.get(selectedFeature).isTextual() &&
+                                      "N/A".equals(roiFeatures.get(selectedFeature).asText())) {
+                                featuresList.add(Float.NaN);
+                                found = true;
                             }
+                        }
+
+                        if (!found) {
+                            featuresList.add(0.0f); // Default value for missing features
+                            logger.debug("Feature '{}' missing for cell '{}', using 0.0", selectedFeature, roiName);
                         }
                     }
 
-                    if (!found) {
-                        featuresList.add(Float.NaN); // Use NaN for missing values
+                    // Convert list to array and store
+                    float[] featuresArray = new float[featuresList.size()];
+                    for (int i = 0; i < featuresList.size(); i++) {
+                        featuresArray[i] = featuresList.get(i);
                     }
-                }
 
-                // Convert to float array
-                float[] features = new float[featuresList.size()];
-                for (int i = 0; i < featuresList.size(); i++) {
-                    features[i] = featuresList.get(i);
-                }
+                    // Create unique cell ID from ROI name and class ID
+                    String cellId = roiName + "_" + classIdKey;
+                    cellFeatures.put(cellId, featuresArray);
+                    cellCount++;
 
-                cellFeatures.put(cellId, features);
-                cellCount++;
+                    logger.debug("Added features for cell {} (class: {}, {} features)",
+                        cellId, className, featuresArray.length);
+                }
             }
         }
 
-        logger.info("Parsed {} cells with {} features each from classifiedROIs", cellCount, selectedFeatureNames.size());
+        logger.info("Parsed {} cells with {} features each from comprehensive classifiedROIs", cellCount, selectedFeatureNames.size());
+    }
+
+    /**
+     * Parse the cellData format from comprehensive_feature_extraction JSON.
+     * This handles the structure where each cell has metadata and ROI sections (Cell, Cytoplasm, Nucleus).
+     */
+    private void parseCellDataFormat(JsonNode cellDataNode, List<String> featureFilter) {
+        logger.info("Parsing cellData format from comprehensive_feature_extraction...");
+        
+        // First pass: collect all available features from all ROI types
+        Set<String> allFeatureNames = new HashSet<>();
+        Iterator<Map.Entry<String, JsonNode>> cellIterator = cellDataNode.fields();
+        
+        while (cellIterator.hasNext()) {
+            Map.Entry<String, JsonNode> cellEntry = cellIterator.next();
+            JsonNode cellNode = cellEntry.getValue();
+            
+            // Extract features from Cell, Cytoplasm, and Nucleus sections
+            for (String roiType : new String[]{"Cell", "Cytoplasm", "Nucleus"}) {
+                if (cellNode.has(roiType)) {
+                    JsonNode roiNode = cellNode.get(roiType);
+                    Iterator<String> fieldNames = roiNode.fieldNames();
+                    while (fieldNames.hasNext()) {
+                        String fieldName = fieldNames.next();
+                        // Skip non-numeric fields like "ignore"
+                        if (!fieldName.equals("ignore")) {
+                            allFeatureNames.add(roiType.toLowerCase() + "_" + fieldName);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Set feature names
+        featureNames = new ArrayList<>(allFeatureNames);
+        Collections.sort(featureNames); // Ensure consistent ordering
+        
+        // Apply feature filter
+        selectedFeatureNames = (featureFilter != null && !featureFilter.isEmpty())
+            ? new ArrayList<>(featureFilter)
+            : new ArrayList<>(featureNames);
+            
+        logger.info("Found {} total features, selected {} features",
+                   featureNames.size(), selectedFeatureNames.size());
+        
+        // Second pass: extract features and labels for each cell
+        cellIterator = cellDataNode.fields();
+        int cellCount = 0;
+        
+        while (cellIterator.hasNext()) {
+            Map.Entry<String, JsonNode> cellEntry = cellIterator.next();
+            String cellId = cellEntry.getKey();
+            JsonNode cellNode = cellEntry.getValue();
+            
+            // Extract class label
+            if (cellNode.has("Class")) {
+                String className = cellNode.get("Class").asText();
+                Integer classId = classNameToIdMap.get(className);
+                if (classId != null) {
+                    trainingLabels.put(cellId, classId.floatValue());
+                } else {
+                    logger.warn("Unknown class '{}' for cell {}", className, cellId);
+                    continue;
+                }
+            } else {
+                logger.warn("Cell {} missing class information", cellId);
+                continue;
+            }
+            
+            // Extract features
+            float[] features = new float[selectedFeatureNames.size()];
+            boolean hasValidFeatures = false;
+            
+            for (int i = 0; i < selectedFeatureNames.size(); i++) {
+                String featureName = selectedFeatureNames.get(i);
+                features[i] = 0.0f; // Default value
+                
+                // Parse feature name to get ROI type and feature
+                String[] parts = featureName.split("_", 2);
+                if (parts.length == 2) {
+                    String roiType = parts[0];
+                    String actualFeature = parts[1];
+                    
+                    // Capitalize first letter for JSON lookup
+                    String roiTypeCap = roiType.substring(0, 1).toUpperCase() + roiType.substring(1);
+                    
+                    if (cellNode.has(roiTypeCap)) {
+                        JsonNode roiNode = cellNode.get(roiTypeCap);
+                        if (roiNode.has(actualFeature)) {
+                            JsonNode featureNode = roiNode.get(actualFeature);
+                            if (featureNode.isNumber()) {
+                                features[i] = (float) featureNode.asDouble();
+                                hasValidFeatures = true;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if (hasValidFeatures) {
+                cellFeatures.put(cellId, features);
+                cellCount++;
+                logger.debug("Added features for cell {} (class: {}, {} features)",
+                           cellId, cellNode.get("Class").asText(), features.length);
+            } else {
+                logger.warn("Cell {} has no valid numeric features", cellId);
+            }
+        }
+        
+        logger.info("Parsed {} cells with {} features each from cellData format",
+                   cellCount, selectedFeatureNames.size());
     }
 
     /**

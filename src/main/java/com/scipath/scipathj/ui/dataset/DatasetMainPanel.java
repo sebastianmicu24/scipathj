@@ -1,5 +1,6 @@
 package com.scipath.scipathj.ui.dataset;
 
+import com.scipath.scipathj.infrastructure.config.ConfigurationManager;
 import com.scipath.scipathj.infrastructure.config.MainSettings;
 import com.scipath.scipathj.ui.utils.UIConstants;
 import com.scipath.scipathj.ui.utils.UIUtils;
@@ -32,12 +33,14 @@ public class DatasetMainPanel extends JPanel {
     private DatasetSetupPanel setupPanel;
     private DatasetClassificationPanel classificationPanel;
     private final MainSettings settings;
+    private final ConfigurationManager configurationManager;
 
     /**
      * Creates a new dataset main panel.
      */
-    public DatasetMainPanel(MainSettings settings) {
-        this.settings = settings;
+    public DatasetMainPanel(ConfigurationManager configurationManager) {
+        this.configurationManager = configurationManager;
+        this.settings = configurationManager.loadMainSettings();
         initializeComponents();
         showSetupPanel();
     }
@@ -53,7 +56,7 @@ public class DatasetMainPanel extends JPanel {
         setupPanel = new DatasetSetupPanel();
         setupPanel.setSetupCompleteListener(e -> startClassification());
 
-        classificationPanel = new DatasetClassificationPanel(settings);
+        classificationPanel = new DatasetClassificationPanel(settings, configurationManager);
     }
 
     /**

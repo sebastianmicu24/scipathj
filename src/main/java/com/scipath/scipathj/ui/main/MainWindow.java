@@ -16,7 +16,7 @@ import com.scipath.scipathj.ui.common.StatusPanel;
 import com.scipath.scipathj.ui.controllers.AnalysisController;
 import com.scipath.scipathj.ui.controllers.NavigationController;
 import com.scipath.scipathj.ui.dataset.DatasetMainPanel;
-import com.scipath.scipathj.ui.training.XGBoostTrainingPanel;
+import com.scipath.scipathj.ui.training.XGBoostTrainingWizardPanel;
 import com.scipath.scipathj.ui.analysis.dialogs.ROIStatisticsDialog;
 import com.scipath.scipathj.ui.visualization.ResultsVisualizationPanel;
 import com.scipath.scipathj.ui.common.dialogs.settings.DisplaySettingsDialog;
@@ -54,7 +54,7 @@ public class MainWindow extends JFrame {
   private JPanel mainContentPanel;
   private MainMenuPanel mainMenuPanel;
   private DatasetMainPanel datasetCreationPanel;
-  private XGBoostTrainingPanel xgBoostTrainingPanel;
+  private XGBoostTrainingWizardPanel xgBoostTrainingPanel;
   private ResultsVisualizationPanel resultsVisualizationPanel;
   private JPanel analysisSetupPanel;
   private PipelineRecapPanel pipelineRecapPanel;
@@ -148,8 +148,8 @@ public class MainWindow extends JFrame {
    */
   private void createMainPanels() {
     mainMenuPanel = new MainMenuPanel();
-    datasetCreationPanel = new DatasetMainPanel(configurationManager.loadMainSettings());
-    xgBoostTrainingPanel = new XGBoostTrainingPanel(this);
+    datasetCreationPanel = new DatasetMainPanel(configurationManager);
+    xgBoostTrainingPanel = new XGBoostTrainingWizardPanel(this);
     resultsVisualizationPanel = new ResultsVisualizationPanel();
     analysisSetupPanel = createAnalysisSetupPanel();
     imageViewPanel = createImageViewPanel();

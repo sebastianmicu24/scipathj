@@ -1,5 +1,6 @@
 package com.scipath.scipathj.ui.dataset;
 
+import com.scipath.scipathj.infrastructure.config.ConfigurationManager;
 import com.scipath.scipathj.infrastructure.config.MainSettings;
 import com.scipath.scipathj.infrastructure.roi.UserROI;
 import com.scipath.scipathj.ui.common.SimpleImageGallery;
@@ -24,27 +25,28 @@ public class DatasetClassificationPanel extends JPanel {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DatasetClassificationPanel.class);
     
-    // Main components - using streamlined architecture with legacy controls integration
+    // Main components - using streamlined architecture with refactored controls integration
     private SimpleImageGallery imageGallery;
     private DatasetImageViewer datasetImageViewer;
-    private DatasetControlsPanel controlsPanel;
+    private DatasetControlsPanelRefactored controlsPanel;
     
     // Data
     private File selectedImageFolder;
     private File selectedRoiZip;
     private final List<String> classNames = new ArrayList<>();
     
-    // Settings
+    // Settings and Configuration
     private final MainSettings settings;
+    private final ConfigurationManager configurationManager;
 
-    public DatasetClassificationPanel(MainSettings settings) {
+    public DatasetClassificationPanel(MainSettings settings, ConfigurationManager configurationManager) {
         this.settings = settings;
+        this.configurationManager = configurationManager;
         initializeClassNames();
         initializeComponents();
         setupEventHandlers();
-        
     }
-    
+
     private void initializeClassNames() {
         classNames.add("Unclassified");
         classNames.add("Normal");
@@ -65,13 +67,13 @@ public class DatasetClassificationPanel extends JPanel {
         // Create streamlined dataset image viewer with zoom/pan
         datasetImageViewer = new DatasetImageViewer();
         
-        // Create integrated controls panel (legacy integration)
-        controlsPanel = new DatasetControlsPanel();
-        
+        // Create integrated controls panel (refactored version) with ConfigurationManager
+        controlsPanel = new DatasetControlsPanelRefactored(configurationManager);
+
         // Set minimum size for controls panel to prevent color square compression
         controlsPanel.setMinimumSize(new Dimension(280, 400));
         controlsPanel.setPreferredSize(new Dimension(320, 600));
-        
+
         // Connect controls to overlay and image viewer
         controlsPanel.setOverlay(datasetImageViewer.getROIOverlay());
         controlsPanel.setDatasetImageViewer(datasetImageViewer);
@@ -129,7 +131,7 @@ public class DatasetClassificationPanel extends JPanel {
         });
         
         // Controls panel listeners
-        controlsPanel.addControlListener(new DatasetControlsPanel.ControlListener() {
+        controlsPanel.addControlListener(new DatasetControlsPanelRefactored.ControlListener() {
             @Override
             public void onLoadROIsRequested() {
                 LOGGER.debug("Load ROIs requested from controls panel");
@@ -192,11 +194,7 @@ public class DatasetClassificationPanel extends JPanel {
             // Load image and ROIs using the new integrated viewer
             datasetImageViewer.loadImageWithROIs(imageFile, selectedRoiZip);
 
-            // Update controls panel with current image for feature extraction
-            if (datasetImageViewer.getCurrentImagePlus() != null) {
-                controlsPanel.setCurrentImage(datasetImageViewer.getCurrentImagePlus());
-            }
-
+            // Update controls panel status (image connection handled by overlay)
             controlsPanel.updateStatus("Loaded: " + imageFile.getName());
             LOGGER.info("Successfully loaded image: {}", imageFile.getName());
             
@@ -226,7 +224,7 @@ public class DatasetClassificationPanel extends JPanel {
         return datasetImageViewer;
     }
 
-    public DatasetControlsPanel getControlsPanel() {
+    public DatasetControlsPanelRefactored getControlsPanel() {
         return controlsPanel;
     }
 
