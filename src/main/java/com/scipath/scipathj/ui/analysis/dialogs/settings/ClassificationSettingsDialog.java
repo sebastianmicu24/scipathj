@@ -11,6 +11,8 @@ import java.awt.*;
 import java.io.*;
 import java.nio.file.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.zip.ZipFile;
+import java.util.zip.ZipEntry;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.filechooser.FileFilter;
@@ -327,13 +329,13 @@ public class ClassificationSettingsDialog extends JDialog {
                                 20, getPrimaryColor());
     JPanel labelWithIcon = new JPanel(new FlowLayout(FlowLayout.LEFT));
     labelWithIcon.setOpaque(false);
-    labelWithIcon.add(new JLabel("Select XGBoost Model JSON Bundle"));
+    labelWithIcon.add(new JLabel("Select XGBoost Model ZIP Bundle"));
     labelWithIcon.add(new JLabel("<html>&nbsp;&nbsp;</html>")); // Spacing
     labelWithIcon.add(new JLabel(icon));
     headerPanel.add(labelWithIcon);
 
     // Description
-    JLabel descLabel = new JLabel("<html><div style='width: 450px; color: #666;'>Choose a JSON file containing the complete XGBoost model bundle. This single JSON file includes the trained model, feature metadata, label mappings, and all configuration.</div></html>");
+    JLabel descLabel = new JLabel("<html><div style='width: 450px; color: #666;'>Choose a ZIP file containing the XGBoost model bundle. The ZIP contains metadata.json with configuration and model.ubj with the trained model in UBJSON format for optimal storage and performance.</div></html>");
     descLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
     descLabel.setForeground(getTextSecondaryColor());
     descLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -369,20 +371,20 @@ public class ClassificationSettingsDialog extends JDialog {
 
   private void browseForJsonFile() {
     JFileChooser fileChooser = new JFileChooser();
-    fileChooser.setDialogTitle("Select XGBoost Model JSON Bundle");
+    fileChooser.setDialogTitle("Select XGBoost Model ZIP Bundle");
     fileChooser.setAcceptAllFileFilterUsed(true);
 
-    // Set JSON file filter
+    // Set ZIP file filter
     fileChooser.setFileFilter(new javax.swing.filechooser.FileFilter() {
       @Override
       public boolean accept(java.io.File f) {
         return f.isDirectory() ||
-               f.getName().toLowerCase().endsWith(".json");
+               f.getName().toLowerCase().endsWith(".zip");
       }
 
       @Override
       public String getDescription() {
-        return "JSON Bundles (*.json)";
+        return "ZIP Bundles (*.zip)";
       }
     });
 
@@ -434,42 +436,41 @@ public class ClassificationSettingsDialog extends JDialog {
 
   private void saveSettings() {
     try {
-      String jsonPath = jsonFileField.getText().trim();
-      if (jsonPath.isEmpty() || !Files.exists(Paths.get(jsonPath)) || !jsonPath.endsWith(".json")) {
-        // Use defaults - no custom JSON bundle selected
+      String bundlePath = jsonFileField.getText().trim();
+      if (bundlePath.isEmpty() || !Files.exists(Paths.get(bundlePath)) || !bundlePath.endsWith(".zip")) {
+        // Use defaults - no custom ZIP bundle selected
         ClassificationSettings newSettings = ClassificationSettings.createDefault();
         configManager.saveClassificationSettings(newSettings);
         JOptionPane.showMessageDialog(this,
-            "Using default classifiers. No custom JSON bundle selected.",
+            "Using default classifiers. No custom ZIP bundle selected.",
             "Settings Saved", JOptionPane.INFORMATION_MESSAGE);
       } else {
-        // Validate JSON bundle exists and can be loaded
-        if (!isValidJsonBundle(jsonPath)) {
+        // Validate ZIP bundle exists and can be loaded
+        if (!isValidZipBundle(bundlePath)) {
           JOptionPane.showMessageDialog(this,
-              "Selected file is not a valid XGBoost model bundle or cannot be loaded.\nPlease select a JSON file created by SciPathJ's training process.",
+              "Selected file is not a valid XGBoost model bundle or cannot be loaded.\nPlease select a ZIP file created by SciPathJ's training process.",
               "Invalid Bundle", JOptionPane.ERROR_MESSAGE);
           return;
         }
 
-        // Create settings pointing to the JSON bundle
-        // Create settings with the JSON bundle path as the model path
-        // The classification system will detect this is a JSON bundle and load appropriately
-        ClassificationSettings newSettings = ClassificationSettings.withCustomModel(jsonPath);
+        // Create settings pointing to the ZIP bundle
+        // The classification system will detect this is a ZIP bundle and load appropriately
+        ClassificationSettings newSettings = ClassificationSettings.withCustomModel(bundlePath);
         newSettings.validate();
         configManager.saveClassificationSettings(newSettings);
 
         // Load basic info from the bundle for display
         try {
-          XGBoostModelBundle bundle = loadBundleInfo(jsonPath);
+          XGBoostModelBundle bundle = loadBundleInfo(bundlePath);
           JOptionPane.showMessageDialog(this,
-              "JSON bundle validated and settings saved successfully!\n\n" +
+              "ZIP bundle validated and settings saved successfully!\n\n" +
               "Title: " + bundle.modelInfo.title + "\n" +
               "Description: " + bundle.modelInfo.description + "\n" +
-              "File: " + new File(jsonPath).getName(),
+              "File: " + new File(bundlePath).getName(),
               "Settings Saved", JOptionPane.INFORMATION_MESSAGE);
         } catch (Exception e) {
           JOptionPane.showMessageDialog(this,
-              "JSON bundle loaded and settings saved successfully!\n\n" + getConfigurationInfo(newSettings),
+              "ZIP bundle loaded and settings saved successfully!\n\n" + getConfigurationInfo(newSettings),
               "Settings Saved", JOptionPane.INFORMATION_MESSAGE);
         }
       }
@@ -482,32 +483,31 @@ public class ClassificationSettingsDialog extends JDialog {
   }
 
   /**
-   * Validate that the selected file is a valid XGBoost model bundle
+   * Validate that the selected file is a valid XGBoost model bundle (ZIP format)
    */
-  private boolean isValidJsonBundle(String jsonPath) {
+  private boolean isValidZipBundle(String zipPath) {
     try {
-      XGBoostModelBundle bundle = loadBundleInfo(jsonPath);
+      XGBoostModelBundle bundle = loadBundleInfo(zipPath);
       return bundle != null &&
-             bundle.xgboostModel != null &&
-             bundle.xgboostModel.modelJson != null &&
-             !bundle.xgboostModel.modelJson.trim().isEmpty();
+             bundle.modelInfo != null &&
+             bundle.featureMetadata != null;
     } catch (Exception e) {
       return false;
     }
   }
 
   /**
-   * Load basic bundle information for validation/display
+   * Load basic bundle information for validation/display (supports both ZIP and JSON formats)
    */
-  private XGBoostModelBundle loadBundleInfo(String jsonPath) throws IOException {
+  private XGBoostModelBundle loadBundleInfo(String bundlePath) throws IOException {
     try {
       // Log what we're trying to load
       java.util.logging.Logger logger = java.util.logging.Logger.getLogger("XGBoostSettings");
-      logger.info("Attempting to load XGBoost bundle from: " + jsonPath);
+      logger.info("Attempting to load XGBoost bundle from: " + bundlePath);
 
-      File bundleFile = new File(jsonPath);
+      File bundleFile = new File(bundlePath);
       if (!bundleFile.exists()) {
-        throw new IOException("Bundle file does not exist: " + jsonPath);
+        throw new IOException("Bundle file does not exist: " + bundlePath);
       }
       logger.info("Bundle file exists, size: " + bundleFile.length() + " bytes");
 
@@ -519,91 +519,69 @@ public class ClassificationSettingsDialog extends JDialog {
       mapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.ACCEPT_FLOAT_AS_INT, true);
       mapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-      logger.info("Starting JSON deserialization...");
+      // Determine if this is ZIP or JSON based on file extension
+      if (bundlePath.toLowerCase().endsWith(".zip")) {
+        // Handle ZIP bundle - read metadata.json from ZIP
+        logger.info("Detected ZIP bundle format, loading metadata.json from archive");
 
-      // First try to read as raw JSON to see the structure
-      try {
-        com.fasterxml.jackson.databind.JsonNode rootNode = mapper.readTree(bundleFile);
+        ZipFile zipFile = null;
+        try {
+          zipFile = new ZipFile(bundlePath);
+          ZipEntry metadataEntry = zipFile.getEntry("metadata.json");
 
-        // Collect root field names manually for compatibility
-        java.util.List<String> rootKeys = new java.util.ArrayList<>();
-        java.util.Iterator<String> fieldIterator = rootNode.fieldNames();
-        while (fieldIterator.hasNext()) {
-          rootKeys.add(fieldIterator.next());
-        }
+          if (metadataEntry == null) {
+            throw new IOException("No metadata.json found in ZIP bundle");
+          }
 
-        logger.info("Successfully read JSON structure. Root keys: " + java.lang.String.join(", ", rootKeys));
+          // Read metadata.json from ZIP
+          try (java.io.InputStream metadataStream = zipFile.getInputStream(metadataEntry)) {
+            XGBoostModelBundle bundle = mapper.readValue(metadataStream, XGBoostModelBundle.class);
+            logger.info("Successfully loaded ZIP bundle: " + (bundle.modelInfo != null ? bundle.modelInfo.title : "Unknown"));
+            return bundle;
+          }
 
-        // Check specific fields that might cause issues
-        if (rootNode.has("training_config") && rootNode.get("training_config").has("hyperparameters")) {
-          com.fasterxml.jackson.databind.JsonNode hyperparams = rootNode.get("training_config").get("hyperparameters");
-          logger.info("Found hyperparameters section with " + hyperparams.size() + " parameters");
-
-          // List the hyperparameters and their types
-          java.util.Iterator<String> fieldNames = hyperparams.fieldNames();
-          while (fieldNames.hasNext()) {
-            String paramName = fieldNames.next();
-            com.fasterxml.jackson.databind.JsonNode paramValue = hyperparams.get(paramName);
-            logger.info("  Parameter '" + paramName + "' type: " + paramValue.getNodeType() + " value: " + paramValue.toString());
+        } finally {
+          if (zipFile != null) {
+            zipFile.close();
           }
         }
-      } catch (Exception e) {
-        logger.warning("Failed to read JSON structure: " + e.getMessage());
+
+      } else if (bundlePath.toLowerCase().endsWith(".json")) {
+        // Handle legacy JSON bundle
+        logger.info("Detected legacy JSON bundle format");
+
+        XGBoostModelBundle bundle = mapper.readValue(bundleFile, XGBoostModelBundle.class);
+
+        // Handle backwards compatibility - copy root-level fields to nested structure if present
+        if (bundle.modelInfo == null) {
+          bundle.modelInfo = new XGBoostModelBundle.ModelInfo();
+        }
+
+        if (bundle.modelTitle != null && !bundle.modelTitle.trim().isEmpty()) {
+          bundle.modelInfo.title = bundle.modelTitle;
+        }
+        if (bundle.modelDescription != null && !bundle.modelDescription.trim().isEmpty()) {
+          bundle.modelInfo.description = bundle.modelDescription;
+        }
+        if (bundle.modelVersion != null && !bundle.modelVersion.trim().isEmpty()) {
+          bundle.modelInfo.version = bundle.modelVersion;
+        }
+
+        logger.info("Successfully loaded legacy JSON bundle for: " + (bundle.modelInfo != null ? bundle.modelInfo.title : "Unknown"));
+        return bundle;
+
+      } else {
+        throw new IOException("Unsupported bundle format. Expected .zip or .json file, got: " + bundlePath);
       }
-
-      // Now try the full deserialization
-      logger.info("Attempting full XGBoostModelBundle deserialization...");
-      XGBoostModelBundle bundle = mapper.readValue(bundleFile, XGBoostModelBundle.class);
-
-      // Handle backwards compatibility - copy root-level fields to nested structure if present
-      if (bundle.modelInfo == null) {
-        bundle.modelInfo = new XGBoostModelBundle.ModelInfo();
-      }
-      
-      if (bundle.modelTitle != null && !bundle.modelTitle.trim().isEmpty()) {
-        bundle.modelInfo.title = bundle.modelTitle;
-      }
-      if (bundle.modelDescription != null && !bundle.modelDescription.trim().isEmpty()) {
-        bundle.modelInfo.description = bundle.modelDescription;
-      }
-      if (bundle.modelVersion != null && !bundle.modelVersion.trim().isEmpty()) {
-        bundle.modelInfo.version = bundle.modelVersion;
-      }
-
-      logger.info("Successfully loaded XGBoost bundle for: " + (bundle.modelInfo != null ? bundle.modelInfo.title : "Unknown"));
-      return bundle;
-
-    } catch (ClassCastException e) {
-      // This is likely the Integer/Double casting error
-      java.util.logging.Logger logger = java.util.logging.Logger.getLogger("XGBoostSettings");
-      logger.severe("ClassCastException during bundle loading: " + e.getMessage());
-      logger.severe("Exception type: " + e.getClass().getName());
-      logger.severe("Stack trace: ");
-
-      // Log the full stack trace
-      StringWriter sw = new StringWriter();
-      PrintWriter pw = new PrintWriter(sw);
-      e.printStackTrace(pw);
-      logger.severe(sw.toString());
-
-      // Re-throw as IOException with more details
-      throw new IOException("Failed to parse XGBoost bundle - class casting error: " + e.getMessage() +
-                           ". This usually indicates mixed Integer/Double types in hyperparameters or other fields.", e);
 
     } catch (Exception e) {
-      java.util.logging.Logger logger = java.util.logging.Logger.getLogger("XGBoostSettings");
-      logger.severe("Unexpected error during bundle loading: " + e.getMessage());
-      logger.severe("Exception type: " + e.getClass().getName());
-
-      // Log the full stack trace
-      StringWriter sw = new StringWriter();
-      PrintWriter pw = new PrintWriter(sw);
-      e.printStackTrace(pw);
-      logger.severe(sw.toString());
-
+      java.util.logging.Logger loggerInstance = java.util.logging.Logger.getLogger("XGBoostSettings");
+      loggerInstance.severe("Failed to load XGBoost bundle: " + e.getMessage());
+      loggerInstance.severe("Exception type: " + e.getClass().getName());
       throw new IOException("Failed to load XGBoost bundle: " + e.getMessage(), e);
     }
   }
+
 
   private void resetToDefaults() {
     int confirm = JOptionPane.showConfirmDialog(this,

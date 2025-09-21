@@ -13,12 +13,16 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Random;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Step 6: Final Testing Panel.
@@ -589,8 +593,10 @@ public class FinalTestingStepPanel extends JPanel {
                 String savedPath = saveLocationLabel.getText() + File.separator + modelName + ".json";
                 wizardState.setSavedModelFile(new File(savedPath));
                 
-                // Export as comprehensive JSON bundle
-                exportModelBundle(savedPath, modelName, modelDescriptionField.getText());
+                // Export as ZIP bundle (new format)
+                String zipPath = savedPath.replace(".json", ".zip");
+                exportModelBundleZIP(zipPath, modelName, modelDescriptionField.getText());
+                savedPath = zipPath; // Update saved path for display
                 
                 JOptionPane.showMessageDialog(this,
                     "Model bundle exported successfully to:\n" + savedPath,
@@ -658,162 +664,349 @@ public class FinalTestingStepPanel extends JPanel {
     }
     
     /**
-     * Export comprehensive model bundle as JSON.
+     * Export model bundle as ZIP file (new, recommended approach).
      */
-    private void exportModelBundle(String filePath, String modelTitle, String modelDescription) {
+    private void exportModelBundleZIP(String zipFilePath, String modelTitle, String modelDescription) {
         try {
-            Map<String, Object> bundle = new HashMap<>();
-            
-            // Model info
-            Map<String, Object> modelInfo = new HashMap<>();
-            modelInfo.put("version", "1.0.0");
-            modelInfo.put("created", new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSSS").format(new Date()));
-            modelInfo.put("platform", "SciPathJ");
-            modelInfo.put("description", modelDescription);
-            modelInfo.put("title", modelTitle);
-            modelInfo.put("author", "SciPathJ Application");
-            bundle.put("model_info", modelInfo);
-            
-            // XGBoost model with realistic, detailed tree structures
-            Map<String, Object> xgboostModel = new HashMap<>();
-            TrainingSettings modelSettings = wizardState.getTrainingSettings();
-            int numTrees = modelSettings != null ? modelSettings.getNumTrees() : 100;
-            int numClasses = wizardState.getClassDistribution().size();
-            java.util.List<String> featureNames = new ArrayList<>(wizardState.getSelectedFeatures());
-            
-            // Generate realistic, detailed XGBoost model JSON with actual tree structures
-            String detailedModelJson = generateRealisticXGBoostModel(numTrees, numClasses, featureNames, modelSettings);
-            
-            xgboostModel.put("model_json", detailedModelJson);
-            xgboostModel.put("model_type", "xgboost");
-            xgboostModel.put("num_trees", numTrees);
-            xgboostModel.put("num_classes", numClasses);
-            xgboostModel.put("best_iteration", wizardState.getBestEpoch());
-            
-            // Add inference instructions
-            Map<String, Object> inferenceInfo = new HashMap<>();
-            inferenceInfo.put("feature_order", featureNames);
-            inferenceInfo.put("preprocessing_required", "Feature values should be normalized/scaled as during training");
-            inferenceInfo.put("output_format", numClasses > 2 ? "Probability distribution over " + numClasses + " classes" : "Binary probability");
-            inferenceInfo.put("usage_instructions", "Use XGBoost4J library: Booster.predict(DMatrix) with feature vector in exact same order");
-            xgboostModel.put("inference_info", inferenceInfo);
-            bundle.put("xgboost_model", xgboostModel);
-            
-            // Training config
-            Map<String, Object> trainingConfig = new HashMap<>();
-            Map<String, Object> hyperparams = new HashMap<>();
-            TrainingSettings trainingSettings = wizardState.getTrainingSettings();
-            hyperparams.put("colsample_bytree", trainingSettings.getColsampleBytree());
-            hyperparams.put("lambda", trainingSettings.getLambda());
-            hyperparams.put("eta", trainingSettings.getLearningRate());
-            hyperparams.put("eval_metric", trainingSettings.getEvalMetric());
-            hyperparams.put("num_class", trainingSettings.getNumClasses());
-            hyperparams.put("max_depth", trainingSettings.getMaxDepth());
-            hyperparams.put("alpha", trainingSettings.getAlpha());
-            hyperparams.put("subsample", trainingSettings.getSubsample());
-            hyperparams.put("min_child_weight", trainingSettings.getMinChildWeight());
-            hyperparams.put("gamma", trainingSettings.getGamma());
-            hyperparams.put("objective", trainingSettings.getObjective());
-            trainingConfig.put("hyperparameters", hyperparams);
-            
-            Map<String, Object> dataSplit = new HashMap<>();
-            dataSplit.put("train_ratio", wizardState.getTrainRatio());
-            dataSplit.put("eval_ratio", wizardState.getEvalRatio());
-            dataSplit.put("test_ratio", wizardState.getTestRatio());
-            dataSplit.put("balance_classes", true);
-            dataSplit.put("train_samples", (int)(wizardState.getTotalSamples() * wizardState.getTrainRatio()));
-            dataSplit.put("eval_samples", (int)(wizardState.getTotalSamples() * wizardState.getEvalRatio()));
-            dataSplit.put("test_samples", (int)(wizardState.getTotalSamples() * wizardState.getTestRatio()));
-            dataSplit.put("class_distribution", wizardState.getClassDistribution());
-            trainingConfig.put("data_split", dataSplit);
-            bundle.put("training_config", trainingConfig);
-            
-            // Evaluation results
-            Map<String, Object> evalResults = new HashMap<>();
-            if (finalTestExecuted) {
-                Map<String, Object> overallMetrics = new HashMap<>();
-                overallMetrics.put("accuracy", wizardState.getFinalTestAccuracy());
-                overallMetrics.put("f1_score", wizardState.getFinalTestF1());
-                evalResults.put("overall_metrics", overallMetrics);
-                evalResults.put("confusion_matrix", wizardState.getConfusionMatrix());
-            } else {
-                evalResults.put("overall_metrics", null);
-                evalResults.put("confusion_matrix", null);
+            LOGGER.info("📦 Starting ZIP bundle export: {}", zipFilePath);
+
+            java.util.zip.ZipOutputStream zos = null;
+            java.io.FileOutputStream fos = null;
+
+            try {
+                // Create ZIP output streams
+                fos = new java.io.FileOutputStream(zipFilePath);
+                zos = new java.util.zip.ZipOutputStream(fos);
+
+                // 1. Create and add metadata.json
+                LOGGER.debug("Creating metadata.json...");
+                Map<String, Object> metadata = createBundleMetadata(modelTitle, modelDescription);
+                ObjectMapper mapper = new ObjectMapper();
+                String metadataJson = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(metadata);
+
+                // Add metadata to ZIP
+                java.util.zip.ZipEntry metadataEntry = new java.util.zip.ZipEntry("metadata.json");
+                zos.putNextEntry(metadataEntry);
+                zos.write(metadataJson.getBytes(StandardCharsets.UTF_8));
+                zos.closeEntry();
+                LOGGER.debug("Added metadata.json to ZIP ({} bytes)", metadataJson.length());
+
+                // 2. Create and add model.ubj from trained booster
+                // Get the real trained model from the trainer
+                LOGGER.debug("Saving trained model to model.ubj...");
+                saveTrainedModelToZIP(zos);
+                LOGGER.debug("Added trained model.ubj to ZIP");
+
+                zos.finish();
+                zos.close();
+                fos.close();
+
+                LOGGER.info("✅ ZIP bundle export completed successfully: {}", zipFilePath);
+                LOGGER.info("Bundle contains: metadata.json and model.ubj");
+
+            } finally {
+                if (zos != null) zos.close();
+                if (fos != null) fos.close();
             }
-            evalResults.put("per_class_metrics", wizardState.getPerClassMetrics());
-            bundle.put("evaluation_results", evalResults);
-            
-            // Feature metadata
-            Map<String, Object> featureMetadata = new HashMap<>();
-            featureMetadata.put("selected_features", new ArrayList<>(wizardState.getSelectedFeatures()));
-            featureMetadata.put("num_selected_features", wizardState.getSelectedFeatures().size());
-            featureMetadata.put("feature_types", null);
-            featureMetadata.put("feature_importance", wizardState.getFeatureImportance());
-            bundle.put("feature_metadata", featureMetadata);
-            
-            // Label metadata
-            Map<String, Object> labelMetadata = new HashMap<>();
-            Map<String, Object> labelMapping = new HashMap<>();
-            Map<String, Integer> originalToXgboost = new HashMap<>();
-            Map<String, String> xgboostToOriginal = new HashMap<>();
-            
-            int index = 0;
-            for (String className : wizardState.getClassDistribution().keySet()) {
-                originalToXgboost.put(className, index);
-                xgboostToOriginal.put(String.valueOf(index), className);
-                index++;
-            }
-            
-            labelMapping.put("original_to_xgboost_index", originalToXgboost);
-            labelMapping.put("xgboost_index_to_original", xgboostToOriginal);
-            labelMetadata.put("label_mapping", labelMapping);
-            
-            Map<String, Object> classDetails = new HashMap<>();
-            String[] colors = {"#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A", "#98D8C8", "#F7DC6F"};
-            index = 0;
-            for (String className : wizardState.getClassDistribution().keySet()) {
-                Map<String, Object> classDetail = new HashMap<>();
-                classDetail.put("name", className);
-                classDetail.put("id", index);
-                classDetail.put("color", colors[index % colors.length]);
-                classDetails.put(String.valueOf(index), classDetail);
-                index++;
-            }
-            
-            labelMetadata.put("class_details", classDetails);
-            labelMetadata.put("num_classes", wizardState.getClassDistribution().size());
-            bundle.put("label_metadata", labelMetadata);
-            
-            // Legacy fields for compatibility
-            bundle.put("modelVersion", "1.0.0");
-            bundle.put("modelDescription", modelDescription);
-            bundle.put("modelTitle", modelTitle);
-            
-            // Write to file
-            // Note: In a real implementation, you'd use a proper JSON library like Jackson or Gson
-            // For now, we'll create a simple representation
-            StringBuilder json = new StringBuilder();
-            json.append("{\n");
-            json.append("  \"model_info\" : ").append(toJsonString(modelInfo)).append(",\n");
-            json.append("  \"xgboost_model\" : ").append(toJsonString(xgboostModel)).append(",\n");
-            json.append("  \"training_config\" : ").append(toJsonString(trainingConfig)).append(",\n");
-            json.append("  \"evaluation_results\" : ").append(toJsonString(evalResults)).append(",\n");
-            json.append("  \"feature_metadata\" : ").append(toJsonString(featureMetadata)).append(",\n");
-            json.append("  \"label_metadata\" : ").append(toJsonString(labelMetadata)).append(",\n");
-            json.append("  \"modelVersion\" : \"1.0.0\",\n");
-            json.append("  \"modelDescription\" : \"").append(modelDescription).append("\",\n");
-            json.append("  \"modelTitle\" : \"").append(modelTitle).append("\"\n");
-            json.append("}");
-            
-            // Write to file (simplified - in production use proper JSON library)
-            java.nio.file.Files.write(java.nio.file.Paths.get(filePath), json.toString().getBytes());
-            
+
         } catch (Exception e) {
+            LOGGER.error("❌ Error exporting ZIP bundle: {}", e.getMessage(), e);
             JOptionPane.showMessageDialog(this,
-                "Error exporting model bundle: " + e.getMessage(),
+                "Error exporting ZIP model bundle: " + e.getMessage(),
                 "Export Error",
                 JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    /**
+     * Create bundle metadata for ZIP export
+     */
+    private Map<String, Object> createBundleMetadata(String modelTitle, String modelDescription) {
+        Map<String, Object> metadata = new HashMap<>();
+
+        // Model info
+        Map<String, Object> modelInfo = new HashMap<>();
+        modelInfo.put("version", "1.0.0");
+        modelInfo.put("created", new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS").format(new Date()));
+        modelInfo.put("platform", "SciPathJ");
+        modelInfo.put("description", modelDescription);
+        modelInfo.put("title", modelTitle);
+        modelInfo.put("author", "SciPathJ Application");
+        metadata.put("model_info", modelInfo);
+
+        // Model metadata (without actual model data)
+        Map<String, Object> modelMeta = new HashMap<>();
+        int numClasses = wizardState.getClassDistribution().size();
+        modelMeta.put("model_type", "xgboost");
+        modelMeta.put("format", "ubjson");
+        modelMeta.put("num_trees", wizardState.getTrainingSettings() != null ? wizardState.getTrainingSettings().getNumTrees() : 100);
+        modelMeta.put("num_classes", numClasses);
+        modelMeta.put("best_iteration", wizardState.getBestEpoch());
+
+        Map<String, Object> inferenceInfo = new HashMap<>();
+        inferenceInfo.put("feature_order", new ArrayList<>(wizardState.getSelectedFeatures()));
+        inferenceInfo.put("preprocessing_required", "Feature values should be normalized/scaled as during training");
+        inferenceInfo.put("output_format", numClasses > 2 ? "Probability distribution over " + numClasses + " classes" : "Binary probability");
+        inferenceInfo.put("usage_instructions", "Use XGBoost4J library: Booster.predict(DMatrix) with feature vector in exact same order");
+        modelMeta.put("inference_info", inferenceInfo);
+        metadata.put("xgboost_model", modelMeta);
+
+        // Training config
+        Map<String, Object> trainingConfig = new HashMap<>();
+        Map<String, Object> hyperparams = new HashMap<>();
+        TrainingSettings settings = wizardState.getTrainingSettings();
+        if (settings != null) {
+            hyperparams.put("colsample_bytree", settings.getColsampleBytree());
+            hyperparams.put("lambda", settings.getLambda());
+            hyperparams.put("eta", settings.getLearningRate());
+            hyperparams.put("eval_metric", settings.getEvalMetric());
+            hyperparams.put("num_class", settings.getNumClasses());
+            hyperparams.put("max_depth", settings.getMaxDepth());
+            hyperparams.put("alpha", settings.getAlpha());
+            hyperparams.put("subsample", settings.getSubsample());
+            hyperparams.put("min_child_weight", settings.getMinChildWeight());
+            hyperparams.put("gamma", settings.getGamma());
+            hyperparams.put("objective", settings.getObjective());
+        }
+        trainingConfig.put("hyperparameters", hyperparams);
+
+        Map<String, Object> dataSplit = new HashMap<>();
+        dataSplit.put("train_ratio", wizardState.getTrainRatio());
+        dataSplit.put("eval_ratio", wizardState.getEvalRatio());
+        dataSplit.put("test_ratio", wizardState.getTestRatio());
+        dataSplit.put("balance_classes", true);
+        dataSplit.put("class_distribution", wizardState.getClassDistribution());
+        trainingConfig.put("data_split", dataSplit);
+        metadata.put("training_config", trainingConfig);
+
+        // Evaluation results
+        Map<String, Object> evalResults = new HashMap<>();
+        if (finalTestExecuted) {
+            Map<String, Object> overallMetrics = new HashMap<>();
+            overallMetrics.put("accuracy", wizardState.getFinalTestAccuracy());
+            overallMetrics.put("f1_score", wizardState.getFinalTestF1());
+            evalResults.put("overall_metrics", overallMetrics);
+        } else {
+            evalResults.put("overall_metrics", null);
+        }
+
+        // Convert per_class_metrics from flat Map<String, Double> to nested Map<String, Map<String, Double>>
+        // XGBoostModelBundle expects nested structure: {"Hepatocytes": {"precision": 0.8, "recall": 0.85, ...}}
+        Map<String, Double> flatMetrics = wizardState.getPerClassMetrics();
+        Map<String, Map<String, Double>> nestedMetrics = new HashMap<>();
+
+        if (flatMetrics != null && !flatMetrics.isEmpty()) {
+            LOGGER.debug("Converting {} flat per-class metrics to nested format", flatMetrics.size());
+            for (Map.Entry<String, Double> entry : flatMetrics.entrySet()) {
+                String key = entry.getKey();
+                Double value = entry.getValue();
+
+                // Keys are in format "ClassName_metric" (e.g., "Hepatocytes_precision")
+                String[] parts = key.split("_", 2);
+                if (parts.length == 2) {
+                    String className = parts[0];
+                    String metricName = parts[1];
+
+                    nestedMetrics.computeIfAbsent(className, k -> new HashMap<>()).put(metricName, value);
+                    LOGGER.debug("  - {} {}: {}", className, metricName, value);
+                } else {
+                    LOGGER.warn("Skipping malformed metric key: {}", key);
+                }
+            }
+            LOGGER.debug("Converted to nested metrics for {} classes", nestedMetrics.size());
+        } else {
+            LOGGER.debug("No per-class metrics available in wizard state");
+        }
+
+        evalResults.put("per_class_metrics", nestedMetrics);
+
+        // Convert confusion_matrix from double[][] to nested Map<String, Map<String, Integer>>
+        // XGBoostModelBundle expects nested structure: {"Actual_Class": {"Predicted_Class": count, ...}, ...}
+        double[][] confusionArray = wizardState.getConfusionMatrix();
+        Map<String, Map<String, Integer>> confusionMap = new HashMap<>();
+        String[] classNames = wizardState.getClassDistribution().keySet().toArray(new String[0]);
+
+        if (confusionArray != null && classNames.length > 0) {
+            LOGGER.debug("Converting confusion matrix from 2D array to nested map format");
+            for (int i = 0; i < confusionArray.length && i < classNames.length; i++) {
+                String actualClass = classNames[i];
+                Map<String, Integer> predictions = new HashMap<>();
+                for (int j = 0; j < confusionArray[i].length && j < classNames.length; j++) {
+                    String predictedClass = classNames[j];
+                    int count = (int) Math.round(confusionArray[i][j]);
+                    predictions.put(predictedClass, count);
+                }
+                confusionMap.put(actualClass, predictions);
+                LOGGER.debug("  - {} predictions: {}", actualClass, predictions);
+            }
+            LOGGER.debug("Converted confusion matrix for {} classes", confusionMap.size());
+        }
+
+        evalResults.put("confusion_matrix", confusionMap);
+        metadata.put("evaluation_results", evalResults);
+
+        // Feature metadata
+        Map<String, Object> featureMetadata = new HashMap<>();
+        featureMetadata.put("selected_features", new ArrayList<>(wizardState.getSelectedFeatures()));
+        featureMetadata.put("num_selected_features", wizardState.getSelectedFeatures().size());
+        featureMetadata.put("feature_types", null);
+
+        // Convert feature importance from Map<String, Double> to List<Map<String, Object>>
+        // This matches the expected XGBoostModelBundle format
+        Map<String, Double> importanceMap = wizardState.getFeatureImportance();
+        List<Map<String, Object>> featureImportanceList = null;
+
+        if (importanceMap != null && !importanceMap.isEmpty()) {
+            featureImportanceList = new ArrayList<>();
+            LOGGER.debug("Converting {} feature importance entries to list format", importanceMap.size());
+            for (Map.Entry<String, Double> entry : importanceMap.entrySet()) {
+                Map<String, Object> impEntry = new java.util.LinkedHashMap<>();
+                impEntry.put("feature", entry.getKey());
+                impEntry.put("importance", entry.getValue());
+                featureImportanceList.add(impEntry);
+                LOGGER.debug("  - {}: {}", entry.getKey(), entry.getValue());
+            }
+            LOGGER.debug("Feature importance converted to list with {} entries", featureImportanceList.size());
+        } else {
+            LOGGER.debug("No feature importance data available in wizard state");
+        }
+
+        featureMetadata.put("feature_importance", featureImportanceList);
+        metadata.put("feature_metadata", featureMetadata);
+
+        // Label metadata
+        Map<String, Object> labelMetadata = new HashMap<>();
+        Map<String, Object> labelMapping = new HashMap<>();
+        Map<String, Integer> originalToXgboost = new HashMap<>();
+        Map<String, String> xgboostToOriginal = new HashMap<>();
+
+        // Sort class names to ensure consistent mapping with XGBoost training (same as XGBoostTrainer)
+        List<String> sortedClassNames = new ArrayList<>(wizardState.getClassDistribution().keySet());
+        Collections.sort(sortedClassNames);
+        LOGGER.debug("Creating label mapping for {} classes: {}", sortedClassNames.size(), sortedClassNames);
+
+        int index = 0;
+        for (String className : sortedClassNames) {
+            originalToXgboost.put(className, index);
+            xgboostToOriginal.put(String.valueOf(index), className);
+            index++;
+        }
+
+        labelMapping.put("original_to_xgboost_index", originalToXgboost);
+        labelMapping.put("xgboost_index_to_original", xgboostToOriginal);
+        labelMetadata.put("label_mapping", labelMapping);
+
+        // Convert class details using consistent XGBoost indices (not sample counts)
+        Map<String, Map<String, Object>> classDetails = new HashMap<>();
+
+        String[] defaultColors = {
+            "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FECA57",
+            "#FF9FF3", "#54A0FF", "#5F27CD", "#00D2D3", "#FF9F43"
+        };
+
+        index = 0; // Reuse index from label mapping
+        for (String className : sortedClassNames) {
+            Map<String, Object> classDetail = new HashMap<>();
+            classDetail.put("name", className);
+            classDetail.put("id", index);
+            classDetail.put("color", defaultColors[index % defaultColors.length]);
+
+            classDetails.put(String.valueOf(index), classDetail);
+            index++;
+        }
+
+        labelMetadata.put("class_details", classDetails);
+        labelMetadata.put("num_classes", wizardState.getClassDistribution().size());
+
+        // Add label_metadata to main metadata
+        metadata.put("label_metadata", labelMetadata);
+
+        // Legacy compatibility fields
+        metadata.put("modelVersion", "1.0.0");
+        metadata.put("modelDescription", modelDescription);
+        metadata.put("modelTitle", modelTitle);
+
+        return metadata;
+    }
+
+    /**
+     * Save the trained XGBoost booster to the ZIP archive
+     */
+    private void saveTrainedModelToZIP(java.util.zip.ZipOutputStream zos) throws java.io.IOException {
+        try {
+            // Get the trained booster from wizard state
+            ml.dmlc.xgboost4j.java.Booster booster = wizardState.getTrainedBooster();
+
+            if (booster == null) {
+                throw new RuntimeException("No trained XGBoost booster available in wizard state");
+            }
+
+            LOGGER.debug("Saving real XGBoost trained model to ZIP in UBJSON format...");
+
+            // Create temp file for UBJSON data
+            java.io.File tempModelFile = java.io.File.createTempFile("model", ".ubj");
+            tempModelFile.deleteOnExit();
+
+            try {
+                // Save the booster in UBJSON format to temp file
+                booster.saveModel(tempModelFile.getAbsolutePath());
+
+                // Add the model file to ZIP
+                java.util.zip.ZipEntry modelEntry = new java.util.zip.ZipEntry("model.ubj");
+                zos.putNextEntry(modelEntry);
+
+                // Copy temp file to ZIP stream
+                try (java.io.FileInputStream fis = new java.io.FileInputStream(tempModelFile)) {
+                    byte[] buffer = new byte[8192];
+                    int length;
+                    while ((length = fis.read(buffer)) > 0) {
+                        zos.write(buffer, 0, length);
+                    }
+                }
+
+                zos.closeEntry();
+                LOGGER.debug("Added real trained XGBoost model.ubj to ZIP ({} bytes)", tempModelFile.length());
+
+            } finally {
+                // Clean up temp file
+                try {
+                    if (tempModelFile.exists()) {
+                        tempModelFile.delete();
+                    }
+                } catch (Exception e) {
+                    LOGGER.warn("Failed to delete temp model file: {}", e.getMessage());
+                }
+            }
+
+        } catch (Exception e) {
+            LOGGER.error("Failed to save trained model to ZIP: {}", e.getMessage(), e);
+            throw new java.io.IOException("Failed to save trained XGBoost model to ZIP", e);
+        }
+    }
+
+    /**
+     * Create placeholder UBJSON model data for export demo.
+     * DEPRECATED: This method is kept for backward compatibility but should not be used.
+     * Use saveTrainedModelToZIP instead for real trained models.
+     */
+    @Deprecated
+    private String createPlaceholderUBJSONModel() {
+        // Note: This is a placeholder for demonstration purposes
+        // Real implementation should access the trained Booster from XGBoostTrainer or stored state
+        LOGGER.warn("⚠️ Exporting placeholder UBJSON model - real trained model should be used in production");
+        return "{ \"xgboost_ubjson_placeholder\": \"This should contain real XGBoost model data from Booster.saveModel() in UBJSON format. Currently using demo data for " +
+               wizardState.getSelectedFeatures().size() + " features and " +
+               wizardState.getClassDistribution().size() + " classes\" }";
+    }
+
+    /**
+     * Export model bundle (legacy JSON method - now aliased to ZIP)
+     * @deprecated Use exportModelBundleZIP instead
+     */
+    @Deprecated
+    private void exportModelBundle(String filePath, String modelTitle, String modelDescription) {
+        LOGGER.warn("⚠️ Legacy exportModelBundle called - consider using ZIP format");
+        exportModelBundleZIP(filePath.replace(".json", ".zip"), modelTitle, modelDescription);
     }
     
     /**

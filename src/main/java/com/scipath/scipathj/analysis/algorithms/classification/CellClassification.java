@@ -14,6 +14,8 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import ml.dmlc.xgboost4j.java.Booster;
 import ml.dmlc.xgboost4j.java.DMatrix;
@@ -46,8 +48,8 @@ public class CellClassification {
    private List<String> loadedSelectedFeatureNames = new ArrayList<>();
    private Map<Integer, ClassDetails> classIdToDetails = new HashMap<>();
 
-   // Flag to track if a JSON bundle was successfully loaded
-   private boolean loadedFromJSONBundle = false;
+   // Flag to track if a bundle (ZIP or JSON) was successfully loaded
+   private boolean loadedFromBundle = false;
 
    // Decimal format configuration
    private static final String FLOAT_FORMAT_PATTERN = "#.######";
@@ -138,9 +140,9 @@ public class CellClassification {
           // Load the XGBoost model
           loadXGBoostModel();
 
-          // If a JSON bundle was loaded, we already have all necessary data
-          if (loadedFromJSONBundle) {
-              LOGGER.info("Skipping individual file loading - all data loaded from JSON bundle");
+          // If a bundle was loaded, we already have all necessary data
+          if (loadedFromBundle) {
+              LOGGER.info("Skipping individual file loading - all data loaded from bundle");
               
               // Only generate defaults if the bundle didn't provide essential data
               if (loadedSelectedFeatureNames.isEmpty()) {
@@ -200,15 +202,15 @@ public class CellClassification {
       try {
           String configuredPath = this.modelPath;
 
-          // Try to load as JSON bundle first
-          if (tryLoadFromJSONBundle(configuredPath)) {
-              loadedFromJSONBundle = true;
-              LOGGER.info("XGBoost model loaded from JSON bundle");
+          // Try to load as bundle (ZIP preferred, JSON fallback) first
+          if (tryLoadFromBundle(configuredPath)) {
+              loadedFromBundle = true; // Note: using generic flag now
+              LOGGER.info("XGBoost model loaded from bundle");
               return;
           }
 
           // Fallback to individual files approach
-          loadedFromJSONBundle = false;
+          loadedFromBundle = false;
           LOGGER.info("Falling back to loading individual model files");
           loadXGBoostModelFromFiles(configuredPath);
 
@@ -219,12 +221,31 @@ public class CellClassification {
   }
 
   /**
-   * Try to load the complete model bundle from JSON file.
+   * Try to load the complete model bundle from ZIP or JSON file.
    * Returns true if successful, false if should fall back to individual files.
    */
-  private boolean tryLoadFromJSONBundle(String modelPath) throws IOException, XGBoostError {
+  private boolean tryLoadFromBundle(String modelPath) throws IOException, XGBoostError {
       try {
-          // First, try to load the file directly as a JSON bundle
+          // Priority 1: Try ZIP bundle (new format)
+          if (modelPath.endsWith(".zip")) {
+              File zipFile = new File(modelPath);
+              if (zipFile.exists()) {
+                  LOGGER.info("Detected ZIP bundle file: {}", modelPath);
+                  return loadFromZIPBundle(modelPath);
+              }
+          }
+
+          // Try to find ZIP bundle with same name
+          if (modelPath.endsWith(".json")) {
+              String zipPath = modelPath.replace(".json", ".zip");
+              File zipFile = new File(zipPath);
+              if (zipFile.exists()) {
+                  LOGGER.info("Found ZIP bundle file: {}", zipPath);
+                  return loadFromZIPBundle(zipPath);
+              }
+          }
+
+          // Priority 2: Try JSON bundle (legacy format)
           if (modelPath.endsWith(".json")) {
               File modelFile = new File(modelPath);
               if (modelFile.exists()) {
@@ -266,7 +287,7 @@ public class CellClassification {
           return false; // No bundle found, will try individual files
 
       } catch (Exception e) {
-          LOGGER.warn("Failed to load from JSON bundle, attempting individual files: {}", e.getMessage());
+          LOGGER.warn("Failed to load from bundle, attempting individual files: {}", e.getMessage());
           return false;
       }
   }
@@ -387,6 +408,166 @@ public class CellClassification {
       } catch (Exception e) {
           LOGGER.warn("Failed to load from JSON bundle '{}': {}", bundlePath, e.getMessage());
           return false;
+      }
+  }
+
+  /**
+   * Load model from ZIP bundle (new format containing metadata.json and model.ubj).
+   */
+  private boolean loadFromZIPBundle(String zipPath) throws IOException, XGBoostError {
+      ZipFile zipFile = null;
+      File tempModelFile = null;
+
+      try {
+          LOGGER.info("📦 Loading model from ZIP bundle: {}", zipPath);
+          zipFile = new ZipFile(zipPath);
+
+          // Extract metadata.json
+          ZipEntry metadataEntry = zipFile.getEntry("metadata.json");
+          if (metadataEntry == null) {
+              LOGGER.warn("No metadata.json found in ZIP bundle");
+              return false;
+          }
+
+          ObjectMapper mapper = new ObjectMapper();
+          mapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.ACCEPT_FLOAT_AS_INT, true);
+          Map<String, Object> metadataBundle;
+          try (java.io.InputStream metadataStream = zipFile.getInputStream(metadataEntry)) {
+              metadataBundle = mapper.readValue(metadataStream, Map.class);
+          }
+          LOGGER.debug("Loaded metadata.json from ZIP ({} bytes)", metadataEntry.getSize());
+
+          // Process metadata bundle (similar to JSON bundle processing)
+          if (metadataBundle.containsKey("xgboost_model")) {
+              @SuppressWarnings("unchecked")
+              Map<String, Object> xgboostMeta = (Map<String, Object>) metadataBundle.get("xgboost_model");
+              LOGGER.info("ZIP bundle contains XGBoost metadata with {} key(s)", xgboostMeta.size());
+          }
+
+          // Extract and load model.ubj
+          ZipEntry modelEntry = zipFile.getEntry("model.ubj");
+          if (modelEntry == null) {
+              LOGGER.warn("No model.ubj found in ZIP bundle");
+              return false;
+          }
+
+          // Create temporary file for UBJSON model
+          tempModelFile = File.createTempFile("xgboost_model_zip", ".ubj");
+          tempModelFile.deleteOnExit();
+
+          try (java.io.InputStream modelStream = zipFile.getInputStream(modelEntry);
+               java.io.FileOutputStream fos = new java.io.FileOutputStream(tempModelFile)) {
+              byte[] buffer = new byte[8192];
+              int bytesRead;
+              while ((bytesRead = modelStream.read(buffer)) != -1) {
+                  fos.write(buffer, 0, bytesRead);
+              }
+          }
+          LOGGER.debug("Extracted model.ubj to temp file ({} bytes)", modelEntry.getSize());
+
+          // Load the XGBoost model from temp file
+          booster = XGBoost.loadModel(tempModelFile.getAbsolutePath());
+          tempModelFile.delete(); // Safe to delete now
+
+          LOGGER.info("✅ XGBoost model loaded from ZIP bundle successfully");
+
+          // Process metadata (same logic as JSON bundle)
+          processBundleMetadata(metadataBundle);
+
+          return true;
+
+      } catch (Exception e) {
+          LOGGER.error("❌ Failed to load from ZIP bundle '{}': {}", zipPath, e.getMessage(), e);
+          return false;
+      } finally {
+          if (tempModelFile != null && tempModelFile.exists()) {
+              try {
+                  Files.deleteIfExists(tempModelFile.toPath());
+              } catch (Exception e) {
+                  LOGGER.debug("Could not delete temp model file: {}", e.getMessage());
+              }
+          }
+          if (zipFile != null) {
+              try {
+                  zipFile.close();
+              } catch (Exception e) {
+                  LOGGER.debug("Could not close ZIP file: {}", e.getMessage());
+              }
+          }
+      }
+  }
+
+  /**
+   * Process metadata from bundle (shared between ZIP and JSON formats).
+   */
+  private void processBundleMetadata(Map<String, Object> bundle) {
+      try {
+          // Process feature metadata
+          if (bundle.containsKey("feature_metadata")) {
+              @SuppressWarnings("unchecked")
+              Map<String, Object> featureMeta = (Map<String, Object>) bundle.get("feature_metadata");
+              if (featureMeta.containsKey("selected_features")) {
+                  @SuppressWarnings("unchecked")
+                  List<String> features = (List<String>) featureMeta.get("selected_features");
+                  loadedSelectedFeatureNames.clear();
+                  loadedSelectedFeatureNames.addAll(features);
+                  LOGGER.info("Loaded {} selected features from bundle", features.size());
+              }
+          }
+
+          // Process label metadata
+          if (bundle.containsKey("label_metadata")) {
+              @SuppressWarnings("unchecked")
+              Map<String, Object> labelMeta = (Map<String, Object>) bundle.get("label_metadata");
+
+              // Process label mapping
+              if (labelMeta.containsKey("label_mapping")) {
+                  @SuppressWarnings("unchecked")
+                  Map<String, Object>_mappings = (Map<String, Object>) labelMeta.get("label_mapping");
+
+                  // xgboost_index_to_original: Maps XGBoost index (string key) to class name (string value)
+                  @SuppressWarnings("unchecked")
+                  Map<String, String> xgbIndexToClassName = (Map<String, String>) _mappings.get("xgboost_index_to_original");
+                  if (xgbIndexToClassName != null) {
+                      xgbIndexToClassId.clear();
+                      // Convert: XGBoost index (string key) -> class name (string value) -> internal class ID (int value)
+                      for (Map.Entry<String, String> entry : xgbIndexToClassName.entrySet()) {
+                          String xgbIndexStr = entry.getKey();
+                          String className = entry.getValue();
+                          try {
+                              Integer xgbIndex = Integer.parseInt(xgbIndexStr);
+                              // For ZIP bundle, we map XGBoost indices directly to themselves (0->0, 1->1, 2->2)
+                              // since class IDs are the XGBoost indices
+                              xgbIndexToClassId.put(xgbIndex, xgbIndex);
+                          } catch (NumberFormatException e) {
+                              LOGGER.warn("Invalid XGBoost index key '{}', skipping", xgbIndexStr);
+                          }
+                      }
+                      LOGGER.info("Loaded label mapping from bundle: {} mappings", xgbIndexToClassId.size());
+                  }
+              }
+
+              // Process class details
+              if (labelMeta.containsKey("class_details")) {
+                  @SuppressWarnings("unchecked")
+                  Map<String, Map<String, Object>> classDetails = (Map<String, Map<String, Object>>) labelMeta.get("class_details");
+                  classIdToDetails.clear();
+                  for (Map.Entry<String, Map<String, Object>> entry : classDetails.entrySet()) {
+                      Map<String, Object> classData = entry.getValue();
+                      String name = (String) classData.get("name");
+                      Integer id = ((Number) classData.get("id")).intValue();
+                      String color = (String) classData.get("color");
+
+                      ClassDetails details = new ClassDetails(name, id, color);
+                      classIdToDetails.put(id, details);
+                  }
+                  LOGGER.info("Loaded {} class details from bundle", classIdToDetails.size());
+              }
+          }
+
+          LOGGER.info("✅ Bundle metadata processing completed");
+      } catch (Exception e) {
+          LOGGER.warn("Failed to process some bundle metadata: {}", e.getMessage());
       }
   }
 
@@ -1112,15 +1293,13 @@ public class CellClassification {
           ClassDetails classDetails = classIdToDetails.get(classId);
           
           // Debug logging
-          LOGGER.debug("Classification mapping: XGBoost index {} -> Class ID {} -> Class details: {}",
-              i, classId, classDetails != null ? classDetails.name : "NULL");
+          
           
           if (classDetails != null) {
               className = classDetails.name;
               LOGGER.debug("Using class name '{}' from bundle/details for class ID {}", className, classId);
           } else {
-              LOGGER.warn("No class details found for class ID {}, using default name '{}'", classId, className);
-          }
+              }
           classProbabilities.put(className, (double) probabilities[i]);
       }
 

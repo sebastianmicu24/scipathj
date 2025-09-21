@@ -177,7 +177,8 @@ public class XGBoostModelBundle {
      */
     public static class LabelMetadata {
         @JsonProperty("label_mapping")
-        public Map<String, Map<String, Integer>> labelMapping;
+        @JsonDeserialize(using = FlexibleMapDeserializer.class)
+        public Map<String, Object> labelMapping;
 
         @JsonProperty("class_details")
         public Map<Integer, ClassDetail> classDetails;

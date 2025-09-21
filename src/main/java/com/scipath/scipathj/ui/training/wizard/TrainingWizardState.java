@@ -1,6 +1,7 @@
 package com.scipath.scipathj.ui.training.wizard;
 
 import com.scipath.scipathj.training.TrainingSettings;
+import ml.dmlc.xgboost4j.java.Booster;
 
 import java.io.File;
 import java.util.*;
@@ -52,6 +53,7 @@ public class TrainingWizardState {
     private Map<String, Double> perClassMetrics = new HashMap<>();
     private double[][] confusionMatrix;
     private Map<String, Double> featureImportance = new HashMap<>();
+    private Booster trainedBooster = null;
 
     // Step 6: Final Testing state
     private double finalTestAccuracy = 0.0;
@@ -413,6 +415,9 @@ public class TrainingWizardState {
 
     public File getSavedModelFile() { return savedModelFile; }
     public void setSavedModelFile(File savedModelFile) { this.savedModelFile = savedModelFile; }
+
+    public Booster getTrainedBooster() { return trainedBooster; }
+    public void setTrainedBooster(Booster trainedBooster) { this.trainedBooster = trainedBooster; }
 
     // Generic step state management
     public void saveStepState(String stepName, Object state) {
