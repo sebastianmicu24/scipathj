@@ -24,6 +24,9 @@ public class ROIManager {
   // Map of image filename to list of ROIs for that image
   private final Map<String, List<UserROI>> imageROIs;
 
+  // Map of image filename to processing time in milliseconds
+  private final Map<String, Long> imageProcessingTimes;
+
   // Map of ROI key to classification results for tooltip display
   private final Map<String, CellClassification.ClassificationResult> classificationResults;
 
@@ -35,6 +38,7 @@ public class ROIManager {
 
   private ROIManager() {
     this.imageROIs = new ConcurrentHashMap<>();
+    this.imageProcessingTimes = new ConcurrentHashMap<>();
     this.classificationResults = new ConcurrentHashMap<>();
     this.listeners = new ArrayList<>();
   }
@@ -92,6 +96,44 @@ public class ROIManager {
    */
   public Map<String, CellClassification.ClassificationResult> getAllClassificationResults() {
     return new HashMap<>(this.classificationResults);
+  }
+
+  /**
+   * Set processing time for an image
+   */
+  public void setProcessingTime(String imageFileName, long processingTimeMs) {
+    this.imageProcessingTimes.put(imageFileName, processingTimeMs);
+    LOGGER.debug("Set processing time for image '{}' to {}ms", imageFileName, processingTimeMs);
+  }
+
+  /**
+   * Get processing time for an image
+   */
+  public long getProcessingTime(String imageFileName) {
+    return this.imageProcessingTimes.getOrDefault(imageFileName, 0L);
+  }
+
+  /**
+   * Get all processing times by image
+   */
+  public Map<String, Long> getAllProcessingTimes() {
+    return new HashMap<>(this.imageProcessingTimes);
+  }
+
+  /**
+   * Clear processing times for an image
+   */
+  public void clearProcessingTime(String imageFileName) {
+    this.imageProcessingTimes.remove(imageFileName);
+    LOGGER.debug("Cleared processing time for image '{}'", imageFileName);
+  }
+
+  /**
+   * Clear all processing times
+   */
+  public void clearAllProcessingTimes() {
+    this.imageProcessingTimes.clear();
+    LOGGER.debug("Cleared all processing times");
   }
 
   /**

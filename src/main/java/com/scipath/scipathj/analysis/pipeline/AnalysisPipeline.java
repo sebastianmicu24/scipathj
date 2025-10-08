@@ -186,8 +186,16 @@ public class AnalysisPipeline {
         updateProgress(i, "Analyzing...");
 
         try {
+          // Track processing time for this image
+          long imageStartTime = System.currentTimeMillis();
           ImageAnalysisResult result = processImage(imageFile);
+          long imageEndTime = System.currentTimeMillis();
+          long processingTimeMs = imageEndTime - imageStartTime;
+
           if (result.success()) {
+            // Store processing time in ROI manager for statistics
+            roiManager.setProcessingTime(fileName, processingTimeMs);
+
             totalVessels += result.vesselCount();
             totalNuclei += result.nucleusCount();
             totalCells += result.cellCount();
