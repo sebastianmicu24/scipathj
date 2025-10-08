@@ -365,10 +365,6 @@ private void handleAddClass() {
         view.getClassNameField().setText("");
         view.getClassNameField().setForeground(UIManager.getColor("TextField.foreground"));
         
-        // Clear the class name field placeholder
-        view.getClassNameField().setText("Enter class name");
-        view.getClassNameField().setForeground(new Color(128, 128, 128)); // Gray placeholder text
-        
         updateStatus("Added and selected new class: " + className);
     } else {
         showErrorMessage("Failed to add class.");
@@ -395,7 +391,8 @@ private void handleAddClass() {
 
     private void updateProgress(ProgressState state) {
         SwingUtilities.invokeLater(() -> {
-            view.updateProgress(state.getDetails(), (int) state.getCurrent(), (int) state.getTotal());
+            // Progress display removed from UI - use status instead
+            view.setStatus(state.getDetails() + " (" + (int) state.getCurrent() + "/" + (int) state.getTotal() + ")");
         });
     }
 
@@ -403,7 +400,7 @@ private void handleAddClass() {
         // Could be used for additional progress visualization
         SwingUtilities.invokeLater(() -> {
             String message = String.format("%.0f%% complete", percentage * 100);
-            view.getProgressLabel().setText(message);
+            view.setStatus(message);
         });
     }
 

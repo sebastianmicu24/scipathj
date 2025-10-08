@@ -333,6 +333,15 @@ public class NavigationController {
   }
 
   /**
+   * Gets the selected file (if single file selection).
+   *
+   * @return the selected file, or null if folder selection
+   */
+  public File getSelectedFile() {
+    return selectedFile;
+  }
+
+  /**
    * Sets the selected folder.
    *
    * @param folder the selected folder

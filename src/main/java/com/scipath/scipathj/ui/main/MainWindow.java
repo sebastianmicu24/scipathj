@@ -408,10 +408,11 @@ public class MainWindow extends JFrame {
         e -> {
           PipelineInfo pipeline = navigationController.getSelectedPipeline();
           File folder = navigationController.getSelectedFolder();
+          File selectedFile = navigationController.getSelectedFile();
           int imageCount = navigationController.getImageCount();
 
           if (pipeline != null && folder != null) {
-            analysisController.startAnalysis(pipeline, folder, imageCount);
+            analysisController.startAnalysis(pipeline, folder, selectedFile, imageCount);
           }
         });
   }

@@ -75,11 +75,13 @@ public class AnalysisExecutionController {
    * Starts the analysis process for the given parameters.
    *
    * @param selectedFolder the selected folder containing images
+   * @param selectedFile the selected file (null for folder selection, specific file for single-file analysis)
    * @param imageCount the number of images to process
    * @param onComplete callback when analysis completes
    */
-  public void startAnalysis(File selectedFolder, int imageCount, Runnable onComplete) {
-    LOGGER.info("Analysis start requested for folder: {} ({} images)", selectedFolder.getAbsolutePath(), imageCount);
+  public void startAnalysis(File selectedFolder, File selectedFile, int imageCount, Runnable onComplete) {
+    String analysisScope = selectedFile != null ? "file: " + selectedFile.getName() : "folder: " + selectedFolder.getAbsolutePath();
+    LOGGER.info("Analysis start requested for {} ({} images)", analysisScope, imageCount);
 
     if (isAnalysisRunning) {
       LOGGER.warn("Analysis already running, ignoring start request");
@@ -90,7 +92,15 @@ public class AnalysisExecutionController {
     statusPanel.showProgress(0, "Starting analysis...");
 
     // Start analysis
-    performCombinedSegmentationAnalysis(selectedFolder, imageCount, onComplete);
+    performCombinedSegmentationAnalysis(selectedFolder, selectedFile, imageCount, onComplete);
+  }
+
+  /**
+   * Legacy method for backward compatibility.
+   */
+  @Deprecated
+  public void startAnalysis(File selectedFolder, int imageCount, Runnable onComplete) {
+    startAnalysis(selectedFolder, null, imageCount, onComplete);
   }
 
   /**
@@ -122,18 +132,20 @@ public class AnalysisExecutionController {
   /**
    * Performs the combined segmentation analysis.
    */
-  private void performCombinedSegmentationAnalysis(File selectedFolder, int imageCount, Runnable onComplete) {
+  private void performCombinedSegmentationAnalysis(File selectedFolder, File selectedFile, int imageCount, Runnable onComplete) {
     isAnalysisRunning = true;
 
     currentAnalysisWorker = new SwingWorker<Void, String>() {
       @Override
       protected Void doInBackground() throws Exception {
         try {
-          // Get all image files from the folder
-          File[] imageFiles = getImageFiles(selectedFolder);
+          // Get image files - either single selected file or all from folder
+          File[] imageFiles = (selectedFile != null) ?
+              new File[]{selectedFile} : // Single file analysis
+              getImageFiles(selectedFolder); // Folder analysis
 
           if (imageFiles.length == 0) {
-            publish("No supported image files found in the selected folder.");
+            publish("No supported image files found.");
             return null;
           }
 

@@ -391,7 +391,8 @@
 
     <profiles>
         <profile>
-            <id>release</id>
+            <id>release-windows</id>
+            <!-- Activation removed: run on Windows platform only -->
             <build>
                 <plugins>
                     <!-- Copy dependencies -->
@@ -437,7 +438,6 @@
                                         <copy failonerror="false" flatten="true" todir="${project.build.directory}/lib">
                                             <fileset dir="${project.build.directory}/natives-temp">
                                                 <include name="**/*.dll"></include>
-                                                <include name="**/*.so"></include>
                                             </fileset>
                                         </copy>
                                         <delete dir="${project.build.directory}/natives-temp"></delete>
@@ -447,7 +447,7 @@
                         </executions>
                     </plugin>
 
-                    <!-- JPackage -->
+                    <!-- JPackage Windows -->
                     <plugin>
                         <groupId>org.panteleyev</groupId>
                         <artifactId>jpackage-maven-plugin</artifactId>
@@ -467,6 +467,262 @@
                             <winMenu>true</winMenu>
                             <winShortcut>true</winShortcut>
                             <icon>src/main/resources/icons/scipathj.ico</icon>
+
+                            <!-- Include dependencies and natives -->
+                            <appContent>
+                                <additionalContent>
+                                    <name>libs</name>
+                                    <source>${project.build.directory}/libs</source>
+                                </additionalContent>
+                                <additionalContent>
+                                    <name>lib</name>
+                                    <source>${project.build.directory}/lib</source>
+                                </additionalContent>
+                            </appContent>
+
+                            <!-- JVM options for TensorFlow and Java 23 compatibility -->
+                            <javaOptions>
+                                <javaOption>-Xmx4G</javaOption>
+                                <javaOption>-Xms1G</javaOption>
+                                <javaOption>--add-opens=java.base/java.lang=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/java.lang.reflect=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/java.util=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/java.util.concurrent=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/sun.nio.ch=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/java.nio=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/sun.nio.fs=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/java.io=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/java.net=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.desktop/sun.awt=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.desktop/sun.java2d=ALL-UNNAMED</javaOption>
+                                <javaOption>-Djava.library.path=$APPDIR/lib</javaOption>
+                                <javaOption>-Dorg.tensorflow.NativeLibrary.MODE=bundled</javaOption>
+                                <javaOption>-Djna.library.path=$APPDIR/lib</javaOption>
+                                <javaOption>-Dfile.encoding=UTF-8</javaOption>
+                                <javaOption>-Dsun.java2d.d3d=false</javaOption>
+                                <javaOption>-Dsun.java2d.opengl=false</javaOption>
+                                <javaOption>-Dswing.aatext=true</javaOption>
+                                <javaOption>-Dawt.useSystemAAFontSettings=on</javaOption>
+                            </javaOptions>
+
+                            <verbose>true</verbose>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>jpackage</goal>
+                                </goals>
+                                <phase>package</phase>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>release-mac</id>
+            <!-- Activation removed: run on macOS only -->
+            <build>
+                <plugins>
+                    <!-- Copy dependencies -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-dependency-plugin</artifactId>
+                        <version>${maven-dependency-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>copy-dependencies</id>
+                                <goals>
+                                    <goal>copy-dependencies</goal>
+                                </goals>
+                                <phase>prepare-package</phase>
+                                <configuration>
+                                    <outputDirectory>${project.build.directory}/libs</outputDirectory>
+                                    <includeScope>runtime</includeScope>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <!-- Extract TensorFlow natives -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <version>${maven-antrun-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>extract-natives</id>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <phase>prepare-package</phase>
+                                <configuration>
+                                    <target>
+                                        <mkdir dir="${project.build.directory}/lib"></mkdir>
+                                        <unzip dest="${project.build.directory}/natives-temp">
+                                            <fileset dir="${settings.localRepository}/org/tensorflow/libtensorflow_jni/1.15.0">
+                                                <include name="libtensorflow_jni-1.15.0.jar"></include>
+                                            </fileset>
+                                        </unzip>
+                                        <copy failonerror="false" flatten="true" todir="${project.build.directory}/lib">
+                                            <fileset dir="${project.build.directory}/natives-temp">
+                                                <include name="**/*.dylib"></include>
+                                            </fileset>
+                                        </copy>
+                                        <delete dir="${project.build.directory}/natives-temp"></delete>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <!-- JPackage Mac -->
+                    <plugin>
+                        <groupId>org.panteleyev</groupId>
+                        <artifactId>jpackage-maven-plugin</artifactId>
+                        <version>${jpackage-maven-plugin.version}</version>
+                        <configuration>
+                            <name>SciPathJ</name>
+                            <appVersion>${project.version}</appVersion>
+                            <vendor>SciPath</vendor>
+                            <description>Segmentation and Classification of Images, Pipelines for the Analysis of Tissue Histopathology</description>
+
+                            <destination>${project.build.directory}/dist</destination>
+                            <input>${project.build.directory}</input>
+                            <mainJar>${project.build.finalName}.jar</mainJar>
+                            <mainClass>com.scipath.scipathj.SciPathJApplication</mainClass>
+
+                            <type>PKG</type>
+                            <icon>src/main/resources/icons/scipathj.png</icon>
+
+                            <!-- Include dependencies and natives -->
+                            <appContent>
+                                <additionalContent>
+                                    <name>libs</name>
+                                    <source>${project.build.directory}/libs</source>
+                                </additionalContent>
+                                <additionalContent>
+                                    <name>lib</name>
+                                    <source>${project.build.directory}/lib</source>
+                                </additionalContent>
+                            </appContent>
+
+                            <!-- JVM options for TensorFlow and Java 23 compatibility -->
+                            <javaOptions>
+                                <javaOption>-Xmx4G</javaOption>
+                                <javaOption>-Xms1G</javaOption>
+                                <javaOption>--add-opens=java.base/java.lang=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/java.lang.reflect=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/java.util=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/java.util.concurrent=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/sun.nio.ch=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/java.nio=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/sun.nio.fs=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/java.io=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.base/java.net=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.desktop/sun.awt=ALL-UNNAMED</javaOption>
+                                <javaOption>--add-opens=java.desktop/sun.java2d=ALL-UNNAMED</javaOption>
+                                <javaOption>-Djava.library.path=$APPDIR/lib</javaOption>
+                                <javaOption>-Dorg.tensorflow.NativeLibrary.MODE=bundled</javaOption>
+                                <javaOption>-Djna.library.path=$APPDIR/lib</javaOption>
+                                <javaOption>-Dfile.encoding=UTF-8</javaOption>
+                                <javaOption>-Dsun.java2d.d3d=false</javaOption>
+                                <javaOption>-Dsun.java2d.opengl=false</javaOption>
+                                <javaOption>-Dswing.aatext=true</javaOption>
+                                <javaOption>-Dawt.useSystemAAFontSettings=on</javaOption>
+                            </javaOptions>
+
+                            <verbose>true</verbose>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>jpackage</goal>
+                                </goals>
+                                <phase>package</phase>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>release-linux</id>
+            <!-- Activation removed: run on Linux only -->
+            <build>
+                <plugins>
+                    <!-- Copy dependencies -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-dependency-plugin</artifactId>
+                        <version>${maven-dependency-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>copy-dependencies</id>
+                                <goals>
+                                    <goal>copy-dependencies</goal>
+                                </goals>
+                                <phase>prepare-package</phase>
+                                <configuration>
+                                    <outputDirectory>${project.build.directory}/libs</outputDirectory>
+                                    <includeScope>runtime</includeScope>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <!-- Extract TensorFlow natives -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <version>${maven-antrun-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>extract-natives</id>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <phase>prepare-package</phase>
+                                <configuration>
+                                    <target>
+                                        <mkdir dir="${project.build.directory}/lib"></mkdir>
+                                        <unzip dest="${project.build.directory}/natives-temp">
+                                            <fileset dir="${settings.localRepository}/org/tensorflow/libtensorflow_jni/1.15.0">
+                                                <include name="libtensorflow_jni-1.15.0.jar"></include>
+                                            </fileset>
+                                        </unzip>
+                                        <copy failonerror="false" flatten="true" todir="${project.build.directory}/lib">
+                                            <fileset dir="${project.build.directory}/natives-temp">
+                                                <include name="**/*.so"></include>
+                                            </fileset>
+                                        </copy>
+                                        <delete dir="${project.build.directory}/natives-temp"></delete>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <!-- JPackage Linux -->
+                    <plugin>
+                        <groupId>org.panteleyev</groupId>
+                        <artifactId>jpackage-maven-plugin</artifactId>
+                        <version>${jpackage-maven-plugin.version}</version>
+                        <configuration>
+                            <name>SciPathJ</name>
+                            <appVersion>${project.version}</appVersion>
+                            <vendor>SciPath</vendor>
+                            <description>Segmentation and Classification of Images, Pipelines for the Analysis of Tissue Histopathology</description>
+
+                            <destination>${project.build.directory}/dist</destination>
+                            <input>${project.build.directory}</input>
+                            <mainJar>${project.build.finalName}.jar</mainJar>
+                            <mainClass>com.scipath.scipathj.SciPathJApplication</mainClass>
+
+                            <type>DEB</type>
+                            <icon>src/main/resources/icons/scipathj.png</icon>
 
                             <!-- Include dependencies and natives -->
                             <appContent>

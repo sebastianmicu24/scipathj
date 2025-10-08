@@ -38,10 +38,6 @@ public class DatasetControlsView extends JPanel {
     private JPanel colorPreview;
     private JPanel classCountersPanel;
 
-    // Progress components
-    private JProgressBar progressBar;
-    private JLabel progressLabel;
-
     // Status label
     private JLabel statusLabel;
 
@@ -80,6 +76,9 @@ public class DatasetControlsView extends JPanel {
         addClassButton = createModernButton("Add Class", new Color(0, 123, 255));
         classNameField = createStyledTextField(15);
 
+        // Setup placeholder behavior for class name field
+        setupPlaceholderBehavior(classNameField, "Enter class name");
+
         // Color picker
         colorPickerButton = createColorPickerButton();
         colorPreview = createColorPreview();
@@ -88,13 +87,6 @@ public class DatasetControlsView extends JPanel {
         classCountersPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
         classCountersPanel.setOpaque(false);
 
-        // Progress components
-        progressBar = new JProgressBar();
-        progressBar.setStringPainted(true);
-        progressBar.setString("");
-
-        progressLabel = new JLabel();
-        progressLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
         // Status label
         statusLabel = new JLabel("Ready");
@@ -127,10 +119,6 @@ public class DatasetControlsView extends JPanel {
 
         // Class counters section
         mainPanel.add(createModernSection("Class Counts", classCountersPanel));
-        mainPanel.add(Box.createVerticalStrut(15));
-
-        // Progress section
-        mainPanel.add(createProgressSection());
 
         // Add main panel
         add(mainPanel, BorderLayout.CENTER);
@@ -209,12 +197,44 @@ public class DatasetControlsView extends JPanel {
         return button;
     }
 
-    private JPanel createColorPreview() {
+    public JPanel createColorPreview() {
         JPanel preview = new JPanel();
         preview.setPreferredSize(new Dimension(20, 20));
         preview.setBackground(new Color(255, 87, 34)); // Material Orange
         preview.setBorder(BorderFactory.createLineBorder(new Color(200, 200, 200), 1));
         return preview;
+    }
+
+    /**
+     * Setup placeholder behavior for a text field.
+     * When focused, clear placeholder text if present.
+     * When unfocused and empty, restore placeholder text.
+     */
+    private void setupPlaceholderBehavior(JTextField textField, String placeholderText) {
+        // Store original foreground color
+        Color originalColor = textField.getForeground();
+
+        // Initially show placeholder
+        textField.setText(placeholderText);
+        textField.setForeground(new Color(128, 128, 128)); // Gray placeholder text
+
+        textField.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusGained(java.awt.event.FocusEvent e) {
+                if (placeholderText.equals(textField.getText())) {
+                    textField.setText("");
+                    textField.setForeground(originalColor);
+                }
+            }
+
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
+                if (textField.getText().trim().isEmpty()) {
+                    textField.setText(placeholderText);
+                    textField.setForeground(new Color(128, 128, 128));
+                }
+            }
+        });
     }
 
     // === PANEL CREATION METHODS ===
@@ -300,21 +320,6 @@ public class DatasetControlsView extends JPanel {
         return panel;
     }
 
-    private JPanel createProgressSection() {
-        JPanel section = createModernSection("Progress", createProgressPanel());
-        section.setBorder(new EmptyBorder(15, 15, 15, 15));
-        return section;
-    }
-
-    private JPanel createProgressPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setOpaque(false);
-
-        panel.add(progressLabel, BorderLayout.NORTH);
-        panel.add(progressBar, BorderLayout.CENTER);
-
-        return panel;
-    }
 
     private JPanel createStatusBar() {
         JPanel statusBar = new JPanel(new BorderLayout());
@@ -367,36 +372,15 @@ public class DatasetControlsView extends JPanel {
     public JPanel getColorPreview() { return colorPreview; }
     public JPanel getClassCountersPanel() { return classCountersPanel; }
 
-    public JProgressBar getProgressBar() { return progressBar; }
-    public JLabel getProgressLabel() { return progressLabel; }
     public JLabel getStatusLabel() { return statusLabel; }
 
     // === UTILITY METHODS ===
-
-    /**
-     * Update progress display.
-     */
-    public void updateProgress(String label, int value, int max) {
-        progressLabel.setText(label);
-        progressBar.setMaximum(max);
-        progressBar.setValue(value);
-        progressBar.setString(label + " (" + value + "/" + max + ")");
-    }
 
     /**
      * Set status message.
      */
     public void setStatus(String status) {
         statusLabel.setText(status);
-    }
-
-    /**
-     * Reset progress to zero.
-     */
-    public void resetProgress() {
-        progressBar.setValue(0);
-        progressBar.setString("");
-        progressLabel.setText("");
     }
 
     /**

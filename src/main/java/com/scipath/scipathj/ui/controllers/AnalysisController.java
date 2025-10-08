@@ -87,13 +87,16 @@ public class AnalysisController {
    *
    * @param selectedPipeline the selected pipeline
    * @param selectedFolder the selected folder
+   * @param selectedFile the selected file (null for folder selection, specific file for single-file analysis)
    * @param imageCount the number of images to process
    */
-  public void startAnalysis(PipelineInfo selectedPipeline, File selectedFolder, int imageCount) {
+  public void startAnalysis(PipelineInfo selectedPipeline, File selectedFolder, File selectedFile, int imageCount) {
+    String analysisScope = selectedFile != null ? "single file: " + selectedFile.getName() :
+                                                  "folder: " + selectedFolder.getAbsolutePath();
     LOGGER.info(
-        "Analysis start requested for pipeline: {} with folder: {} ({} images)",
+        "Analysis start requested for pipeline: {} with {} ({} images)",
         selectedPipeline.getDisplayName(),
-        selectedFolder.getAbsolutePath(),
+        analysisScope,
         imageCount);
 
     // Store analysis parameters
@@ -110,7 +113,15 @@ public class AnalysisController {
     }
 
     // Start analysis via execution controller
-    executionController.startAnalysis(selectedFolder, imageCount, this::handleAnalysisCompletion);
+    executionController.startAnalysis(selectedFolder, selectedFile, imageCount, this::handleAnalysisCompletion);
+  }
+
+  /**
+   * Legacy method for backward compatibility.
+   */
+  @Deprecated
+  public void startAnalysis(PipelineInfo selectedPipeline, File selectedFolder, int imageCount) {
+    startAnalysis(selectedPipeline, selectedFolder, null, imageCount);
   }
 
   /**

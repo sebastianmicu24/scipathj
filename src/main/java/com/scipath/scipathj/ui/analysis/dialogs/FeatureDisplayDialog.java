@@ -27,6 +27,7 @@ public class FeatureDisplayDialog extends JDialog {
   private JTable featuresTable;
   private DefaultTableModel tableModel;
   private Map<String, Map<String, Object>> featuresData;
+  private Map<String, Map<String, Object>> allFeaturesData; // Unfiltered version for full export
   private String imageName;
   private MainSettings mainSettings;
 
@@ -41,6 +42,7 @@ public class FeatureDisplayDialog extends JDialog {
   public FeatureDisplayDialog(Frame parent, Map<String, Map<String, Object>> features, String imageName, MainSettings mainSettings) {
     super(parent, "Extracted Features", true);
     this.featuresData = features;
+    this.allFeaturesData = features; // Store unfiltered version for full export
     this.imageName = imageName;
     this.mainSettings = mainSettings;
     initializeDialog();
@@ -218,14 +220,21 @@ public class FeatureDisplayDialog extends JDialog {
 
     JLabel statsLabel = UIUtils.createLabel(statsText, UIConstants.NORMAL_FONT_SIZE, null);
 
-    JButton exportButton = UIUtils.createStandardButton("Export to CSV", null);
+    JButton exportButton = UIUtils.createStandardButton("Save Displayed Features", null);
+    exportButton.setPreferredSize(new Dimension(200, exportButton.getPreferredSize().height));
     exportButton.addActionListener(e -> exportToCSV());
 
+    JButton exportAllButton = UIUtils.createStandardButton("Save All Features", null);
+    exportAllButton.setPreferredSize(new Dimension(180, exportAllButton.getPreferredSize().height));
+    exportAllButton.addActionListener(e -> exportAllFeaturesToCSV());
+
     JButton closeButton = UIUtils.createStandardButton("Close", null);
+    closeButton.setPreferredSize(new Dimension(100, closeButton.getPreferredSize().height));
     closeButton.addActionListener(e -> dispose());
 
     statsPanel.add(statsLabel);
     statsPanel.add(exportButton);
+    statsPanel.add(exportAllButton);
     statsPanel.add(closeButton);
 
     return statsPanel;
@@ -424,9 +433,174 @@ public class FeatureDisplayDialog extends JDialog {
             "Export Success", JOptionPane.INFORMATION_MESSAGE);
       } catch (IOException e) {
         JOptionPane.showMessageDialog(this, "Error exporting to CSV: " + e.getMessage(),
-                                       "Export Error", JOptionPane.ERROR_MESSAGE);
+                                        "Export Error", JOptionPane.ERROR_MESSAGE);
       }
     }
+  }
+
+  private void exportAllFeaturesToCSV() {
+    JFileChooser fileChooser = new JFileChooser();
+    fileChooser.setSelectedFile(new File("all_features_export.csv")); // Default filename
+    int result = fileChooser.showSaveDialog(this);
+
+    if (result == JFileChooser.APPROVE_OPTION) {
+      File selectedFile = fileChooser.getSelectedFile();
+      // Ensure the file has .csv extension
+      if (!selectedFile.getName().toLowerCase().endsWith(".csv")) {
+        selectedFile = new File(selectedFile.getAbsolutePath() + ".csv");
+      }
+
+      try (FileWriter writer = new FileWriter(selectedFile)) {
+        // Determine CSV format settings
+        String delimiter;
+        String decimalSeparator;
+
+        if (mainSettings != null && mainSettings.useEuCsvFormat()) {
+          // EU format: semicolon delimiter, comma decimal separator
+          delimiter = ";";
+          decimalSeparator = ",";
+        } else {
+          // US format: comma delimiter, period decimal separator
+          delimiter = ",";
+          decimalSeparator = ".";
+        }
+
+        // Create table model for all features (with filtering disabled)
+        DefaultTableModel allFeaturesModel = createAllFeaturesTableModel();
+
+        // Write headers
+        for (int i = 0; i < allFeaturesModel.getColumnCount(); i++) {
+          writer.write(allFeaturesModel.getColumnName(i));
+          if (i < allFeaturesModel.getColumnCount() - 1) {
+            writer.write(delimiter);
+          }
+        }
+        writer.write("\n");
+
+        // Write all data from all features table (no filtering applied)
+        int exportedRows = allFeaturesModel.getRowCount();
+        for (int row = 0; row < exportedRows; row++) {
+          for (int col = 0; col < allFeaturesModel.getColumnCount(); col++) {
+            Object value = allFeaturesModel.getValueAt(row, col);
+            if (value != null) {
+              String stringValue = value.toString();
+              // If using EU format and this is a numeric column, replace decimal separator
+              if (mainSettings != null && mainSettings.useEuCsvFormat() && value instanceof Number) {
+                stringValue = stringValue.replace(".", decimalSeparator);
+              }
+              writer.write(stringValue);
+            } else {
+              writer.write("");
+            }
+            if (col < allFeaturesModel.getColumnCount() - 1) {
+              writer.write(delimiter);
+            }
+          }
+          writer.write("\n");
+        }
+
+        String formatType = (mainSettings != null && mainSettings.useEuCsvFormat()) ? "EU" : "US";
+        JOptionPane.showMessageDialog(this,
+            String.format("All features CSV export successful!\nFormat: %s\nRows exported: %d\nSaved to: %s",
+                formatType + " format", exportedRows, selectedFile.getAbsolutePath()),
+            "Export Success", JOptionPane.INFORMATION_MESSAGE);
+      } catch (IOException e) {
+        JOptionPane.showMessageDialog(this, "Error exporting all features to CSV: " + e.getMessage(),
+                                        "Export Error", JOptionPane.ERROR_MESSAGE);
+      }
+    }
+  }
+
+  /**
+   * Creates a table model for all features without any filtering.
+   */
+  private DefaultTableModel createAllFeaturesTableModel() {
+    // Determine all unique feature names across all ROIs
+    Set<String> allFeatureNames = new HashSet<>();
+    for (Map<String, Object> roiFeatures : allFeaturesData.values()) {
+      allFeatureNames.addAll(roiFeatures.keySet());
+    }
+
+    // Create column names (same as filtered table)
+    List<String> columnNames = new ArrayList<>();
+    columnNames.add("Image Name");
+    columnNames.add("Cell Type");
+    columnNames.add("ROI ID");
+    columnNames.addAll(allFeatureNames.stream().sorted().toList());
+
+    // Create table model
+    DefaultTableModel model = new DefaultTableModel(columnNames.toArray(), 0) {
+      @Override
+      public Class<?> getColumnClass(int column) {
+        // First 3 columns are strings, rest can be numbers or strings
+        if (column < 3) {
+          return String.class;
+        }
+
+        // For feature columns, check the actual data type
+        for (int row = 0; row < getRowCount(); row++) {
+          Object value = getValueAt(row, column);
+          if (value != null) {
+            return value instanceof String ? String.class : Double.class;
+          }
+        }
+
+        // Default to Object if no data found
+        return Object.class;
+      }
+
+      @Override
+      public boolean isCellEditable(int row, int column) {
+        return false; // Table is read-only
+      }
+    };
+
+    // Populate table data from all features (no filtering)
+    for (Map.Entry<String, Map<String, Object>> entry : allFeaturesData.entrySet()) {
+      String roiName = entry.getKey();
+      Map<String, Object> roiFeatures = entry.getValue();
+
+      // Parse ROI name to extract components (same as filtered table)
+      String currentImageName;
+      if (this.imageName != null && !this.imageName.trim().isEmpty()) {
+        // Use provided image name if available
+        currentImageName = this.imageName.trim();
+      } else {
+        // Extract from ROI name
+        currentImageName = extractImageName(roiName);
+        // If extraction returns "Unknown", try to use the ROI name itself as fallback
+        if ("Unknown".equals(currentImageName)) {
+          currentImageName = roiName;
+        }
+      }
+      String cellType = extractCellType(roiName);
+      String roiId = extractROIId(roiName);
+
+      // Create row data
+      List<Object> rowData = new ArrayList<>();
+      rowData.add(currentImageName);
+      rowData.add(cellType);
+      rowData.add(roiId);
+
+      // Add feature values in the same order as column names
+      for (int i = 3; i < columnNames.size(); i++) {
+        String featureName = columnNames.get(i);
+        Object value = roiFeatures.get(featureName);
+        if (value == null) {
+          rowData.add(""); // Use empty string for null values
+        } else if (value instanceof String) {
+          rowData.add(value); // Keep strings as strings
+        } else if (value instanceof Number) {
+          rowData.add(((Number) value).doubleValue()); // Convert numbers to double
+        } else {
+          rowData.add(value.toString()); // Convert other types to string
+        }
+      }
+
+      model.addRow(rowData.toArray());
+    }
+
+    return model;
   }
 
 }

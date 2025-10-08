@@ -135,7 +135,7 @@ public class DatasetControlsPanelRefactored extends JPanel {
      * Legacy method for updating progress.
      */
     public void updateProgress(int current, int total) {
-        view.updateProgress("Processing...", current, total);
+        view.setStatus("Processing... (" + current + "/" + total + ")");
     }
 
     /**

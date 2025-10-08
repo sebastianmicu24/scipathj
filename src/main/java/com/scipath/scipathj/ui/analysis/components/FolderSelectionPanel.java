@@ -271,6 +271,9 @@ public class FolderSelectionPanel extends JPanel {
     fileChooser.setDialogTitle("Select Folder Containing Images");
     fileChooser.setCurrentDirectory(FileSystemView.getFileSystemView().getDefaultDirectory());
 
+    // Allow navigation through directories but don't show files
+    fileChooser.setAcceptAllFileFilterUsed(false);
+
     if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
       setSelectedFolder(fileChooser.getSelectedFile());
     }
@@ -281,6 +284,13 @@ public class FolderSelectionPanel extends JPanel {
     fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
     fileChooser.setDialogTitle("Select Image File");
     fileChooser.setCurrentDirectory(FileSystemView.getFileSystemView().getDefaultDirectory());
+
+    // Add file filter for supported image formats
+    javax.swing.filechooser.FileNameExtensionFilter imageFilter =
+        new javax.swing.filechooser.FileNameExtensionFilter(
+            "Image Files",
+            "tif", "tiff", "jpg", "jpeg", "png", "bmp");
+    fileChooser.setFileFilter(imageFilter);
 
     if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
       setSelectedFile(fileChooser.getSelectedFile());
