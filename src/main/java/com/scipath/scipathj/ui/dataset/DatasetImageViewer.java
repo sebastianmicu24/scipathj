@@ -304,6 +304,11 @@ public class DatasetImageViewer extends JPanel {
 
     private void displayImageWithROIs(ImagePlus imagePlus, File roiZipFile) {
         try {
+            // Close previous image to prevent memory leaks
+            if (this.currentImagePlus != null && this.currentImagePlus != imagePlus) {
+                this.currentImagePlus.close();
+            }
+
             currentImagePlus = imagePlus;
             isLoading = false;
             originalImage = imagePlus.getImage();
@@ -560,6 +565,12 @@ public class DatasetImageViewer extends JPanel {
             "Select an image from the gallery to view it here",
             UIManager.getColor("Label.disabledForeground"));
         imageInfoLabel.setText("");
+
+        // Close and clean up current image resources
+        if (currentImagePlus != null) {
+            currentImagePlus.close();
+        }
+
         currentImageFile = null;
         currentImagePlus = null;
         originalImage = null;

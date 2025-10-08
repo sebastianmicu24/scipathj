@@ -27,6 +27,12 @@ public class ROIManager {
   // Map of ROI key to classification results for tooltip display
   private final Map<String, CellClassification.ClassificationResult> classificationResults;
 
+  // Map of image filename to processing time in milliseconds
+  private final Map<String, Long> imageProcessingTimes;
+
+  // Temporary storage for ROIs during batch processing
+  private File tempROIDirectory;
+
   // Listeners for ROI changes
   private final List<ROIChangeListener> listeners;
 
@@ -36,6 +42,7 @@ public class ROIManager {
   private ROIManager() {
     this.imageROIs = new ConcurrentHashMap<>();
     this.classificationResults = new ConcurrentHashMap<>();
+    this.imageProcessingTimes = new ConcurrentHashMap<>();
     this.listeners = new ArrayList<>();
   }
 
@@ -47,6 +54,38 @@ public class ROIManager {
       instance = new ROIManager();
     }
     return instance;
+  }
+
+  /**
+   * Initialize temporary ROI storage for batch processing
+   * This enables memory-efficient ROI management during analysis
+   */
+  public void initializeTempROIStorage() {
+    if (tempROIDirectory == null) {
+      tempROIDirectory = new File(System.getProperty("java.io.tmpdir"),
+          "scipathj_batch_rois_" + System.currentTimeMillis());
+      tempROIDirectory.mkdirs();
+      LOGGER.info("Initialized temporary ROI storage: {}", tempROIDirectory.getAbsolutePath());
+    }
+  }
+
+  /**
+   * Check if we're using temporary ROI storage (batch processing mode)
+   */
+  public boolean isUsingTempStorage() {
+    return tempROIDirectory != null;
+  }
+
+  /**
+   * Cleanup temporary ROI storage and switch back to memory mode
+   */
+  public void cleanupTempROIStorage() {
+    if (tempROIDirectory != null && tempROIDirectory.exists()) {
+      // Delete all temporary ROI files
+      deleteDirectory(tempROIDirectory);
+      tempROIDirectory = null;
+      LOGGER.info("Cleaned up temporary ROI storage");
+    }
   }
 
   /**
@@ -95,6 +134,44 @@ public class ROIManager {
   }
 
   /**
+   * Set processing time for an image
+   */
+  public void setProcessingTime(String imageFileName, long processingTimeMs) {
+    this.imageProcessingTimes.put(imageFileName, processingTimeMs);
+    LOGGER.debug("Set processing time for image '{}' to {}ms", imageFileName, processingTimeMs);
+  }
+
+  /**
+   * Get processing time for an image
+   */
+  public long getProcessingTime(String imageFileName) {
+    return this.imageProcessingTimes.getOrDefault(imageFileName, 0L);
+  }
+
+  /**
+   * Get all processing times by image
+   */
+  public Map<String, Long> getAllProcessingTimes() {
+    return new HashMap<>(this.imageProcessingTimes);
+  }
+
+  /**
+   * Clear processing times for an image
+   */
+  public void clearProcessingTime(String imageFileName) {
+    this.imageProcessingTimes.remove(imageFileName);
+    LOGGER.debug("Cleared processing time for image '{}'", imageFileName);
+  }
+
+  /**
+   * Clear all processing times
+   */
+  public void clearAllProcessingTimes() {
+    this.imageProcessingTimes.clear();
+    LOGGER.debug("Cleared all processing times");
+  }
+
+  /**
    * Interface for listening to ROI changes
    */
   public interface ROIChangeListener {
@@ -122,12 +199,69 @@ public class ROIManager {
   }
 
   /**
+   * Save a single ROI to temporary storage
+   */
+  private void saveROIToTempFile(UserROI roi) throws IOException {
+    if (tempROIDirectory == null) {
+      throw new IllegalStateException("Temporary ROI storage not initialized");
+    }
+
+    String imageFileName = roi.getImageFileName();
+    String safeImageName = sanitizeFileName(imageFileName);
+
+    // Create subdirectory for this image if it doesn't exist
+    File imageTempDir = new File(tempROIDirectory, safeImageName);
+    imageTempDir.mkdirs();
+
+    // Save ROI to temporary file
+    File tempROIFile = new File(imageTempDir, roi.getId() + ".roi");
+    Roi ijRoi = convertToImageJROI(roi);
+    RoiEncoder.save(ijRoi, tempROIFile.getAbsolutePath());
+  }
+
+  /**
+   * Load ROIs for an image from temporary storage
+   */
+  private List<UserROI> loadROIsFromTempFiles(String imageFileName) throws IOException {
+    if (tempROIDirectory == null) {
+      return new ArrayList<>();
+    }
+
+    String safeImageName = sanitizeFileName(imageFileName);
+    File imageTempDir = new File(tempROIDirectory, safeImageName);
+
+    if (!imageTempDir.exists() || !imageTempDir.isDirectory()) {
+      return new ArrayList<>();
+    }
+
+    List<UserROI> loadedROIs = new ArrayList<>();
+    File[] roiFiles = imageTempDir.listFiles((dir, name) -> name.endsWith(".roi"));
+
+    if (roiFiles != null) {
+      for (File roiFile : roiFiles) {
+        try {
+          UserROI roi = loadSingleROI(roiFile, imageFileName);
+          if (roi != null) {
+            loadedROIs.add(roi);
+          }
+        } catch (IOException e) {
+          LOGGER.warn("Failed to load ROI from temporary file {}: {}", roiFile.getName(), e.getMessage());
+        }
+      }
+    }
+
+    return loadedROIs;
+  }
+
+  /**
    * Add a ROI to the specified image
    */
   public void addROI(UserROI roi) {
     if (roi == null) return;
 
     String imageFileName = roi.getImageFileName();
+
+    // Always store in memory for immediate UI updates and processing
     List<UserROI> roisForImage = imageROIs.computeIfAbsent(imageFileName, k -> new ArrayList<>());
 
     // Check for duplicate ROI by ID to prevent double counting
@@ -139,8 +273,6 @@ public class ROIManager {
 
     roisForImage.add(roi);
 
-    // LOGGER.info("Added ROI '{}' to image '{}'", roi.getName(), imageFileName);
-
     // Notify listeners
     listeners.forEach(
         listener -> {
@@ -150,6 +282,35 @@ public class ROIManager {
             LOGGER.error("Error notifying ROI listener", e);
           }
         });
+  }
+
+  /**
+   * Save all ROIs for a specific image to temporary storage.
+   * Call this after all ROIs for an image have been added to avoid excessive I/O.
+   */
+  public void saveROIsToTempStorage(String imageFileName) throws IOException {
+    if (!isUsingTempStorage()) {
+      return; // No-op when not using temp storage
+    }
+
+    List<UserROI> rois = getROIsForImage(imageFileName);
+    if (rois.isEmpty()) {
+      return;
+    }
+
+    // Create subdirectory for this image if it doesn't exist
+    String safeImageName = sanitizeFileName(imageFileName);
+    File imageTempDir = new File(tempROIDirectory, safeImageName);
+    imageTempDir.mkdirs();
+
+    // Save each ROI as individual file
+    for (UserROI roi : rois) {
+      File tempROIFile = new File(imageTempDir, roi.getId() + ".roi");
+      Roi ijRoi = convertToImageJROI(roi);
+      RoiEncoder.save(ijRoi, tempROIFile.getAbsolutePath());
+    }
+
+    LOGGER.debug("Saved {} ROIs for image '{}' to temporary storage", rois.size(), imageFileName);
   }
 
   /**
@@ -191,8 +352,28 @@ public class ROIManager {
    * Get all ROIs for a specific image
    */
   public List<UserROI> getROIsForImage(String imageFileName) {
-    return imageROIs.getOrDefault(imageFileName, Collections.emptyList()).stream()
-        .collect(Collectors.toList()); // Return defensive copy
+    // If using temporary storage, load from files with memory fallback
+    if (isUsingTempStorage()) {
+      try {
+        List<UserROI> tempROIs = loadROIsFromTempFiles(imageFileName);
+        if (!tempROIs.isEmpty()) {
+          return tempROIs;
+        }
+        // Fallback to memory cache if no temp files found
+        return imageROIs.getOrDefault(imageFileName, Collections.emptyList()).stream()
+            .collect(Collectors.toList());
+      } catch (IOException e) {
+        LOGGER.error("Failed to load ROIs from temporary storage for image {}: {}",
+            imageFileName, e.getMessage());
+        // Fallback to memory cache on error
+        return imageROIs.getOrDefault(imageFileName, Collections.emptyList()).stream()
+            .collect(Collectors.toList());
+      }
+    } else {
+      // Normal memory-only operation
+      return imageROIs.getOrDefault(imageFileName, Collections.emptyList()).stream()
+          .collect(Collectors.toList()); // Return defensive copy
+    }
   }
 
   /**
@@ -217,17 +398,20 @@ public class ROIManager {
     List<UserROI> removed = imageROIs.remove(imageFileName);
     if (removed != null && !removed.isEmpty()) {
       LOGGER.info("Cleared {} ROIs from image '{}'", removed.size(), imageFileName);
-
-      // Notify listeners
-      listeners.forEach(
-          listener -> {
-            try {
-              listener.onROIsCleared(imageFileName);
-            } catch (Exception e) {
-              LOGGER.error("Error notifying ROI listener", e);
-            }
-          });
     }
+
+    // Also clear processing time for this image
+    clearProcessingTime(imageFileName);
+
+    // Notify listeners
+    listeners.forEach(
+        listener -> {
+          try {
+            listener.onROIsCleared(imageFileName);
+          } catch (Exception e) {
+            LOGGER.error("Error notifying ROI listener", e);
+          }
+        });
   }
 
   /**
@@ -308,8 +492,21 @@ public class ROIManager {
   /**
    * Save all ROIs from all images to a master ZIP file.
    * Each image's ROIs are saved in a separate ZIP file within the master ZIP.
+   * If using temporary storage, uses existing temp files for maximum efficiency.
    */
   public void saveAllROIsToMasterZip(File outputFile) throws IOException {
+    // Check if we have any ROIs to save
+    if (!isUsingTempStorage() && imageROIs.isEmpty()) {
+      throw new IllegalArgumentException("No ROIs found in any image");
+    }
+
+    // If using temporary storage, collect all image directories
+    if (isUsingTempStorage()) {
+      createMasterZipFromTempFiles(outputFile);
+      return;
+    }
+
+    // Fallback to original method for non-temp storage mode
     if (imageROIs.isEmpty()) {
       throw new IllegalArgumentException("No ROIs found in any image");
     }
@@ -354,6 +551,66 @@ public class ROIManager {
     } finally {
       // Clean up temporary files
       deleteDirectory(tempDir);
+    }
+  }
+
+  /**
+   * Create master ZIP file using existing temporary ROI files (most efficient)
+   */
+  private void createMasterZipFromTempFiles(File outputFile) throws IOException {
+    if (tempROIDirectory == null || !tempROIDirectory.exists()) {
+      throw new IllegalStateException("Temporary ROI directory not available");
+    }
+
+    try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(new FileOutputStream(outputFile))) {
+      File[] imageDirs = tempROIDirectory.listFiles(File::isDirectory);
+
+      if (imageDirs != null) {
+        for (File imageDir : imageDirs) {
+          // Create ZIP file for this image's ROIs
+          String imageName = imageDir.getName();
+          File imageZipFile = new File(tempROIDirectory, imageName + "_ROIs.zip");
+
+          // Create ZIP file containing all ROI files for this image
+          try (java.util.zip.ZipOutputStream imageZos =
+              new java.util.zip.ZipOutputStream(new FileOutputStream(imageZipFile))) {
+
+            File[] roiFiles = imageDir.listFiles((dir, name) -> name.endsWith(".roi"));
+            if (roiFiles != null && roiFiles.length > 0) {
+              for (File roiFile : roiFiles) {
+                java.util.zip.ZipEntry entry = new java.util.zip.ZipEntry(roiFile.getName());
+                imageZos.putNextEntry(entry);
+
+                try (FileInputStream fis = new FileInputStream(roiFile)) {
+                  byte[] buffer = new byte[1024];
+                  int length;
+                  while ((length = fis.read(buffer)) > 0) {
+                    imageZos.write(buffer, 0, length);
+                  }
+                }
+                imageZos.closeEntry();
+              }
+            }
+          }
+
+          // Add this image's ZIP to the master ZIP
+          if (imageZipFile.exists()) {
+            java.util.zip.ZipEntry masterEntry = new java.util.zip.ZipEntry(imageZipFile.getName());
+            zos.putNextEntry(masterEntry);
+
+            try (FileInputStream fis = new FileInputStream(imageZipFile)) {
+              byte[] buffer = new byte[1024];
+              int length;
+              while ((length = fis.read(buffer)) > 0) {
+                zos.write(buffer, 0, length);
+              }
+            }
+            zos.closeEntry();
+          }
+        }
+      }
+
+      LOGGER.info("Created master ZIP from temporary ROI files: {}", outputFile.getAbsolutePath());
     }
   }
 

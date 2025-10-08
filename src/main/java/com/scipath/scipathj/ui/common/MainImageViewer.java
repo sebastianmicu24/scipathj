@@ -376,6 +376,11 @@ public class MainImageViewer extends JPanel
   }
 
   private void displayLoadedImage(ImagePlus imagePlus) {
+    // Close previous image to prevent memory leaks
+    if (this.currentImagePlus != null && this.currentImagePlus != imagePlus) {
+      this.currentImagePlus.close();
+    }
+
     this.currentImagePlus = imagePlus;
     this.isLoading = false;
 
@@ -650,6 +655,12 @@ public class MainImageViewer extends JPanel
         "Select an image from the gallery to view it here",
         UIManager.getColor("Label.disabledForeground"));
     imageInfoLabel.setText("");
+
+    // Close and clean up current image resources
+    if (currentImagePlus != null) {
+      currentImagePlus.close();
+    }
+
     currentImageFile = null;
     currentImagePlus = null;
     originalImage = null;

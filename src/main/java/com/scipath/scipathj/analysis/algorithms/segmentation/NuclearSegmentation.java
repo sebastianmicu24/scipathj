@@ -221,10 +221,9 @@ public class NuclearSegmentation implements AutoCloseable {
    */
   @SuppressWarnings({"unchecked", "rawtypes"})
   private Dataset convertToDataset(ImagePlus imagePlus) throws NuclearSegmentationException {
+    // Prepare image for StarDist (8-bit preferred)
+    ImagePlus processedImage = prepareImageForStarDist(imagePlus);
     try {
-      // Prepare image for StarDist (8-bit preferred)
-      ImagePlus processedImage = prepareImageForStarDist(imagePlus);
-
       // Convert to ImgLib2
       Img img = ImageJFunctions.wrapReal(processedImage);
 
@@ -239,8 +238,11 @@ public class NuclearSegmentation implements AutoCloseable {
 
       return dataset;
 
-    } catch (Exception e) {
-      throw new NuclearSegmentationException("Image conversion failed: " + e.getMessage(), e);
+    } finally {
+      // Close the processed image to prevent memory leaks
+      if (processedImage != null && processedImage != imagePlus) {
+        processedImage.close();
+      }
     }
   }
 
@@ -274,9 +276,11 @@ public class NuclearSegmentation implements AutoCloseable {
    * Convert RGB image to a 3-channel 8-bit stack that ImgLib2 can handle.
    */
   private ImagePlus convertRGBToChannelStack(ImagePlus rgbImage) {
+    ImagePlus rgb = null;
+    ImagePlus gray = null;
     try {
       // Ensure we have an RGB image
-      ImagePlus rgb = rgbImage.duplicate();
+      rgb = rgbImage.duplicate();
       if (!(rgb.getProcessor() instanceof ij.process.ColorProcessor)) {
         new ij.process.ImageConverter(rgb).convertToRGB();
       }
@@ -285,30 +289,47 @@ public class NuclearSegmentation implements AutoCloseable {
       ij.plugin.ChannelSplitter splitter = new ij.plugin.ChannelSplitter();
       ImagePlus[] channels = splitter.split(rgb);
 
-      if (channels.length != 3) {
-        LOGGER.warn("Expected 3 RGB channels, got {}", channels.length);
-        // Fallback: convert to grayscale
-        ImagePlus gray = rgb.duplicate();
-        new ij.process.ImageConverter(gray).convertToGray8();
-        return gray;
+      try {
+        if (channels.length != 3) {
+          LOGGER.warn("Expected 3 RGB channels, got {}", channels.length);
+          // Fallback: convert to grayscale
+          gray = rgb.duplicate();
+          new ij.process.ImageConverter(gray).convertToGray8();
+          return gray;
+        }
+
+        // Create a 3-channel stack
+        ij.ImageStack stack = new ij.ImageStack(rgb.getWidth(), rgb.getHeight());
+        stack.addSlice("Red", channels[0].getProcessor());
+        stack.addSlice("Green", channels[1].getProcessor());
+        stack.addSlice("Blue", channels[2].getProcessor());
+
+        ImagePlus result = new ImagePlus(rgb.getTitle() + "_RGB_Stack", stack);
+        result.setDimensions(3, 1, 1); // 3 channels, 1 slice, 1 frame
+
+        return result;
+
+      } finally {
+        // Close temporary channel images
+        if (channels != null) {
+          for (ImagePlus channel : channels) {
+            if (channel != null) {
+              channel.close();
+            }
+          }
+        }
       }
-
-      // Create a 3-channel stack
-      ij.ImageStack stack = new ij.ImageStack(rgb.getWidth(), rgb.getHeight());
-      stack.addSlice("Red", channels[0].getProcessor());
-      stack.addSlice("Green", channels[1].getProcessor());
-      stack.addSlice("Blue", channels[2].getProcessor());
-
-      ImagePlus result = new ImagePlus(rgb.getTitle() + "_RGB_Stack", stack);
-      result.setDimensions(3, 1, 1); // 3 channels, 1 slice, 1 frame
-
-      return result;
 
     } catch (Exception e) {
       LOGGER.error("Failed to convert RGB to channel stack, falling back to grayscale", e);
 
+      // Close rgb if it was created but not yet returned
+      if (rgb != null && rgb != gray) {
+        rgb.close();
+      }
+
       // Fallback: convert to 8-bit grayscale
-      ImagePlus gray = rgbImage.duplicate();
+      gray = rgbImage.duplicate();
       new ij.process.ImageConverter(gray).convertToGray8();
       return gray;
     }

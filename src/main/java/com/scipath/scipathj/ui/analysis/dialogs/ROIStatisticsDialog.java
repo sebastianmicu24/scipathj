@@ -2,6 +2,7 @@ package com.scipath.scipathj.ui.analysis.dialogs;
 
 import com.scipath.scipathj.infrastructure.config.MainSettings;
 import com.scipath.scipathj.infrastructure.roi.UserROI;
+import com.scipath.scipathj.ui.common.ROIManager;
 import com.scipath.scipathj.ui.utils.UIConstants;
 import com.scipath.scipathj.ui.utils.UIUtils;
 import java.awt.*;
@@ -37,6 +38,8 @@ public class ROIStatisticsDialog extends JDialog {
   private Map<String, List<UserROI>> roiData; // imageFileName -> ROI list
   private MainSettings mainSettings;
 
+  private ROIManager roiManager = ROIManager.getInstance();
+
   public ROIStatisticsDialog(Frame parent, Map<String, List<UserROI>> roiData, MainSettings mainSettings) {
     super(parent, "ROI Statistics", true);
     this.roiData = roiData != null ? roiData : Map.of();
@@ -55,7 +58,7 @@ public class ROIStatisticsDialog extends JDialog {
 
   private void initializeComponents() {
     // Create table model with columns
-    String[] columnNames = {"Image", "Total ROIs", "Vessels", "Nuclei", "Cytoplasms", "Cells", "Ignored"};
+    String[] columnNames = {"Image", "Total ROIs", "Vessels", "Nuclei", "Cytoplasms", "Cells", "Ignored", "Analysis Time"};
     tableModel = new DefaultTableModel(columnNames, 0) {
       @Override
       public boolean isCellEditable(int row, int column) {
@@ -82,7 +85,7 @@ public class ROIStatisticsDialog extends JDialog {
       statisticsTable.getColumnModel().getColumn(i).setCellRenderer(centerRenderer);
     }
 
-    // Set custom renderer for ignored column (column 6, now the last column) to show in ignore color
+    // Set custom renderer for ignored column (column 6) to show in ignore color
     DefaultTableCellRenderer ignoredRenderer = new DefaultTableCellRenderer();
     ignoredRenderer.setHorizontalAlignment(SwingConstants.CENTER);
     if (mainSettings != null) {
@@ -139,7 +142,7 @@ public class ROIStatisticsDialog extends JDialog {
 
     if (roiData.isEmpty()) {
       // Add empty row
-      tableModel.addRow(new Object[]{"No images with ROIs", "0", "0", "0", "0", "0", "0"});
+      tableModel.addRow(new Object[]{"No images with ROIs", "0", "0", "0", "0", "0", "0", "N/A"});
       return;
     }
 
@@ -171,6 +174,10 @@ public class ROIStatisticsDialog extends JDialog {
       int cytoplasmCount = categoryCounts.getOrDefault(MainSettings.ROICategory.CYTOPLASM, 0L).intValue();
       int cellCount = categoryCounts.getOrDefault(MainSettings.ROICategory.CELL, 0L).intValue();
 
+      // Get processing time for this image
+      long processingTimeMs = roiManager.getProcessingTime(entry.getKey());
+      String timeString = processingTimeMs > 0 ? formatProcessingTime(processingTimeMs) : "Not processed";
+
       // Add row to table
       tableModel.addRow(new Object[]{
           imageName,
@@ -179,7 +186,8 @@ public class ROIStatisticsDialog extends JDialog {
           String.valueOf(nucleusCount),
           String.valueOf(cytoplasmCount),
           String.valueOf(cellCount),
-          String.valueOf(ignoredCount)
+          String.valueOf(ignoredCount),
+          timeString
       });
     }
 
@@ -217,6 +225,21 @@ public class ROIStatisticsDialog extends JDialog {
     UserROI dummyROI = new UserROI(dummyRoi, "dummy", "dummy", type);
     MainSettings.ROICategory category = determineROICategory(dummyROI);
     return mainSettings.getSettingsForCategory(category).borderColor();
+  }
+
+  /**
+   * Format processing time in a human-readable format
+   */
+  private String formatProcessingTime(long processingTimeMs) {
+    if (processingTimeMs < 1000) {
+      return processingTimeMs + "ms";
+    } else if (processingTimeMs < 60000) {
+      return String.format("%.1fs", processingTimeMs / 1000.0);
+    } else {
+      long minutes = processingTimeMs / 60000;
+      long seconds = (processingTimeMs % 60000) / 1000;
+      return String.format("%dm %ds", minutes, seconds);
+    }
   }
 
   /**
@@ -304,8 +327,8 @@ public class ROIStatisticsDialog extends JDialog {
       }
 
       // Write CSV header
-      writer.write("Image" + delimiter + "Total ROIs" + delimiter + "Vessels" + delimiter +
-                  "Nuclei" + delimiter + "Cytoplasms" + delimiter + "Cells" + delimiter + "Ignored\n");
+      writer.write("Image" + delimiter + "Total ROIs" + delimiter +
+                  "Vessels" + delimiter + "Nuclei" + delimiter + "Cytoplasms" + delimiter + "Cells" + delimiter + "Ignored" + delimiter + "Analysis Time\n");
 
       // Write table data
       for (int i = 0; i < tableModel.getRowCount(); i++) {
@@ -330,7 +353,7 @@ public class ROIStatisticsDialog extends JDialog {
           }
 
           // Handle decimal separators for numeric values in EU format
-          if (mainSettings != null && mainSettings.useEuCsvFormat() && j > 0) { // Skip first column (Image name)
+          if (mainSettings != null && mainSettings.useEuCsvFormat() && j > 0 && j < 7) { // Skip Image name and Analysis Time columns
             try {
               double numericValue = Double.parseDouble(value);
               value = String.format("%.1f", numericValue).replace(".", decimalSeparator);

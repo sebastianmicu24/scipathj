@@ -19,6 +19,10 @@ import com.scipath.scipathj.analysis.algorithms.classification.FeatureExtraction
 import com.scipath.scipathj.analysis.algorithms.classification.CellClassification;
 import com.scipath.scipathj.ui.common.ROIManager;
 import com.scipath.scipathj.ui.utils.ImageLoader;
+import com.scipath.scipathj.infrastructure.utils.DirectFileLogger;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
+import java.lang.management.MemoryUsage;
 import ij.ImagePlus;
 import java.io.File;
 import java.io.IOException;
@@ -64,6 +68,7 @@ public class AnalysisPipeline {
   private final AtomicBoolean cancelRequested = new AtomicBoolean(false);
   private final AtomicInteger processedImages = new AtomicInteger(0);
   private volatile int totalImages = 0;
+  private static long imageCounter = 0;
 
   // Progress callbacks
   private Consumer<String> progressMessageCallback;
@@ -151,6 +156,72 @@ public class AnalysisPipeline {
    * @throws IllegalStateException if pipeline is already processing
    */
   public AnalysisResults processBatch(final File[] imageFiles) {
+    return processBatchSequential(imageFiles); // Use sequential by default for compatibility
+  }
+
+  /**
+   * PERFORMANCE OPTIMIZATION: Processes a batch of images through the complete analysis pipeline
+   * using parallel processing for maximum throughput.
+   *
+   * @param imageFiles array of image files to process
+   * @return analysis results containing counts for each step
+   * @throws IllegalStateException if pipeline is already processing
+   */
+  public AnalysisResults processBatchParallel(final File[] imageFiles) {
+    if (imageFiles == null || imageFiles.length == 0) {
+      LOGGER.warn("No image files provided for parallel batch processing");
+      return new AnalysisResults(0, 0, 0, 0, java.util.Map.of());
+    }
+
+    LOGGER.info("Starting PARALLEL batch analysis of {} images", imageFiles.length);
+
+    // PERFORMANCE OPTIMIZATION: Process images in parallel streams
+    java.util.List<ImageAnalysisResult> results = java.util.Arrays.stream(imageFiles)
+        .parallel() // Process multiple images concurrently
+        .<ImageAnalysisResult>map(imageFile -> {
+          try {
+            return processImage(imageFile);
+          } catch (Exception e) {
+            LOGGER.error("Parallel processing failed for image {}: {}", imageFile.getName(), e.getMessage());
+            return ImageAnalysisResult.failure(imageFile.getName(), e.getMessage(), 0L);
+          }
+        })
+        .filter(result -> result != null)
+        .toList();
+
+    // Aggregate results
+    int totalVessels = results.stream().mapToInt(ImageAnalysisResult::vesselCount).sum();
+    int totalNuclei = results.stream().mapToInt(ImageAnalysisResult::nucleusCount).sum();
+    int totalCells = results.stream().mapToInt(ImageAnalysisResult::cellCount).sum();
+    int successfulImages = (int) results.stream().filter(ImageAnalysisResult::success).count();
+
+    // Aggregate extracted features
+    java.util.Map<String, java.util.Map<String, Object>> allFeatures =
+        results.stream()
+            .filter(ImageAnalysisResult::success)
+            .flatMap(result -> result.extractedFeatures().entrySet().stream())
+            .collect(java.util.stream.Collectors.toMap(
+                java.util.Map.Entry::getKey,
+                java.util.Map.Entry::getValue,
+                (v1, v2) -> v2 // In case of duplicate keys, keep later one
+            ));
+
+    LOGGER.info(
+        "PARALLEL batch analysis completed: {} images processed, {} vessels, {} nuclei, {} cells",
+        successfulImages, totalVessels, totalNuclei, totalCells);
+
+    return new AnalysisResults(successfulImages, totalVessels, totalNuclei, totalCells, allFeatures);
+  }
+
+  /**
+   * Processes a batch of images through the complete analysis pipeline sequentially.
+   * Used for backward compatibility and when parallel processing is not desired.
+   *
+   * @param imageFiles array of image files to process
+   * @return analysis results containing counts for each step
+   * @throws IllegalStateException if pipeline is already processing
+   */
+  public AnalysisResults processBatchSequential(final File[] imageFiles) {
     if (imageFiles == null || imageFiles.length == 0) {
       LOGGER.warn("No image files provided for batch processing");
       return new AnalysisResults(0, 0, 0, 0, java.util.Map.of());
@@ -161,6 +232,9 @@ public class AnalysisPipeline {
     }
 
     LOGGER.info("Starting batch analysis of {} images", imageFiles.length);
+
+    // Initialize temporary ROI storage for memory efficiency
+    roiManager.initializeTempROIStorage();
 
     isProcessing.set(true);
     cancelRequested.set(false);
@@ -235,6 +309,9 @@ public class AnalysisPipeline {
       isProcessing.set(false);
       processedImages.set(0);
       totalImages = 0;
+
+      // Clean up temporary ROI storage to prevent memory accumulation
+      roiManager.cleanupTempROIStorage();
     }
 
     return new AnalysisResults(successfulImages, totalVessels, totalNuclei, totalCells, allFeatures);
@@ -259,7 +336,7 @@ public class AnalysisPipeline {
       throw new IOException("Failed to load image: " + fileName);
     }
 
-    return processImage(imagePlus, fileName);
+    return processImage(imagePlus, fileName, 0L); // No additional loading time tracked here
   }
 
   /**
@@ -273,14 +350,56 @@ public class AnalysisPipeline {
    */
   public ImageAnalysisResult processImage(final ImagePlus imagePlus, final String fileName)
       throws ImageProcessingException {
+    return processImage(imagePlus, fileName, 0L);
+  }
+
+  /**
+   * Processes a loaded ImagePlus through the complete analysis pipeline with timing tracking.
+   * Currently implements steps 1-3 (vessel, nuclear, and cytoplasm segmentation).
+   *
+   * @param imagePlus the loaded image
+   * @param fileName the filename for ROI association
+   * @param baseProcessingTimeMs time already spent loading the image
+   * @return analysis result for the image
+   * @throws ImageProcessingException if image processing fails
+   */
+  public ImageAnalysisResult processImage(final ImagePlus imagePlus, final String fileName, final long baseProcessingTimeMs)
+      throws ImageProcessingException {
+
+    // Initialize performance logging for first image
+    if (++imageCounter == 1) {
+      DirectFileLogger.initializePerformanceLogging();
+    }
+
+    final long totalStartTime = System.currentTimeMillis();
+    DirectFileLogger.logPerformance("=== Starting analysis of image: " + fileName + " (image #" + imageCounter + ") ===");
+
+    // Log initial memory state
+    MemoryMXBean memoryMXBean = ManagementFactory.getMemoryMXBean();
+    MemoryUsage heapUsage = memoryMXBean.getHeapMemoryUsage();
+    DirectFileLogger.logPerformance("Memory before: Heap Used=" + (heapUsage.getUsed() / 1024 / 1024) + "MB, Committed=" + (heapUsage.getCommitted() / 1024 / 1024) + "MB");
+
+    // Store image dimensions for ignore calculation before any processing that might close the image
+    final int imageWidth = imagePlus.getWidth();
+    final int imageHeight = imagePlus.getHeight();
     this.currentImage = imagePlus; // Store for ignore calculation
+
+    long vesselStartTime = System.currentTimeMillis();
+    DirectFileLogger.logPerformance("Step 1: Starting vessel segmentation");
+
     try {
       // Step 1: Vessel Segmentation
       VesselSegmentation vesselSegmentation =
           new VesselSegmentation(configurationManager, imagePlus, fileName, vesselSettings);
       List<UserROI> vesselROIs = vesselSegmentation.segmentVessels();
 
+      long vesselEndTime = System.currentTimeMillis();
+      DirectFileLogger.logPerformance("Step 1: Vessel segmentation completed in " + (vesselEndTime - vesselStartTime) + "ms - found " + vesselROIs.size() + " vessels");
+
       // Step 2: Nuclear Segmentation
+      long nuclearStartTime = System.currentTimeMillis();
+      DirectFileLogger.logPerformance("Step 2: Starting nuclear segmentation");
+
       NuclearSegmentation nuclearSegmentation =
           new NuclearSegmentation(
               configurationManager, imagePlus, fileName, nuclearSettings, roiManager);
@@ -289,21 +408,29 @@ public class AnalysisPipeline {
       try {
         if (nuclearSegmentation.isAvailable()) {
           nucleusROIs = nuclearSegmentation.segmentNuclei();
+          DirectFileLogger.logPerformance("Step 2: Nuclear segmentation found " + nucleusROIs.size() + " nuclei");
         } else {
+          DirectFileLogger.logPerformance("Step 2: StarDist H&E model not available, skipping nuclear segmentation");
           LOGGER.warn("StarDist H&E model not available for image: {}", fileName);
         }
       } catch (Exception e) {
+        DirectFileLogger.logPerformance("Step 2: Nuclear segmentation failed - " + e.getMessage());
         LOGGER.error("StarDist segmentation failed for image: {}", fileName, e);
         throw new ImageProcessingException("Nuclear segmentation failed", e);
       } finally {
         nuclearSegmentation.close();
       }
 
+      long nuclearEndTime = System.currentTimeMillis();
+      DirectFileLogger.logPerformance("Step 2: Nuclear segmentation completed in " + (nuclearEndTime - nuclearStartTime) + "ms");
+
       // Step 3: Cytoplasm Segmentation
+      long cytoplasmStartTime = System.currentTimeMillis();
       List<CellROI> cellROIs = List.of();
       List<CytoplasmROI> cytoplasmROIs = List.of();
 
       if (!nucleusROIs.isEmpty()) {
+        DirectFileLogger.logPerformance("Step 3: Starting cytoplasm segmentation");
         List<UserROI> vesselROIsForExclusion =
             cytoplasmSettings.useVesselExclusion() ? vesselROIs : List.of();
 
@@ -321,16 +448,28 @@ public class AnalysisPipeline {
 
           cytoplasmROIs = cytoplasmSegmentation.segmentCytoplasm();
           cellROIs = cytoplasmSegmentation.getCellROIs();
+          DirectFileLogger.logPerformance("Step 3: Cytoplasm segmentation found " + cytoplasmROIs.size() + " cytoplasm ROIs and " + cellROIs.size() + " cell ROIs");
         } catch (CytoplasmSegmentation.CytoplasmSegmentationException e) {
+          DirectFileLogger.logPerformance("Step 3: Cytoplasm segmentation failed - " + e.getMessage());
           LOGGER.error("Cytoplasm segmentation failed for image: {}", fileName, e);
           throw new ImageProcessingException("Cytoplasm segmentation failed", e);
         }
+      } else {
+        DirectFileLogger.logPerformance("Step 3: Skipping cytoplasm segmentation (no nuclei found)");
       }
 
+      long cytoplasmEndTime = System.currentTimeMillis();
+      DirectFileLogger.logPerformance("Step 3: Cytoplasm segmentation completed in " + (cytoplasmEndTime - cytoplasmStartTime) + "ms");
+
       // Add ROIs to manager with proper colors
-      addROIsToManager(vesselROIs, nucleusROIs, cellROIs, cytoplasmROIs);
+      long roiManagerStartTime = System.currentTimeMillis();
+      addROIsToManager(imageWidth, imageHeight, vesselROIs, nucleusROIs, cellROIs, cytoplasmROIs);
+      long roiManagerEndTime = System.currentTimeMillis();
+      DirectFileLogger.logPerformance("ROI manager operations completed in " + (roiManagerEndTime - roiManagerStartTime) + "ms");
 
       // Step 4: Ultra-Fast Feature Extraction with H&E support and scale conversion
+      long featureStartTime = System.currentTimeMillis();
+      DirectFileLogger.logPerformance("Step 4: Starting ultra-fast feature extraction");
       LOGGER.info("Starting ultra-fast feature extraction for image: {}", fileName);
       FeatureExtraction featureExtraction = new FeatureExtraction(
           imagePlus,
@@ -343,10 +482,14 @@ public class AnalysisPipeline {
           mainSettings);
 
       java.util.Map<String, java.util.Map<String, Object>> extractedFeatures = featureExtraction.extractFeatures();
+      long featureEndTime = System.currentTimeMillis();
+      DirectFileLogger.logPerformance("Step 4: Feature extraction completed in " + (featureEndTime - featureStartTime) + "ms - processed " + extractedFeatures.size() + " ROIs");
       LOGGER.info("Feature extraction completed for image: {} - extracted features for {} ROIs",
           fileName, extractedFeatures.size());
 
       // Step 5: Cell Classification using XGBoost
+      long classificationStartTime = System.currentTimeMillis();
+      DirectFileLogger.logPerformance("Step 5: Starting cell classification");
       LOGGER.info("Starting cell classification for image: {}", fileName);
       CellClassification cellClassification = new CellClassification(
           fileName,
@@ -357,6 +500,13 @@ public class AnalysisPipeline {
           classificationSettings.classDetailsPath());
       java.util.Map<String, CellClassification.ClassificationResult> classificationResults = cellClassification.classifyCells();
 
+      long classificationEndTime = System.currentTimeMillis();
+      if (classificationResults != null && !classificationResults.isEmpty()) {
+        DirectFileLogger.logPerformance("Step 5: Cell classification completed in " + (classificationEndTime - classificationStartTime) + "ms - classified " + classificationResults.size() + " ROIs");
+      } else {
+        DirectFileLogger.logPerformance("Step 5: Cell classification completed in " + (classificationEndTime - classificationStartTime) + "ms - no results generated");
+      }
+
       // Store classification results in the ROI manager for tooltip display
       if (classificationResults != null && !classificationResults.isEmpty()) {
           roiManager.setClassificationResults(classificationResults);
@@ -366,19 +516,45 @@ public class AnalysisPipeline {
           LOGGER.warn("No classification results generated for image: {}", fileName);
       }
 
-      // Log feature extraction statistics
-      LOGGER.info("Feature extraction completed for {} with {} ROIs processed", fileName, extractedFeatures.size());
+      // Save ROIs to temporary storage for efficient memory usage
+      long tempStorageStartTime = System.currentTimeMillis();
+      try {
+        roiManager.saveROIsToTempStorage(fileName);
+        long tempStorageEndTime = System.currentTimeMillis();
+        DirectFileLogger.logPerformance("Temp storage save completed in " + (tempStorageEndTime - tempStorageStartTime) + "ms");
+      } catch (IOException e) {
+        DirectFileLogger.logPerformance("Temp storage save failed: " + e.getMessage());
+        LOGGER.warn("Failed to save ROIs to temporary storage for image '{}': {}", fileName, e.getMessage());
+        // Continue processing - memory fallback will be used if needed
+      }
 
       // Clean up
+      long cleanupStartTime = System.currentTimeMillis();
       imagePlus.close();
+      long cleanupEndTime = System.currentTimeMillis();
+      DirectFileLogger.logPerformance("Image cleanup completed in " + (cleanupEndTime - cleanupStartTime) + "ms");
+
+      final long totalEndTime = System.currentTimeMillis();
+      final long totalProcessingTimeMs = totalEndTime - totalStartTime + baseProcessingTimeMs;
+
+      // Final memory check
+      MemoryUsage finalHeapUsage = memoryMXBean.getHeapMemoryUsage();
+      DirectFileLogger.logPerformance("Memory after: Heap Used=" + (finalHeapUsage.getUsed() / 1024 / 1024) + "MB, Committed=" + (finalHeapUsage.getCommitted() / 1024 / 1024) + "MB");
+      DirectFileLogger.logPerformance("=== Total processing time for " + fileName + ": " + totalProcessingTimeMs + "ms ===");
+      DirectFileLogger.logPerformance("");
+
+      // Store processing time in ROI manager for statistics display
+      roiManager.setProcessingTime(fileName, totalProcessingTimeMs);
 
       return ImageAnalysisResult.success(
-          fileName, vesselROIs.size(), nucleusROIs.size(), cellROIs.size(), extractedFeatures, classificationResults);
+          fileName, vesselROIs.size(), nucleusROIs.size(), cellROIs.size(), extractedFeatures, classificationResults, totalProcessingTimeMs);
 
     } catch (ImageProcessingException e) {
       // Re-throw ImageProcessingException as-is
+      DirectFileLogger.logPerformance("PROCESSING FAILED for " + fileName + ": " + e.getMessage());
       throw e;
     } catch (RuntimeException e) {
+      DirectFileLogger.logPerformance("RUNTIME ERROR during analysis of " + fileName + ": " + e.getMessage());
       LOGGER.error("Runtime error during analysis of image: {}", fileName, e);
       throw new ImageProcessingException("Image analysis failed for " + fileName, e);
     }
@@ -390,14 +566,13 @@ public class AnalysisPipeline {
    * Ensures consistency: if a cell or cytoplasm is ignored, its nucleus is also ignored.
    */
   private void addROIsToManager(
+      final int imageWidth,
+      final int imageHeight,
       final List<UserROI> vesselROIs,
       final List<NucleusROI> nucleusROIs,
       final List<CellROI> cellROIs,
       final List<CytoplasmROI> cytoplasmROIs) {
 
-    // Get image dimensions for ignore calculation
-    int imageWidth = currentImage.getWidth();
-    int imageHeight = currentImage.getHeight();
     int borderDistance = mainSettings.ignoreSettings().borderDistance();
 
     // First pass: mark ROIs as ignored based on border distance (only if ignore functionality is enabled)
@@ -568,28 +743,29 @@ public class AnalysisPipeline {
       int nucleusCount,
       int cellCount,
       java.util.Map<String, java.util.Map<String, Object>> extractedFeatures,
-      java.util.Map<String, CellClassification.ClassificationResult> classificationResults) {
+      java.util.Map<String, CellClassification.ClassificationResult> classificationResults,
+      long processingTimeMs) {
 
     public static ImageAnalysisResult success(
         final String fileName, final int vesselCount, final int nucleusCount, final int cellCount,
         final java.util.Map<String, java.util.Map<String, Object>> extractedFeatures,
-        final java.util.Map<String, CellClassification.ClassificationResult> classificationResults) {
-      return new ImageAnalysisResult(fileName, true, null, vesselCount, nucleusCount, cellCount, extractedFeatures, classificationResults);
+        final java.util.Map<String, CellClassification.ClassificationResult> classificationResults, final long processingTimeMs) {
+      return new ImageAnalysisResult(fileName, true, null, vesselCount, nucleusCount, cellCount, extractedFeatures, classificationResults, processingTimeMs);
     }
 
     public static ImageAnalysisResult success(
         final String fileName, final int vesselCount, final int nucleusCount, final int cellCount,
-        final java.util.Map<String, java.util.Map<String, Object>> extractedFeatures) {
-      return new ImageAnalysisResult(fileName, true, null, vesselCount, nucleusCount, cellCount, extractedFeatures, java.util.Map.of());
+        final java.util.Map<String, java.util.Map<String, Object>> extractedFeatures, final long processingTimeMs) {
+      return new ImageAnalysisResult(fileName, true, null, vesselCount, nucleusCount, cellCount, extractedFeatures, java.util.Map.of(), processingTimeMs);
     }
 
     public static ImageAnalysisResult success(
-        final String fileName, final int vesselCount, final int nucleusCount, final int cellCount) {
-      return new ImageAnalysisResult(fileName, true, null, vesselCount, nucleusCount, cellCount, java.util.Map.of(), java.util.Map.of());
+        final String fileName, final int vesselCount, final int nucleusCount, final int cellCount, final long processingTimeMs) {
+      return new ImageAnalysisResult(fileName, true, null, vesselCount, nucleusCount, cellCount, java.util.Map.of(), java.util.Map.of(), processingTimeMs);
     }
 
-    public static ImageAnalysisResult failure(final String fileName, final String errorMessage) {
-      return new ImageAnalysisResult(fileName, false, errorMessage, 0, 0, 0, java.util.Map.of(), java.util.Map.of());
+    public static ImageAnalysisResult failure(final String fileName, final String errorMessage, final long processingTimeMs) {
+      return new ImageAnalysisResult(fileName, false, errorMessage, 0, 0, 0, java.util.Map.of(), java.util.Map.of(), processingTimeMs);
     }
 
     @Override

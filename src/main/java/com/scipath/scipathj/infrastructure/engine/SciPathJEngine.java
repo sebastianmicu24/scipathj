@@ -59,16 +59,25 @@ public class SciPathJEngine {
   }
 
   private ExecutorService createExecutorService() {
-    int threadCount = Math.max(2, Runtime.getRuntime().availableProcessors() - 1);
+    // PERFORMANCE OPTIMIZATION: Use more aggressive threading for batch processing
+    // Use 2x CPU cores or minimum 8 threads for better parallel utilization
+    int availableCores = Runtime.getRuntime().availableProcessors();
+    int threadCount = Math.max(8, availableCores * 2);
+
+    LOGGER.info("Available CPU cores: {}, using {} worker threads", availableCores, threadCount);
+
     ExecutorService service =
         Executors.newFixedThreadPool(
             threadCount,
             r -> {
               Thread t = new Thread(r, "SciPathJ-Worker");
               t.setDaemon(true);
+              // PERFORMANCE OPTIMIZATION: Set thread priority for compute-intensive work
+              t.setPriority(Thread.MAX_PRIORITY);
               return t;
             });
-    LOGGER.info("Created thread pool with {} worker threads", threadCount);
+
+    LOGGER.info("Created performance-optimized thread pool with {} worker threads", threadCount);
     return service;
   }
 

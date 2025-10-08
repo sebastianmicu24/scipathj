@@ -224,4 +224,46 @@ public class DirectFileLogger {
   public static void log(String loggerName, String level, String message) {
     writeToFile("debug.log", level, loggerName, message);
   }
+
+  /**
+   * Write performance monitoring data directly to desktop performance.txt file.
+   */
+  public static void logPerformance(String message) {
+    try {
+      File performanceFile = new File("C:\\Users\\sebas\\Desktop\\performance.txt");
+      String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMAT);
+      String logLine = String.format("%s [%s] PERFORMANCE - %s%n",
+          timestamp, Thread.currentThread().getName(), message);
+
+      try (FileWriter fw = new FileWriter(performanceFile, StandardCharsets.UTF_8, true);
+          PrintWriter pw = new PrintWriter(fw)) {
+        pw.print(logLine);
+        pw.flush();
+      }
+    } catch (IOException e) {
+      System.err.println("Failed to write to performance.txt: " + e.getMessage());
+    }
+  }
+
+  /**
+   * Initialize performance logging with header information.
+   */
+  public static void initializePerformanceLogging() {
+    logPerformance("=== SciPathJ Performance Analysis Started ===");
+    logPerformance("Time format: milliseconds unless specified");
+    logSystemInfoToPerformance();
+    logPerformance("==========================================");
+  }
+
+  /**
+   * Log system information to performance file.
+   */
+  private static void logSystemInfoToPerformance() {
+    Runtime runtime = Runtime.getRuntime();
+    logPerformance("System Info:");
+    logPerformance("  CPU Cores: " + runtime.availableProcessors());
+    logPerformance("  Max Heap: " + (runtime.maxMemory() / (1024 * 1024)) + " MB");
+    logPerformance("  OS: " + System.getProperty("os.name") + " " + System.getProperty("os.version"));
+    logPerformance("  Java: " + System.getProperty("java.version") + " (" + System.getProperty("java.vendor") + ")");
+  }
 }
