@@ -1,5 +1,6 @@
 package com.scipath.scipathj.ui.main;
 
+import com.scipath.scipathj.infrastructure.config.ConfigurationManager;
 import com.scipath.scipathj.infrastructure.config.MainSettings;
 import com.scipath.scipathj.infrastructure.roi.UserROI;
 import com.scipath.scipathj.ui.common.ROIManager;
@@ -7,6 +8,7 @@ import com.scipath.scipathj.ui.analysis.components.ROIToolbar;
 import com.scipath.scipathj.ui.common.MainImageViewer;
 import com.scipath.scipathj.ui.common.SimpleImageGallery;
 import com.scipath.scipathj.ui.analysis.dialogs.ROIStatisticsDialog;
+import com.scipath.scipathj.ui.analysis.dialogs.ROIStatisticsAveragesDialog;
 import java.awt.Window;
 import java.io.File;
 import java.io.IOException;
@@ -110,6 +112,11 @@ public class ROIController {
         @Override
         public void onShowROIStatistics() {
           showROIStatistics();
+        }
+
+        @Override
+        public void onShowROIStatisticsAverages() {
+          showROIStatisticsAverages();
         }
 
         @Override
@@ -221,6 +228,33 @@ public class ROIController {
     dialog.setVisible(true);
 
     LOGGER.info("Showing ROI statistics dialog from ROIManager persistent data");
+  }
+
+  /**
+   * Shows ROI statistics averages dialog.
+   */
+  private void showROIStatisticsAverages() {
+    // Get the stored feature statistics averages per image
+    Map<String, Map<UserROI.ROIType, Map<String, Double>>> perImageStats = roiManager.getAllFeatureStatisticsAverages();
+
+    if (perImageStats == null || perImageStats.isEmpty()) {
+      JOptionPane.showMessageDialog(parentWindow,
+          "No ROI feature statistics available.\n" +
+          "Process some images to generate feature statistics.",
+          "No Data Available",
+          JOptionPane.WARNING_MESSAGE);
+      return;
+    }
+
+    // Get main settings for CSV export format
+    ConfigurationManager configManager = new ConfigurationManager(); // TODO: Pass as constructor parameter
+    MainSettings mainSettings = configManager.loadMainSettings();
+
+    ROIStatisticsAveragesDialog dialog = new ROIStatisticsAveragesDialog((java.awt.Frame) parentWindow, perImageStats, mainSettings);
+    dialog.setVisible(true);
+
+    int totalROITypes = perImageStats.values().stream().mapToInt(Map::size).sum();
+    LOGGER.info("Showing ROI statistics averages dialog with {} processed images and {} total ROI type entries", perImageStats.size(), totalROITypes);
   }
 
   /**

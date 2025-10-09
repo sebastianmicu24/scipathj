@@ -23,7 +23,9 @@ import com.scipath.scipathj.infrastructure.utils.DirectFileLogger;
 import ij.ImagePlus;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -467,8 +469,31 @@ public class AnalysisPipeline {
       }
       DirectFileLogger.logMemoryUsage();
 
-      // Log feature extraction statistics
-      LOGGER.info("Feature extraction completed for {} with {} ROIs processed", fileName, extractedFeatures.size());
+      // Step 6: Calculate ROI feature statistics (mean values per ROI type)
+      DirectFileLogger.logPerformance("Step 6: Starting ROI feature statistics calculation");
+      long statsStart = System.currentTimeMillis();
+
+      ROIStatisticsCalculator statisticsCalculator = new ROIStatisticsCalculator();
+      // Collect all ROIs processed for this image
+      List<UserROI> allROIsForImage = new ArrayList<>();
+      allROIsForImage.addAll(vesselROIs);
+      allROIsForImage.addAll(nucleusROIs);
+      allROIsForImage.addAll(cytoplasmROIs);
+      allROIsForImage.addAll(cellROIs);
+
+      Map<UserROI.ROIType, Map<String, Double>> roiTypeFeatureMeans =
+          statisticsCalculator.calculateROITypeFeatureMeans(extractedFeatures, allROIsForImage);
+
+      long statsTime = System.currentTimeMillis() - statsStart;
+      DirectFileLogger.logPerformance("ROI feature statistics calculation took " + statsTime + "ms");
+
+      // Store the statistics for UI access (per image)
+      roiManager.setFeatureStatisticsAveragesForImage(fileName, roiTypeFeatureMeans);
+
+      // Log the calculated means
+      statisticsCalculator.logROITypeFeatureMeans(roiTypeFeatureMeans, fileName);
+
+      LOGGER.info("Feature extraction and ROI statistics completed for {} with {} ROIs processed", fileName, extractedFeatures.size());
 
       // Clean up
       long cleanupStart = System.currentTimeMillis();

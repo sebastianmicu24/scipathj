@@ -69,8 +69,10 @@ public class ROIToolbar extends JPanel {
 
      void onShowROIStatistics();
 
+     void onShowROIStatisticsAverages();
+
      void onChangeROIType(String imageFileName, UserROI.ROIType newType);
- 
+
      void onShowFeatures();
    }
 
@@ -226,6 +228,11 @@ public class ROIToolbar extends JPanel {
     statsButton.setPreferredSize(new Dimension(buttonWidth, buttonHeight));
     filterPanel.add(statsButton);
 
+    // Averages button
+    JButton averagesButton = createStyledAveragesButton();
+    averagesButton.setPreferredSize(new Dimension(buttonWidth, buttonHeight));
+    filterPanel.add(averagesButton);
+
     add(filterPanel);
   }
 
@@ -273,6 +280,24 @@ public class ROIToolbar extends JPanel {
 
     // Ensure button is non-opaque so the alpha channel is respected
     button.setOpaque(false);
+
+    return button;
+  }
+
+  private JButton createStyledAveragesButton() {
+    JButton button = new JButton("Averages");
+    button.setFocusPainted(false);
+    button.addActionListener(e -> handleShowAverages());
+
+    // Same styling as filter buttons
+    button.setOpaque(false);
+    button.setBorderPainted(true);
+    button.setBorder(new RoundedBorder(Color.BLACK, 1, 8));
+
+    // Set background with 0.15 opacity (more transparent)
+    Color originalBg = button.getBackground();
+    Color semiTransparentBg = new Color(originalBg.getRed(), originalBg.getGreen(), originalBg.getBlue(), 38); // 0.15 * 255
+    button.setBackground(semiTransparentBg);
 
     return button;
   }
@@ -587,6 +612,19 @@ public class ROIToolbar extends JPanel {
     });
 
     LOGGER.debug("Requested ROI statistics display");
+  }
+
+  private void handleShowAverages() {
+    // Notify listeners to show averages dialog
+    listeners.forEach(listener -> {
+      try {
+        listener.onShowROIStatisticsAverages();
+      } catch (Exception e) {
+        LOGGER.error("Error notifying ROI statistics averages request", e);
+      }
+    });
+
+    LOGGER.debug("Requested ROI statistics averages display");
   }
 
   private void handleShowFeatures() {

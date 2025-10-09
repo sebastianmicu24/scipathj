@@ -18,6 +18,7 @@ import com.scipath.scipathj.ui.controllers.NavigationController;
 import com.scipath.scipathj.ui.dataset.DatasetMainPanel;
 import com.scipath.scipathj.ui.training.XGBoostTrainingWizardPanel;
 import com.scipath.scipathj.ui.analysis.dialogs.ROIStatisticsDialog;
+import com.scipath.scipathj.ui.analysis.dialogs.ROIStatisticsAveragesDialog;
 import com.scipath.scipathj.ui.visualization.ResultsVisualizationPanel;
 import com.scipath.scipathj.ui.common.dialogs.settings.DisplaySettingsDialog;
 import com.scipath.scipathj.ui.common.dialogs.settings.MainSettingsDialog;
@@ -507,6 +508,30 @@ public class MainWindow extends JFrame {
             dialog.setVisible(true);
 
             LOGGER.info("Showing ROI statistics dialog with {} images", allROIs.size());
+          }
+
+          @Override
+          public void onShowROIStatisticsAverages() {
+            // Get the stored feature statistics averages per image
+            java.util.Map<String, java.util.Map<UserROI.ROIType, java.util.Map<String, Double>>> perImageStats = roiManager.getAllFeatureStatisticsAverages();
+
+            if (perImageStats == null || perImageStats.isEmpty()) {
+              JOptionPane.showMessageDialog(MainWindow.this,
+                  "No ROI feature statistics available.\n" +
+                  "Process some images to generate feature statistics.",
+                  "No Data Available",
+                  JOptionPane.WARNING_MESSAGE);
+              return;
+            }
+
+            // Get main settings for CSV export format
+            MainSettings mainSettings = configurationManager.loadMainSettings();
+
+            ROIStatisticsAveragesDialog dialog = new ROIStatisticsAveragesDialog(MainWindow.this, perImageStats, mainSettings);
+            dialog.setVisible(true);
+
+            int totalROITypes = perImageStats.values().stream().mapToInt(java.util.Map::size).sum();
+            LOGGER.info("Showing ROI statistics averages dialog with {} processed images and {} total ROI type entries", perImageStats.size(), totalROITypes);
           }
 
           @Override

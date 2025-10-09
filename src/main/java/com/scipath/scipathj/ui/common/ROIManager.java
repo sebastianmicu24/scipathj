@@ -62,6 +62,9 @@ public class ROIManager {
   // Temp stored ROI files for each processed image
   private final Map<String, File> persistedROIFiles;
 
+  // ROI feature statistics averages per image (imageName -> roiType -> featureName -> mean)
+  private volatile Map<String, Map<UserROI.ROIType, Map<String, Double>>> perImageFeatureStatisticsAverages;
+
   // Listeners for ROI changes
   private final List<ROIChangeListener> listeners;
 
@@ -215,6 +218,37 @@ public class ROIManager {
    */
   public Map<String, File> getPersistedROIFiles() {
     return new HashMap<>(persistedROIFiles);
+  }
+
+  /**
+   * Store feature statistics averages for a specific image (calculated from ROI features for that image)
+   */
+  public void setFeatureStatisticsAveragesForImage(String imageName, Map<UserROI.ROIType, Map<String, Double>> averages) {
+    if (this.perImageFeatureStatisticsAverages == null) {
+      this.perImageFeatureStatisticsAverages = new java.util.concurrent.ConcurrentHashMap<>();
+    }
+    if (averages != null) {
+      this.perImageFeatureStatisticsAverages.put(imageName, new java.util.HashMap<>(averages));
+    } else {
+      this.perImageFeatureStatisticsAverages.remove(imageName);
+    }
+    LOGGER.debug("Stored feature statistics averages for image '{}' with {} ROI types", imageName, averages != null ? averages.size() : 0);
+  }
+
+  /**
+   * Get feature statistics averages for a specific image (mean values per ROI type and feature)
+   */
+  public Map<UserROI.ROIType, Map<String, Double>> getFeatureStatisticsAveragesForImage(String imageName) {
+    if (this.perImageFeatureStatisticsAverages == null) return null;
+    Map<UserROI.ROIType, Map<String, Double>> imageStats = this.perImageFeatureStatisticsAverages.get(imageName);
+    return imageStats != null ? new java.util.HashMap<>(imageStats) : null;
+  }
+
+  /**
+   * Get all feature statistics averages organized by image (imageName -> roiType -> featureName -> mean)
+   */
+  public Map<String, Map<UserROI.ROIType, Map<String, Double>>> getAllFeatureStatisticsAverages() {
+    return this.perImageFeatureStatisticsAverages != null ? new java.util.HashMap<>(this.perImageFeatureStatisticsAverages) : new java.util.HashMap<>();
   }
 
   /**

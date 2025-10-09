@@ -187,16 +187,19 @@ public class FeatureDisplayDialog extends JDialog {
     featuresTable.setRowSelectionAllowed(true);
     featuresTable.setColumnSelectionAllowed(true);
 
+    // Disable auto-resize to allow horizontal scrolling when columns exceed width
+    featuresTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+
     // Set column widths
     TableColumnModel columnModel = featuresTable.getColumnModel();
     if (columnModel.getColumnCount() > 0) {
-      columnModel.getColumn(0).setPreferredWidth(200); // Image Name
-      columnModel.getColumn(1).setPreferredWidth(100); // Cell Type
-      columnModel.getColumn(2).setPreferredWidth(80);  // ROI ID
+      columnModel.getColumn(0).setMinWidth(150); // Image Name
+      columnModel.getColumn(1).setMinWidth(100); // Cell Type
+      columnModel.getColumn(2).setMinWidth(80);  // ROI ID
 
-      // Set reasonable width for feature columns
+      // Set reasonable min width for feature columns to prevent "..." showing
       for (int i = 3; i < columnModel.getColumnCount(); i++) {
-        columnModel.getColumn(i).setPreferredWidth(100);
+        columnModel.getColumn(i).setMinWidth(120);
       }
     }
 
