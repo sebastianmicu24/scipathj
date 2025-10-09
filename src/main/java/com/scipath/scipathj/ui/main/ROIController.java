@@ -214,14 +214,13 @@ public class ROIController {
    * Shows ROI statistics dialog.
    */
   private void showROIStatistics() {
-    Map<String, List<UserROI>> allROIs = roiManager.getAllROIsByImage();
-    // Note: We'll need MainSettings passed in - this is a simplified version
-    MainSettings currentSettings = null; // TODO: Get from configuration manager
+    // TODO: Get MainSettings from configuration manager when available
+    MainSettings currentSettings = null; // Placeholder until settings access is implemented
 
-    ROIStatisticsDialog dialog = new ROIStatisticsDialog((java.awt.Frame) parentWindow, allROIs, currentSettings);
+    ROIStatisticsDialog dialog = new ROIStatisticsDialog((java.awt.Frame) parentWindow, currentSettings, roiManager);
     dialog.setVisible(true);
 
-    LOGGER.info("Showing ROI statistics dialog with {} images", allROIs.size());
+    LOGGER.info("Showing ROI statistics dialog from ROIManager persistent data");
   }
 
   /**

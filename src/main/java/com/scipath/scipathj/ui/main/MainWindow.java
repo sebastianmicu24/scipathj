@@ -503,7 +503,7 @@ public class MainWindow extends JFrame {
             MainSettings currentSettings = configurationManager.loadMainSettings();
 
             // Show the statistics dialog
-            ROIStatisticsDialog dialog = new ROIStatisticsDialog(MainWindow.this, allROIs, currentSettings);
+            ROIStatisticsDialog dialog = new ROIStatisticsDialog(MainWindow.this, currentSettings, roiManager);
             dialog.setVisible(true);
 
             LOGGER.info("Showing ROI statistics dialog with {} images", allROIs.size());
