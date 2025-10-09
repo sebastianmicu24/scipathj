@@ -19,16 +19,48 @@ import org.slf4j.LoggerFactory;
  */
 public class ROIManager {
 
+  /**
+   * Statistics record for image processing results that persists in memory.
+   */
+  public record ImageProcessingStats(
+      String fileName,
+      long processingTimeMs,
+      int vesselCount,
+      int nucleusCount,
+      int cytoplasmCount,
+      int cellCount,
+      int ignoredCount) {
+
+    public int totalROI() {
+      return vesselCount + nucleusCount + cytoplasmCount + cellCount;
+    }
+
+    @Override
+    public String toString() {
+      return String.format("Stats[file=%s, time=%dms, total=%d (vessels=%d, nuclei=%d, cyto=%d, cells=%d), ignored=%d]",
+          fileName, processingTimeMs, totalROI(), vesselCount, nucleusCount, cytoplasmCount, cellCount, ignoredCount);
+    }
+  }
+
   private static final Logger LOGGER = LoggerFactory.getLogger(ROIManager.class);
 
   // Map of image filename to list of ROIs for that image
   private final Map<String, List<UserROI>> imageROIs;
+
+  // Map of image filename to set of ROI IDs (for O(1) duplicate checking)
+  private final Map<String, Set<String>> imageROIIds;
 
   // Map of image filename to processing time in milliseconds
   private final Map<String, Long> imageProcessingTimes;
 
   // Map of ROI key to classification results for tooltip display
   private final Map<String, CellClassification.ClassificationResult> classificationResults;
+
+  // Persistent image statistics that survive memory clearing
+  private final Map<String, ImageProcessingStats> persistentImageStats;
+
+  // Temp stored ROI files for each processed image
+  private final Map<String, File> persistedROIFiles;
 
   // Listeners for ROI changes
   private final List<ROIChangeListener> listeners;
@@ -38,8 +70,11 @@ public class ROIManager {
 
   private ROIManager() {
     this.imageROIs = new ConcurrentHashMap<>();
+    this.imageROIIds = new ConcurrentHashMap<>();
     this.imageProcessingTimes = new ConcurrentHashMap<>();
     this.classificationResults = new ConcurrentHashMap<>();
+    this.persistentImageStats = new ConcurrentHashMap<>();
+    this.persistedROIFiles = new ConcurrentHashMap<>();
     this.listeners = new ArrayList<>();
   }
 
@@ -110,14 +145,76 @@ public class ROIManager {
    * Get processing time for an image
    */
   public long getProcessingTime(String imageFileName) {
-    return this.imageProcessingTimes.getOrDefault(imageFileName, 0L);
+    ImageProcessingStats stats = persistentImageStats.get(imageFileName);
+    return stats != null ? stats.processingTimeMs() : 0L;
+  }
+
+  /**
+   * Store processing statistics for an image (survives memory clearing)
+   */
+  public void storeProcessingStats(String fileName, long processingTimeMs,
+      int vesselCount, int nucleusCount, int cytoplasmCount, int cellCount, int ignoredCount) {
+    ImageProcessingStats stats = new ImageProcessingStats(fileName, processingTimeMs,
+        vesselCount, nucleusCount, cytoplasmCount, cellCount, ignoredCount);
+    persistentImageStats.put(fileName, stats);
+    // Also maintain backward compatibility
+    imageProcessingTimes.put(fileName, processingTimeMs);
+    LOGGER.debug("Stored processing stats for '{}': {}", fileName, stats);
   }
 
   /**
    * Get all processing times by image
    */
   public Map<String, Long> getAllProcessingTimes() {
-    return new HashMap<>(this.imageProcessingTimes);
+    return persistentImageStats.entrySet().stream()
+        .collect(java.util.stream.Collectors.toMap(
+            Map.Entry::getKey,
+            entry -> entry.getValue().processingTimeMs()));
+  }
+
+  /**
+   * Get all persistent image stats
+   */
+  public Map<String, ImageProcessingStats> getAllImageStats() {
+    return new HashMap<>(persistentImageStats);
+  }
+
+  /**
+   * Get processing stats for a specific image
+   */
+  public ImageProcessingStats getImageStats(String fileName) {
+    return persistentImageStats.get(fileName);
+  }
+
+  /**
+   * Save current ROI data for an image to a persistent temp file.
+   * This creates a ZIP file that can be reused later without regenerating ROIs.
+   */
+  public void saveROIsToTempFile(String imageFileName) {
+    try {
+      String safeName = sanitizeFileName(imageFileName);
+      File tempDir = System.getProperty("java.io.tmpdir") != null ?
+          new File(System.getProperty("java.io.tmpdir")) : new File("temp");
+
+      // Create a unique temp file for this image's ROIs
+      File tempROIFile = File.createTempFile(safeName + "_rois_", ".zip", tempDir);
+      saveROIsToFile(imageFileName, tempROIFile);
+
+      // Store the file reference for later use in saveAllROIsToMasterZip
+      persistedROIFiles.put(imageFileName, tempROIFile);
+
+      LOGGER.debug("Saved ROIs for '{}' to temp file: {}", imageFileName, tempROIFile.getAbsolutePath());
+
+    } catch (Exception e) {
+      LOGGER.error("Failed to save ROIs to temp file for image '{}': {}", imageFileName, e.getMessage(), e);
+    }
+  }
+
+  /**
+   * Get map of all persisted ROI temp files
+   */
+  public Map<String, File> getPersistedROIFiles() {
+    return new HashMap<>(persistedROIFiles);
   }
 
   /**
@@ -170,15 +267,19 @@ public class ROIManager {
     if (roi == null) return;
 
     String imageFileName = roi.getImageFileName();
-    List<UserROI> roisForImage = imageROIs.computeIfAbsent(imageFileName, k -> new ArrayList<>());
+    String roiId = roi.getId();
 
-    // Check for duplicate ROI by ID to prevent double counting
-    boolean isDuplicate = roisForImage.stream().anyMatch(existing -> existing.getId().equals(roi.getId()));
-    if (isDuplicate) {
+    // PERFORMANCE OPTIMIZATION: O(1) duplicate check using HashSet instead of O(n) list scan
+    Set<String> roiIdsForImage = imageROIIds.computeIfAbsent(imageFileName, k -> new HashSet<>());
+
+    if (roiIdsForImage.contains(roiId)) {
       LOGGER.debug("Skipping duplicate ROI '{}' for image '{}'", roi.getName(), imageFileName);
       return;
     }
 
+    // Add to both collections - set for fast lookup, list for ordered access
+    roiIdsForImage.add(roiId);
+    List<UserROI> roisForImage = imageROIs.computeIfAbsent(imageFileName, k -> new ArrayList<>());
     roisForImage.add(roi);
 
     // LOGGER.info("Added ROI '{}' to image '{}'", roi.getName(), imageFileName);
@@ -198,12 +299,21 @@ public class ROIManager {
    * Remove a ROI by ID
    */
   public boolean removeROI(String roiId) {
-    for (List<UserROI> rois : imageROIs.values()) {
+    for (Map.Entry<String, List<UserROI>> entry : imageROIs.entrySet()) {
+      String imageFileName = entry.getKey();
+      List<UserROI> rois = entry.getValue();
+
       UserROI toRemove =
           rois.stream().filter(roi -> roi.getId().equals(roiId)).findFirst().orElse(null);
 
       if (toRemove != null) {
+        // Remove from both collections to maintain consistency
         rois.remove(toRemove);
+        Set<String> roiIds = imageROIIds.get(imageFileName);
+        if (roiIds != null) {
+          roiIds.remove(roiId);
+        }
+
         LOGGER.info(
             "Removed ROI '{}' from image '{}'", toRemove.getName(), toRemove.getImageFileName());
 
@@ -257,19 +367,25 @@ public class ROIManager {
    */
   public void clearROIsForImage(String imageFileName) {
     List<UserROI> removed = imageROIs.remove(imageFileName);
+    // Also clear the ID set to maintain consistency
+    Set<String> removedIds = imageROIIds.remove(imageFileName);
+
     if (removed != null && !removed.isEmpty()) {
       LOGGER.info("Cleared {} ROIs from image '{}'", removed.size(), imageFileName);
-
-      // Notify listeners
-      listeners.forEach(
-          listener -> {
-            try {
-              listener.onROIsCleared(imageFileName);
-            } catch (Exception e) {
-              LOGGER.error("Error notifying ROI listener", e);
-            }
-          });
     }
+
+    // Also clear processing time for this image
+    clearProcessingTime(imageFileName);
+
+    // Notify listeners
+    listeners.forEach(
+        listener -> {
+          try {
+            listener.onROIsCleared(imageFileName);
+          } catch (Exception e) {
+            LOGGER.error("Error notifying ROI listener", e);
+          }
+        });
   }
 
   /**
@@ -278,8 +394,12 @@ public class ROIManager {
   public void clearAllROIs() {
     Set<String> imageNames = new HashSet<>(imageROIs.keySet());
     imageROIs.clear();
+    imageROIIds.clear();
 
     LOGGER.info("Cleared all ROIs from {} images", imageNames.size());
+
+    // Clear all processing times
+    clearAllProcessingTimes();
 
     // Notify listeners for each image
     imageNames.forEach(
@@ -349,54 +469,46 @@ public class ROIManager {
 
   /**
    * Save all ROIs from all images to a master ZIP file.
-   * Each image's ROIs are saved in a separate ZIP file within the master ZIP.
+   * Uses pre-saved temp ROI files from each processed image.
    */
   public void saveAllROIsToMasterZip(File outputFile) throws IOException {
-    if (imageROIs.isEmpty()) {
-      throw new IllegalArgumentException("No ROIs found in any image");
+    if (persistedROIFiles.isEmpty()) {
+      throw new IllegalArgumentException("No processed ROI files found. Process some images first.");
     }
 
-    // Create a temporary directory for individual image ZIP files
-    File tempDir =
-        new File(
-            System.getProperty("java.io.tmpdir"),
-            "scipathj_master_rois_" + System.currentTimeMillis());
-    tempDir.mkdirs();
-
-    try {
-      // Create ZIP file for each image that has ROIs
-      for (Map.Entry<String, List<UserROI>> entry : imageROIs.entrySet()) {
+    try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(new java.io.FileOutputStream(outputFile))) {
+      for (Map.Entry<String, File> entry : persistedROIFiles.entrySet()) {
         String imageFileName = entry.getKey();
-        List<UserROI> rois = entry.getValue();
+        File roiFile = entry.getValue();
 
-        if (!rois.isEmpty()) {
-          // Create safe filename for the image's ZIP file
+        if (roiFile.exists() && roiFile.length() > 0) {
+          // Create safe filename for the entry in master ZIP
           String safeImageName = sanitizeFileName(imageFileName);
-          File imageZipFile = new File(tempDir, safeImageName + "_ROIs.zip");
 
-          // Save ROIs for this image
-          if (rois.size() == 1) {
-            // For single ROI, create a ZIP containing the single .roi file
-            saveSingleROIAsZip(rois.get(0), imageZipFile);
-          } else {
-            // For multiple ROIs, save as ZIP
-            saveMultipleROIs(rois, imageZipFile);
+          java.util.zip.ZipEntry zipEntry = new java.util.zip.ZipEntry(safeImageName + "_ROIs.zip");
+          zos.putNextEntry(zipEntry);
+
+          // Copy the content of the pre-saved ROI file
+          try (java.io.FileInputStream fis = new java.io.FileInputStream(roiFile)) {
+            byte[] buffer = new byte[8192];
+            int length;
+            while ((length = fis.read(buffer)) > 0) {
+              zos.write(buffer, 0, length);
+            }
           }
+
+          zos.closeEntry();
+          LOGGER.debug("Added ROI file for '{}' to master ZIP", imageFileName);
+        } else {
+          LOGGER.warn("ROI file for '{}' does not exist or is empty", imageFileName);
         }
       }
-
-      // Create master ZIP file containing all image ZIP files
-      createMasterZipFile(tempDir, outputFile);
-
-      LOGGER.info(
-          "Saved ROIs from {} images to master ZIP file '{}'",
-          imageROIs.size(),
-          outputFile.getAbsolutePath());
-
-    } finally {
-      // Clean up temporary files
-      deleteDirectory(tempDir);
     }
+
+    LOGGER.info(
+        "Saved ROIs from {} images to master ZIP file '{}'",
+        persistedROIFiles.size(),
+        outputFile.getAbsolutePath());
   }
 
   /**

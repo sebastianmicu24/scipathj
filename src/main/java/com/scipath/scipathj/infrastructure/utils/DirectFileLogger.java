@@ -33,7 +33,7 @@ public class DirectFileLogger {
 
     try {
       String userHome = System.getProperty("user.home");
-      logDir = new File(userHome, "Desktop/scipathj-logs");
+      logDir = new File(userHome, "Desktop");
 
       if (!logDir.exists()) {
         logDir.mkdirs();
@@ -223,5 +223,41 @@ public class DirectFileLogger {
    */
   public static void log(String loggerName, String level, String message) {
     writeToFile("debug.log", level, loggerName, message);
+  }
+
+  /**
+   * Log performance information to dedicated performance log file.
+   */
+  public static void logPerformance(String message) {
+    writeToFile("performance.log", "PERF", "Performance", message);
+  }
+
+  /**
+   * Initialize performance logging for analysis tracking.
+   */
+  public static void initializePerformanceLogging() {
+    writeToFile("performance.log", "INFO", "Performance", "=== Performance Logging Initialized ===");
+    writeToFile("performance.log", "INFO", "Performance", "System Time: " + LocalDateTime.now().format(TIMESTAMP_FORMAT));
+    writeToFile("performance.log", "INFO", "Performance", "Thread: " + Thread.currentThread().getName());
+    logMemoryUsage();
+  }
+
+  /**
+   * Log current memory usage.
+   */
+  public static void logMemoryUsage() {
+    Runtime runtime = Runtime.getRuntime();
+    long totalMemory = runtime.totalMemory();
+    long freeMemory = runtime.freeMemory();
+    long usedMemory = totalMemory - freeMemory;
+    long maxMemory = runtime.maxMemory();
+
+    writeToFile("performance.log", "MEM", "Memory",
+        String.format("Memory: Used=%dMB (%d%%), Free=%dMB, Total=%dMB, Max=%dMB",
+            usedMemory / (1024 * 1024),
+            (int) ((double) usedMemory / maxMemory * 100),
+            freeMemory / (1024 * 1024),
+            totalMemory / (1024 * 1024),
+            maxMemory / (1024 * 1024)));
   }
 }

@@ -60,11 +60,12 @@ public class ROIStatisticsDialog extends JDialog {
   private MainSettings mainSettings;
   private ROIManager roiManager;
 
-  public ROIStatisticsDialog(Frame parent, Map<String, List<UserROI>> roiData, MainSettings mainSettings, ROIManager roiManager) {
+  public ROIStatisticsDialog(Frame parent, MainSettings mainSettings, ROIManager roiManager) {
     super(parent, "ROI Statistics", true);
-    this.roiData = roiData != null ? roiData : Map.of();
     this.mainSettings = mainSettings;
     this.roiManager = roiManager;
+    // Get data from ROIManager instead of passed parameter
+    this.roiData = collectROIDataFromManager();
 
     initializeComponents();
     updateStatistics();
@@ -75,6 +76,82 @@ public class ROIStatisticsDialog extends JDialog {
     setLocationRelativeTo(parent);
 
     LOGGER.info("Created ROI Statistics dialog with {} images", roiData.size());
+  }
+
+  /**
+   * Collect ROI data from the ROIManager using persistent stats.
+   * Note: Since ROI objects are cleared for memory efficiency, we create synthetic ROI objects
+   * from the stored statistics to enable the existing counting logic to work.
+   */
+  private Map<String, List<UserROI>> collectROIDataFromManager() {
+    Map<String, List<UserROI>> collectedData = new java.util.HashMap<>();
+
+    // Get persistent processed image statistics
+    Map<String, ROIManager.ImageProcessingStats> statsMap = roiManager.getAllImageStats();
+
+    // Create synthetic ROI objects based on stored counts for statistics display
+    for (ROIManager.ImageProcessingStats stats : statsMap.values()) {
+      List<UserROI> syntheticROIs = createSyntheticROIs(stats);
+      collectedData.put(stats.fileName(), syntheticROIs);
+    }
+
+    LOGGER.debug("Created synthetic ROI data for {} images from persistent statistics", collectedData.size());
+    return collectedData;
+  }
+
+  /**
+   * Create synthetic ROI objects based on stored statistics counts.
+   * This allows the existing statistics counting logic to work without actual ROI data in memory.
+   */
+  private List<UserROI> createSyntheticROIs(ROIManager.ImageProcessingStats stats) {
+    List<UserROI> syntheticROIs = new java.util.ArrayList<>();
+
+    // Create synthetic vessel ROIs
+    for (int i = 0; i < stats.vesselCount(); i++) {
+      ij.gui.Roi ijRoi = new ij.gui.Roi(10 * i, 10 * i, 20, 20); // Dummy coordinates
+      UserROI vesselROI = new UserROI(ijRoi, stats.fileName(), "Vessel_" + (i + 1), UserROI.ROIType.VESSEL);
+      vesselROI.setDisplayColor(java.awt.Color.RED);
+      syntheticROIs.add(vesselROI);
+    }
+
+    // Create synthetic nucleus ROIs
+    for (int i = 0; i < stats.nucleusCount(); i++) {
+      ij.gui.Roi ijRoi = new ij.gui.Roi(10 * i + 50, 10 * i + 50, 15, 15);
+      UserROI nucleusROI = new UserROI(ijRoi, stats.fileName(), "Nucleus_" + (i + 1), UserROI.ROIType.NUCLEUS);
+      nucleusROI.setDisplayColor(java.awt.Color.BLUE);
+      syntheticROIs.add(nucleusROI);
+    }
+
+    // Create synthetic cytoplasm ROIs
+    for (int i = 0; i < stats.cytoplasmCount(); i++) {
+      ij.gui.Roi ijRoi = new ij.gui.Roi(10 * i + 150, 10 * i + 150, 25, 25);
+      UserROI cytoplasmROI = new UserROI(ijRoi, stats.fileName(), "Cytoplasm_" + (i + 1), UserROI.ROIType.CYTOPLASM);
+      cytoplasmROI.setDisplayColor(java.awt.Color.CYAN);
+      syntheticROIs.add(cytoplasmROI);
+    }
+
+    // Create synthetic cell ROIs
+    for (int i = 0; i < stats.cellCount(); i++) {
+      ij.gui.Roi ijRoi = new ij.gui.Roi(10 * i + 100, 10 * i + 100, 25, 25);
+      UserROI cellROI = new UserROI(ijRoi, stats.fileName(), "Cell_" + (i + 1), UserROI.ROIType.CELL);
+      cellROI.setDisplayColor(java.awt.Color.GREEN);
+      syntheticROIs.add(cellROI);
+    }
+
+    // Create synthetic ignored ROIs (mark them as ignored)
+    for (int i = 0; i < stats.ignoredCount(); i++) {
+      ij.gui.Roi ijRoi = new ij.gui.Roi(10 * i + 200, 10 * i + 200, 30, 30);
+      UserROI ignoredROI = new UserROI(ijRoi, stats.fileName(), "Ignored_" + (i + 1), UserROI.ROIType.IGNORE);
+      ignoredROI.setDisplayColor(java.awt.Color.GRAY);
+      ignoredROI.setIgnored(true);
+      syntheticROIs.add(ignoredROI);
+    }
+
+    LOGGER.debug("Created {} synthetic ROIs for {} (total={}, vessels={}, nuclei={}, cyto={}, cells={}, ignored={})",
+        syntheticROIs.size(), stats.fileName(), stats.totalROI(),
+        stats.vesselCount(), stats.nucleusCount(), stats.cytoplasmCount(), stats.cellCount(), stats.ignoredCount());
+
+    return syntheticROIs;
   }
 
   private void initializeComponents() {
