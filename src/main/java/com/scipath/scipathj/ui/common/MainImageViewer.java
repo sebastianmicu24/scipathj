@@ -386,8 +386,8 @@ public class MainImageViewer extends JPanel
         this.originalImageWidth = imagePlus.getWidth();
         this.originalImageHeight = imagePlus.getHeight();
 
-        // Start with 100% zoom (native image resolution)
-        currentZoom = 1.0;
+        // Start with fit-to-window zoom so entire image is visible
+        currentZoom = calculateFitZoom();
 
         // Create scaled image
         Image scaledImage = createScaledImage();
