@@ -3,7 +3,10 @@ package com.scipath.scipathj.ui.analysis.dialogs;
 import com.scipath.scipathj.ui.utils.UIConstants;
 import com.scipath.scipathj.ui.utils.UIUtils;
 import com.scipath.scipathj.infrastructure.config.MainSettings;
+import com.scipath.scipathj.analysis.algorithms.classification.CellClassification;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -12,24 +15,36 @@ import java.util.Set;
 import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
-import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumnModel;
+import javax.swing.table.TableColumn;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Collections;
 
 /**
- * Dialog for displaying extracted features in a table format.
+ * Dialog for displaying extracted features in a table format with pagination.
  * Shows features for each ROI with columns for image name, cell type, ROI ID, and all feature values.
+ * Uses pagination to handle large datasets efficiently.
  */
 public class FeatureDisplayDialog extends JDialog {
+
+  private static final int PAGE_SIZE = 100;
 
   private JTable featuresTable;
   private DefaultTableModel tableModel;
   private Map<String, Map<String, Object>> featuresData;
-  private Map<String, Map<String, Object>> allFeaturesData; // Unfiltered version for full export
+  private Map<String, Map<String, Object>> allFeaturesData;
+  private List<String> roiKeys; // Sorted list of ROI keys for pagination
   private String imageName;
   private MainSettings mainSettings;
+
+  // Pagination controls
+  private JButton prevButton;
+  private JButton nextButton;
+  private JLabel pageLabel;
+  private int currentPage = 0;
+  private int totalPages = 0;
 
   public FeatureDisplayDialog(Frame parent, Map<String, Map<String, Object>> features) {
     this(parent, features, null, null);
@@ -49,7 +64,7 @@ public class FeatureDisplayDialog extends JDialog {
   }
 
   private void initializeDialog() {
-    setSize(1200, 800);
+    setSize(1200, 900);
     setLocationRelativeTo(getParent());
 
     JPanel contentPanel = new JPanel(new BorderLayout());
@@ -60,18 +75,26 @@ public class FeatureDisplayDialog extends JDialog {
     titleLabel.setHorizontalAlignment(SwingConstants.CENTER);
     contentPanel.add(titleLabel, BorderLayout.NORTH);
 
+    // Prepare data for pagination
+    roiKeys = new ArrayList<>(featuresData.keySet());
+    Collections.sort(roiKeys); // Sort for consistent ordering
+    totalPages = (int) Math.ceil((double) roiKeys.size() / PAGE_SIZE);
+
     // Create table
     createFeaturesTable();
     JScrollPane scrollPane = new JScrollPane(featuresTable);
     scrollPane.setBorder(BorderFactory.createTitledBorder("Feature Data"));
     contentPanel.add(scrollPane, BorderLayout.CENTER);
 
-    // Statistics panel
-    JPanel statsPanel = createStatisticsPanel();
-    contentPanel.add(statsPanel, BorderLayout.SOUTH);
+    // Pagination controls
+    JPanel paginationPanel = createPaginationPanel();
+    contentPanel.add(paginationPanel, BorderLayout.SOUTH);
 
     add(contentPanel);
-  }
+// Load first page
+loadPage(0);
+updatePaginationControls();
+}
 
   private void createFeaturesTable() {
     // Determine all unique feature names across all ROIs
@@ -85,28 +108,15 @@ public class FeatureDisplayDialog extends JDialog {
     columnNames.add("Image Name");
     columnNames.add("Cell Type");
     columnNames.add("ROI ID");
+    columnNames.add("Predicted Class");
+    columnNames.add("Confidence");
     columnNames.addAll(allFeatureNames.stream().sorted().toList());
 
-    // Create table model
+    // Create table model - simplified, all columns are strings to avoid DoubleRenderer issues
     tableModel = new DefaultTableModel(columnNames.toArray(), 0) {
       @Override
       public Class<?> getColumnClass(int column) {
-        // First 3 columns are strings, rest can be numbers or strings
-        if (column < 3) {
-          return String.class;
-        }
-        
-        // For feature columns, check the actual data type
-        // Look at the first non-null value in this column to determine type
-        for (int row = 0; row < getRowCount(); row++) {
-          Object value = getValueAt(row, column);
-          if (value != null) {
-            return value instanceof String ? String.class : Double.class;
-          }
-        }
-        
-        // Default to Object if no data found
-        return Object.class;
+        return String.class; // All columns as strings to avoid Double rendering issues
       }
 
       @Override
@@ -115,79 +125,11 @@ public class FeatureDisplayDialog extends JDialog {
       }
     };
 
-    // Populate table data, filtering based on ignore setting
-    int filteredOutCount = 0;
-    for (Map.Entry<String, Map<String, Object>> entry : featuresData.entrySet()) {
-      String roiName = entry.getKey();
-      Map<String, Object> roiFeatures = entry.getValue();
-
-      // Check if we should filter out this ROI based on ignore setting
-      boolean shouldIncludeROI = true;
-      if (mainSettings != null && !mainSettings.includeIgnoredInCsv()) {
-        Object ignoreValue = roiFeatures.get("ignore");
-        if (ignoreValue != null) {
-          String ignoreStr = ignoreValue.toString().toLowerCase().trim();
-          if ("true".equals(ignoreStr) || "1".equals(ignoreStr) || "yes".equals(ignoreStr) || Boolean.parseBoolean(ignoreStr)) {
-            shouldIncludeROI = false;
-            filteredOutCount++;
-          }
-        }
-      }
-
-      if (shouldIncludeROI) {
-        // Parse ROI name to extract components
-        String currentImageName;
-        if (this.imageName != null && !this.imageName.trim().isEmpty()) {
-          // Use provided image name if available
-          currentImageName = this.imageName.trim();
-        } else {
-          // Extract from ROI name
-          currentImageName = extractImageName(roiName);
-          // If extraction returns "Unknown", try to use the ROI name itself as fallback
-          if ("Unknown".equals(currentImageName)) {
-            currentImageName = roiName;
-          }
-        }
-        String cellType = extractCellType(roiName);
-        String roiId = extractROIId(roiName);
-
-        // Create row data
-        List<Object> rowData = new ArrayList<>();
-        rowData.add(currentImageName);
-        rowData.add(cellType);
-        rowData.add(roiId);
-
-        // Add feature values in the same order as column names
-        for (int i = 3; i < columnNames.size(); i++) {
-          String featureName = columnNames.get(i);
-          Object value = roiFeatures.get(featureName);
-          if (value == null) {
-            rowData.add(""); // Use empty string for null values
-          } else if (value instanceof String) {
-            rowData.add(value); // Keep strings as strings
-          } else if (value instanceof Number) {
-            rowData.add(((Number) value).doubleValue()); // Convert numbers to double
-          } else {
-            rowData.add(value.toString()); // Convert other types to string
-          }
-        }
-
-        tableModel.addRow(rowData.toArray());
-      }
-    }
-
-    // Log filtering information if any ROIs were filtered out
-    if (filteredOutCount > 0) {
-      System.out.println("FeatureDisplayDialog: Filtered out " + filteredOutCount + " ignored ROI(s) from table display");
-    }
-
     // Create table
     featuresTable = new JTable(tableModel);
     featuresTable.setAutoCreateRowSorter(true);
     featuresTable.setRowSelectionAllowed(true);
     featuresTable.setColumnSelectionAllowed(true);
-
-    // Disable auto-resize to allow horizontal scrolling when columns exceed width
     featuresTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
 
     // Set column widths
@@ -196,17 +138,175 @@ public class FeatureDisplayDialog extends JDialog {
       columnModel.getColumn(0).setMinWidth(150); // Image Name
       columnModel.getColumn(1).setMinWidth(100); // Cell Type
       columnModel.getColumn(2).setMinWidth(80);  // ROI ID
+      columnModel.getColumn(3).setMinWidth(120); // Predicted Class
+      columnModel.getColumn(4).setMinWidth(100); // Confidence
 
-      // Set reasonable min width for feature columns to prevent "..." showing
-      for (int i = 3; i < columnModel.getColumnCount(); i++) {
-        columnModel.getColumn(i).setMinWidth(120);
+      // Set reasonable min width for feature columns
+      for (int i = 5; i < columnModel.getColumnCount(); i++) {
+        columnModel.getColumn(i).setMinWidth(80);
       }
     }
 
-    // TODO: Add custom renderer for tooltips if needed
-    // featuresTable.setDefaultRenderer(Double.class, new TooltipRenderer(featuresTable));
+    // Custom renderer for confidence column to handle percentages
+    if (columnModel.getColumnCount() > 4) {
+      TableColumn confidenceColumn = columnModel.getColumn(4);
+      confidenceColumn.setCellRenderer(new DefaultTableCellRenderer() {
+        @Override
+        protected void setValue(Object value) {
+          if (value == null || value.toString().isEmpty()) {
+            setText("");
+          } else if (value instanceof Double) {
+            Double doubleValue = (Double) value;
+            if (doubleValue.isNaN()) {
+              setText("");
+            } else {
+              setText(String.format("%.1f%%", doubleValue));
+            }
+          } else {
+            // Already a string, just display as-is
+            setText(value.toString());
+          }
+        }
+      });
+    }
   }
 
+  private void loadPage(int page) {
+    currentPage = page;
+
+    // Clear current table data
+    tableModel.setRowCount(0);
+
+    // Calculate range for this page
+    int startIndex = page * PAGE_SIZE;
+    int endIndex = Math.min(startIndex + PAGE_SIZE, roiKeys.size());
+
+    // Load data for this page
+    for (int i = startIndex; i < endIndex; i++) {
+      String roiName = roiKeys.get(i);
+      Map<String, Object> roiFeatures = featuresData.get(roiName);
+
+      // Parse ROI name to extract components
+      String currentImageName = this.imageName != null && !this.imageName.trim().isEmpty() ?
+          this.imageName.trim() : extractImageName(roiName);
+      if ("Unknown".equals(currentImageName)) {
+        currentImageName = roiName;
+      }
+
+      String cellType = extractCellType(roiName);
+      String roiId = extractROIId(roiName);
+
+      // Create row data
+      List<Object> rowData = new ArrayList<>();
+      rowData.add(currentImageName);
+      rowData.add(cellType);
+      rowData.add(roiId);
+
+      // Add classification data
+      CellClassification.ClassificationResult classification = null;
+      String roiPart = extractROITypeAndId(roiName);
+
+      try {
+        // Try multiple lookup strategies
+        classification = com.scipath.scipathj.ui.common.ROIManager.getInstance().getClassificationResult(roiName);
+
+        if (classification == null && roiPart != null) {
+          String reconstructedKey = currentImageName + "_" + roiPart;
+          classification = com.scipath.scipathj.ui.common.ROIManager.getInstance().getClassificationResult(reconstructedKey);
+
+          if (classification == null) {
+            String colonKey = currentImageName + ":" + roiPart;
+            classification = com.scipath.scipathj.ui.common.ROIManager.getInstance().getClassificationResult(colonKey);
+
+            if (classification == null) {
+              // Entity ID matching for partial classifications
+              String entityId = extractEntityIdFromROI(roiName);
+              if (entityId != null) {
+                Map<String, CellClassification.ClassificationResult> allResults =
+                  com.scipath.scipathj.ui.common.ROIManager.getInstance().getAllClassificationResults();
+
+                for (Map.Entry<String, CellClassification.ClassificationResult> entry : allResults.entrySet()) {
+                  String availableKey = entry.getKey();
+                  String availableEntityId = extractEntityIdFromROI(availableKey);
+                  if (entityId.equals(availableEntityId)) {
+                    classification = entry.getValue();
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (Exception e) {
+        System.out.println("Error looking up classification for '" + roiName + "': " + e.getMessage());
+      }
+
+      if (classification != null) {
+        rowData.add(classification.getPredictedClass());
+        rowData.add(classification.getConfidence() * 100.0); // Store as Double for percentage formatting
+      } else {
+        rowData.add(""); // Empty string for predicted class
+        rowData.add(""); // Empty string for confidence
+      }
+
+      // Add feature values
+      for (int j = 5; j < tableModel.getColumnCount(); j++) {
+        String featureName = tableModel.getColumnName(j);
+        Object value = roiFeatures.get(featureName);
+        if (value == null) {
+          rowData.add("");
+        } else if (value instanceof Number) {
+          rowData.add(value.toString()); // Convert to string to avoid Double rendering issues
+        } else {
+          rowData.add(value.toString());
+        }
+      }
+
+      tableModel.addRow(rowData.toArray());
+    }
+  }
+
+  private JPanel createPaginationPanel() {
+    JPanel panel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+
+    prevButton = new JButton("Previous");
+    nextButton = new JButton("Next");
+    pageLabel = new JLabel();
+
+    prevButton.addActionListener(e -> {
+      if (currentPage > 0) {
+        loadPage(currentPage - 1);
+        updatePaginationControls();
+      }
+    });
+
+    nextButton.addActionListener(e -> {
+      if (currentPage < totalPages - 1) {
+        loadPage(currentPage + 1);
+        updatePaginationControls();
+      }
+    });
+
+    JButton exportButton = UIUtils.createStandardButton("Export All Features", null);
+    exportButton.addActionListener(e -> exportAllFeaturesToCSV());
+
+    panel.add(prevButton);
+    panel.add(pageLabel);
+    panel.add(nextButton);
+    panel.add(exportButton);
+
+    return panel;
+  }
+
+  private void updatePaginationControls() {
+    prevButton.setEnabled(currentPage > 0);
+    nextButton.setEnabled(currentPage < totalPages - 1);
+    pageLabel.setText(String.format("Page %d of %d (%d total ROIs)",
+      currentPage + 1, totalPages, roiKeys.size()));
+
+    // Update dialog title with page info
+    setTitle(String.format("Extracted Features - Page %d of %d", currentPage + 1, totalPages));
+  }
   private JPanel createStatisticsPanel() {
     JPanel statsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
 
@@ -246,6 +346,15 @@ public class FeatureDisplayDialog extends JDialog {
   private String extractImageName(String roiName) {
     if (roiName == null || roiName.trim().isEmpty()) {
       return "Unknown";
+    }
+
+    // Check if this is a merged entity feature (simple numeric ID)
+    if (roiName.matches("^\\d+$")) {
+      // For merged entity features, use the provided image name if available
+      if (this.imageName != null && !this.imageName.trim().isEmpty()) {
+        return this.imageName.trim();
+      }
+      return "Entity_" + roiName; // Fallback for merged entities
     }
 
     // New format: "ImageName.ext_ROIType_ID" or "ImageName_ROIType_ID"
@@ -311,6 +420,11 @@ public class FeatureDisplayDialog extends JDialog {
   }
 
   private String extractCellType(String roiName) {
+    // Check if this is a merged entity feature (simple numeric ID)
+    if (roiName.matches("^\\d+$")) {
+      return "Entity"; // Merged entity features from multiple ROI types
+    }
+    
     // Extract cell type based on ROI name pattern
     String lowerName = roiName.toLowerCase();
 
@@ -337,16 +451,19 @@ public class FeatureDisplayDialog extends JDialog {
       return "Cell"; // Assume fused biological entities are cells
     }
     else if (lowerName.matches("\\d+.*") && lowerName.length() < 10) {
-      return "Unknown"; // Likely an ID number, don't log as it might be normal
+      return "Entity"; // Likely merged entity ID
     }
     else {
-      // Debug: Log unknown ROI names to help identify the issue
-      System.out.println("FeatureDisplayDialog: Unknown ROI type for name: '" + roiName + "'");
       return "Unknown";
     }
   }
 
   private String extractROIId(String roiName) {
+    // Check if this is a merged entity feature (simple numeric ID)
+    if (roiName.matches("^\\d+$")) {
+      return roiName; // Entity ID is the ROI name itself
+    }
+    
     // Extract the number after the last underscore
     int lastUnderscoreIndex = roiName.lastIndexOf('_');
     if (lastUnderscoreIndex > 0 && lastUnderscoreIndex < roiName.length() - 1) {
@@ -362,7 +479,46 @@ public class FeatureDisplayDialog extends JDialog {
     return roiName;
   }
 
-  private void exportToCSV() {
+  /**
+   * Extract the ROI type and ID part from a full ROI name.
+   * E.g., "P1 - 9 - 03_Nucleus_132" -> "Nucleus_132"
+   */
+  private String extractROITypeAndId(String fullRoiName) {
+      String cellType = extractCellType(fullRoiName);
+      String roiId = extractROIId(fullRoiName);
+      if (!"Unknown".equals(cellType) && !"Unknown".equals(roiId)) {
+          return cellType + "_" + roiId;
+      }
+      // Fallback to the full name if parsing fails
+      return fullRoiName;
+  }
+
+  /**
+   * Extract entity ID from ROI name for classification lookup
+   * Examples: "P5 - 235 - 02.tif_Cell_2222" -> "2222"
+   *          "P5 - 235 - 02.tif_Nucleus_188" -> "188"
+   */
+  private String extractEntityIdFromROI(String roiName) {
+    if (roiName == null) return null;
+    
+    // If it's already just a number, return it
+    if (roiName.matches("\\d+")) {
+      return roiName;
+    }
+    
+    // Extract the last number after underscore
+    String[] parts = roiName.split("_");
+    if (parts.length > 0) {
+      String lastPart = parts[parts.length - 1];
+      if (lastPart.matches("\\d+")) {
+        return lastPart;
+      }
+    }
+    
+    return null;
+  }
+
+ private void exportToCSV() {
     JFileChooser fileChooser = new JFileChooser();
     fileChooser.setSelectedFile(new File("features_export.csv")); // Default filename
     int result = fileChooser.showSaveDialog(this);
@@ -404,11 +560,18 @@ public class FeatureDisplayDialog extends JDialog {
           for (int col = 0; col < tableModel.getColumnCount(); col++) {
             Object value = tableModel.getValueAt(row, col);
             if (value != null) {
-              String stringValue = value.toString();
-              // If using EU format and this is a numeric column, replace decimal separator
-              if (mainSettings != null && mainSettings.useEuCsvFormat() && value instanceof Number) {
-                stringValue = stringValue.replace(".", decimalSeparator);
-              }
+              String stringValue;
+              if (value instanceof Double && Double.isNaN((Double) value)) {
+                // Handle NaN values (from missing classification data) as empty string
+                stringValue = "";
+              } else {
+                stringValue = value.toString();
+                // If using EU format and this is a numeric column, replace decimal separator
+                if (mainSettings != null && mainSettings.useEuCsvFormat() && value instanceof Number) {
+                  stringValue = stringValue.replace(".", decimalSeparator);
+                }
+            }
+              
               writer.write(stringValue);
             } else {
               writer.write("");
@@ -486,10 +649,16 @@ public class FeatureDisplayDialog extends JDialog {
           for (int col = 0; col < allFeaturesModel.getColumnCount(); col++) {
             Object value = allFeaturesModel.getValueAt(row, col);
             if (value != null) {
-              String stringValue = value.toString();
-              // If using EU format and this is a numeric column, replace decimal separator
-              if (mainSettings != null && mainSettings.useEuCsvFormat() && value instanceof Number) {
-                stringValue = stringValue.replace(".", decimalSeparator);
+              String stringValue;
+              if (value instanceof Double && Double.isNaN((Double) value)) {
+                // Handle NaN values (from missing classification data) as empty string
+                stringValue = "";
+              } else {
+                stringValue = value.toString();
+                // If using EU format and this is a numeric column, replace decimal separator
+                if (mainSettings != null && mainSettings.useEuCsvFormat() && value instanceof Number) {
+                  stringValue = stringValue.replace(".", decimalSeparator);
+                }
               }
               writer.write(stringValue);
             } else {
@@ -529,18 +698,39 @@ public class FeatureDisplayDialog extends JDialog {
     columnNames.add("Image Name");
     columnNames.add("Cell Type");
     columnNames.add("ROI ID");
+    columnNames.add("Predicted Class");
+    columnNames.add("Confidence");
     columnNames.addAll(allFeatureNames.stream().sorted().toList());
 
     // Create table model
     DefaultTableModel model = new DefaultTableModel(columnNames.toArray(), 0) {
       @Override
       public Class<?> getColumnClass(int column) {
-        // First 3 columns are strings, rest can be numbers or strings
+        // First 3 columns are strings
         if (column < 3) {
           return String.class;
         }
+        // Columns 3 and 4 are Predicted Class (String) and Confidence (Double)
+        if (column == 3) { // "Predicted Class"
+          return String.class;
+        }
+        if (column == 4) { // "Confidence" - can contain null values, so use Object.class for custom rendering
+          return Object.class; // Always use Object.class for confidence column to allow null handling
+        }
 
-        // For feature columns, check the actual data type
+        // Override the default renderer for confidence column by forcing it to use Object.class
+        // This ensures our custom renderer will be used instead of the default DoubleRenderer
+        if (column == 4 && getRowCount() > 0) {
+          // Check if any row has null in confidence column
+          for (int row = 0; row < getRowCount(); row++) {
+            Object value = getValueAt(row, 4);
+            if (value == null) {
+              return Object.class; // Force Object.class when nulls are present
+            }
+          }
+        }
+
+        // For feature columns (starting at column 5), check the actual data type
         for (int row = 0; row < getRowCount(); row++) {
           Object value = getValueAt(row, column);
           if (value != null) {
@@ -585,8 +775,37 @@ public class FeatureDisplayDialog extends JDialog {
       rowData.add(cellType);
       rowData.add(roiId);
 
-      // Add feature values in the same order as column names
-      for (int i = 3; i < columnNames.size(); i++) {
+      // Add classification data (columns 3-4: "Predicted Class", "Confidence")
+      // Try to find classification data using key lookups to match tooltip behavior
+      CellClassification.ClassificationResult classification = null;
+      String roiPart = extractROITypeAndId(roiName);
+      try {
+        // First try roiName directly (may already be the correct key)
+        classification = com.scipath.scipathj.ui.common.ROIManager.getInstance().getClassificationResult(roiName);
+        if (classification == null) {
+          // Try reconstructed key like tooltip: imageName + "_" + ROIType_ID
+          String reconstructedKey = currentImageName + "_" + roiPart;
+          classification = com.scipath.scipathj.ui.common.ROIManager.getInstance().getClassificationResult(reconstructedKey);
+          if (classification == null) {
+            // Try colon format as tooltip fallback
+            String colonKey = currentImageName + ":" + roiPart;
+            classification = com.scipath.scipathj.ui.common.ROIManager.getInstance().getClassificationResult(colonKey);
+          }
+        }
+      } catch (Exception e) {
+        // Ignore classification lookup errors
+      }
+
+      if (classification != null) {
+        rowData.add(classification.getPredictedClass());
+        rowData.add(classification.getConfidence() * 100.0); // Store as percentage
+      } else {
+        rowData.add(""); // Empty string for predicted class
+        rowData.add(""); // Use empty string instead of null for missing confidence
+      }
+
+      // Add feature values in the same order as column names (starting from column 5)
+      for (int i = 5; i < columnNames.size(); i++) {
         String featureName = columnNames.get(i);
         Object value = roiFeatures.get(featureName);
         if (value == null) {

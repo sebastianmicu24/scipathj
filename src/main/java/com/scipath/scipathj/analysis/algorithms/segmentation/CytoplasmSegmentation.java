@@ -144,7 +144,8 @@ public class CytoplasmSegmentation {
 
     if (nucleusROIs.isEmpty()) {
       LOGGER.warn("No nucleus ROIs found. Cannot create cytoplasm ROIs.");
-      return List.of();
+      // Ensure we return an empty list but don't throw an exception or cause shutdown
+      return new ArrayList<>();
     }
 
     // Clear any existing ROIs
@@ -159,13 +160,22 @@ public class CytoplasmSegmentation {
       // Step 1: Create a binary mask of nuclei
       ImagePlus nucleiMask = createNucleiMask();
       hideImageWindow(nucleiMask);
-
+      LOGGER.info("before calling createVoronoiTesselation");
       // Step 2: Create Voronoi tessellation
       ImagePlus voronoiImage = createVoronoiTessellation(nucleiMask);
+
+           LOGGER.info("before calling applyVesselExclusion");
 
       // Step 3: Apply vessel exclusion if enabled
       ImagePlus cytoplasmImage = applyVesselExclusion(voronoiImage);
 
+      // Ensure the image is registered with ImageJ (required for IJ.doWand)
+      if (cytoplasmImage.getWindow() == null) {
+        cytoplasmImage.show();
+        hideImageWindow(cytoplasmImage);
+      }
+
+           LOGGER.info("after calling applyVesselExclusion");
       // Step 4: Process each nucleus to create cell and cytoplasm ROIs
       processNucleiForCellCreation(cytoplasmImage, imageWidth, imageHeight);
 
@@ -228,12 +238,24 @@ public class CytoplasmSegmentation {
 
     // Draw nucleus centers as single pixels (the correct way for Voronoi)
     seedProcessor.setValue(255);
-    for (NucleusROI nucleusROI : nucleusROIs) {
-      int[] center = nucleusROI.getNucleusCenter();
-      if (center != null && center.length >= 2) {
-        int x = Math.max(1, Math.min(width - 2, center[0]));
-        int y = Math.max(1, Math.min(height - 2, center[1]));
+
+    if (settings.mergeNuclei()) {
+      // Use merged seeds for polynucleated cells
+      List<int[]> mergedSeeds = computeMergedSeeds();
+      for (int[] seed : mergedSeeds) {
+        int x = Math.max(1, Math.min(width - 2, seed[0]));
+        int y = Math.max(1, Math.min(height - 2, seed[1]));
         seedProcessor.putPixel(x, y, 255);
+      }
+    } else {
+      // Use individual nucleus centers
+      for (NucleusROI nucleusROI : nucleusROIs) {
+        int[] center = nucleusROI.getNucleusCenter();
+        if (center != null && center.length >= 2) {
+          int x = Math.max(1, Math.min(width - 2, center[0]));
+          int y = Math.max(1, Math.min(height - 2, center[1]));
+          seedProcessor.putPixel(x, y, 255);
+        }
       }
     }
 
@@ -257,6 +279,69 @@ public class CytoplasmSegmentation {
     }
 
     return voronoiImage;
+  }
+
+  /**
+   * Computes merged seeds for polynucleated cells.
+   * If two nuclei are closer than the threshold, their midpoint is used as a single seed.
+   * Includes validation to distinguish hepatocytes from infiltrate cells.
+   */
+  private List<int[]> computeMergedSeeds() {
+    List<int[]> seeds = new ArrayList<>();
+    boolean[] processed = new boolean[nucleusROIs.size()];
+    double threshold = settings.mergeThreshold();
+    double thresholdSq = threshold * threshold;
+    int maxNuclei = settings.maxNucleiPerCell();
+
+    for (int i = 0; i < nucleusROIs.size(); i++) {
+      if (processed[i]) continue;
+
+      NucleusROI n1 = nucleusROIs.get(i);
+      int[] c1 = n1.getNucleusCenter();
+      if (c1 == null || c1.length < 2) continue;
+
+      List<NucleusROI> potentialMerge = new ArrayList<>();
+      potentialMerge.add(n1);
+      
+      // Find close neighbors
+      for (int j = i + 1; j < nucleusROIs.size(); j++) {
+        if (processed[j]) continue;
+
+        NucleusROI n2 = nucleusROIs.get(j);
+        int[] c2 = n2.getNucleusCenter();
+        if (c2 == null || c2.length < 2) continue;
+
+        double distSq = Math.pow(c1[0] - c2[0], 2) + Math.pow(c1[1] - c2[1], 2);
+        if (distSq <= thresholdSq) {
+          potentialMerge.add(n2);
+        }
+      }
+
+      // Validate merge
+      if (potentialMerge.size() > 1 && potentialMerge.size() <= maxNuclei) {
+        // Valid merge: mark all as processed and compute centroid
+        int sumX = 0;
+        int sumY = 0;
+        for (NucleusROI n : potentialMerge) {
+          int index = nucleusROIs.indexOf(n);
+          if (index >= 0) processed[index] = true;
+          
+          int[] c = n.getNucleusCenter();
+          sumX += c[0];
+          sumY += c[1];
+        }
+        seeds.add(new int[] {sumX / potentialMerge.size(), sumY / potentialMerge.size()});
+      } else {
+        // Invalid merge (too many nuclei or just one): treat as single nucleus
+        // Only mark the current one as processed
+        processed[i] = true;
+        seeds.add(c1);
+        // Note: Other potential neighbors are NOT marked processed, so they will be evaluated in their own iteration
+        // This allows them to potentially form valid pairs with other neighbors
+      }
+    }
+
+    return seeds;
   }
 
   /**
@@ -284,6 +369,10 @@ public class CytoplasmSegmentation {
 
     image.deleteRoi();
     image.updateAndDraw();
+
+     LOGGER.info(
+        "Added Image Borders", imageFileName);
+
   }
 
   /**
@@ -291,6 +380,7 @@ public class CytoplasmSegmentation {
    */
   private ImagePlus applyVesselExclusion(ImagePlus voronoiImage) {
     if (settings.useVesselExclusion() && backgroundMask != null) {
+      LOGGER.info("Applying vessel exclusion for image: {}", imageFileName);
       ImageCalculator ic = new ImageCalculator();
       ImagePlus result = ic.run("Max create", voronoiImage, backgroundMask);
       result.setTitle("Cytoplasm_" + System.currentTimeMillis());
@@ -334,6 +424,10 @@ public class CytoplasmSegmentation {
    */
   private void processNucleiForCellCreation(
       ImagePlus cytoplasmImage, int imageWidth, int imageHeight) {
+    // Keep track of processed cell ROIs to avoid duplicates in polynucleated cells
+    // We use the center coordinate of the cell ROI as a unique identifier
+    List<String> processedCellCenters = new ArrayList<>();
+
     for (int i = 0; i < nucleusROIs.size(); i++) {
       NucleusROI nucleusROI = nucleusROIs.get(i);
       int nucleusNumber = nucleusROI.getNucleusNumber();
@@ -352,11 +446,29 @@ public class CytoplasmSegmentation {
       Roi cellRoi = cytoplasmImage.getRoi();
 
       if (cellRoi != null && isValidCell(cellRoi)) {
+        // Check if this cell region has already been processed (for polynucleated cells)
+        Rectangle bounds = cellRoi.getBounds();
+        String cellCenterKey = bounds.getCenterX() + "_" + bounds.getCenterY();
+        
+        if (settings.mergeNuclei() && processedCellCenters.contains(cellCenterKey)) {
+          // This cell region was already created by another nucleus in the same cell
+          // We just need to link this nucleus to the existing cell/cytoplasm if possible
+          // For now, we skip creating duplicate ROIs
+          continue;
+        }
+        
+        processedCellCenters.add(cellCenterKey);
+
         // Create cell ROI
         CellROI cell = createCellROI(cellRoi, nucleusROI, nucleusNumber);
         cellROIs.add(cell);
 
         // Create cytoplasm ROI by subtracting nucleus from cell
+        // Note: For polynucleated cells, we should ideally subtract ALL nuclei in this cell
+        // But the current architecture links 1 nucleus <-> 1 cytoplasm
+        // So we stick to the current model where each nucleus gets its own cytoplasm region
+        // or we accept that for merged cells, the cytoplasm calculation might need refinement
+        // For now, we proceed with standard subtraction
         CytoplasmROI cytoplasm = createCytoplasmROI(cellRoi, nucleusROI, nucleusNumber);
         if (cytoplasm != null && isValidCytoplasm(cytoplasm)) {
           cytoplasmROIs.add(cytoplasm);
@@ -386,16 +498,32 @@ public class CytoplasmSegmentation {
   }
 
   /**
-   * Creates a cytoplasm ROI by subtracting the nucleus from the cell.
+   * Creates a cytoplasm ROI by subtracting the nucleus (or nuclei) from the cell.
    */
   private CytoplasmROI createCytoplasmROI(Roi cellRoi, NucleusROI nucleusROI, int nucleusNumber) {
     try {
       // Create ShapeRoi objects for subtraction operation
       ShapeRoi cellShape = new ShapeRoi(cellRoi);
-      ShapeRoi nucleusShape = new ShapeRoi(nucleusROI.getImageJRoi());
+      ShapeRoi cytoplasmShape = cellShape;
 
-      // Subtraction operation: cell - nucleus = cytoplasm (creates donut shape)
-      ShapeRoi cytoplasmShape = cellShape.not(nucleusShape);
+      if (settings.mergeNuclei()) {
+        // For polynucleated cells, subtract all nuclei that are contained within the cell ROI
+        for (NucleusROI nROI : nucleusROIs) {
+          Roi nImageJRoi = nROI.getImageJRoi();
+          if (nImageJRoi != null) {
+            // Check if nucleus center is inside the cell ROI
+            int[] center = nROI.getNucleusCenter();
+            if (cellRoi.contains(center[0], center[1])) {
+              ShapeRoi nucleusShape = new ShapeRoi(nImageJRoi);
+              cytoplasmShape = cytoplasmShape.not(nucleusShape);
+            }
+          }
+        }
+      } else {
+        // Standard behavior: subtract only the associated nucleus
+        ShapeRoi nucleusShape = new ShapeRoi(nucleusROI.getImageJRoi());
+        cytoplasmShape = cellShape.not(nucleusShape);
+      }
 
       if (cytoplasmShape != null) {
         String cytoplasmName = "Cytoplasm_" + nucleusNumber;

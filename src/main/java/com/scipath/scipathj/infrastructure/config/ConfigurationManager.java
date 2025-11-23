@@ -505,6 +505,19 @@ public class ConfigurationManager {
             CytoplasmSegmentationSettings.DEFAULT_SMOOTH_BOUNDARIES);
     boolean verbose =
         getBooleanProperty(properties, "verbose", CytoplasmSegmentationSettings.DEFAULT_VERBOSE);
+    boolean mergeNuclei =
+        getBooleanProperty(
+            properties, "mergeNuclei", CytoplasmSegmentationSettings.DEFAULT_MERGE_NUCLEI);
+    double mergeThreshold =
+        getDoubleProperty(
+            properties,
+            "mergeThreshold",
+            CytoplasmSegmentationSettings.DEFAULT_MERGE_THRESHOLD);
+    int maxNucleiPerCell =
+        getIntProperty(
+            properties,
+            "maxNucleiPerCell",
+            CytoplasmSegmentationSettings.DEFAULT_MAX_NUCLEI_PER_CELL);
 
     return new CytoplasmSegmentationSettings(
         useVesselExclusion,
@@ -518,7 +531,10 @@ public class ConfigurationManager {
         CytoplasmSegmentationSettings.DEFAULT_MAX_ASPECT_RATIO,
         CytoplasmSegmentationSettings.DEFAULT_LINK_NUCLEUS_TO_CYTOPLASM,
         CytoplasmSegmentationSettings.DEFAULT_CREATE_CELL_ROIS,
-        CytoplasmSegmentationSettings.DEFAULT_EXCLUDE_BORDER_CELLS);
+        CytoplasmSegmentationSettings.DEFAULT_EXCLUDE_BORDER_CELLS,
+        mergeNuclei,
+        mergeThreshold,
+        maxNucleiPerCell);
   }
 
   private Properties createCytoplasmProperties(CytoplasmSegmentationSettings settings) {
@@ -536,6 +552,11 @@ public class ConfigurationManager {
         "linkNucleusToCytoplasm", String.valueOf(settings.linkNucleusToCytoplasm()));
     properties.setProperty("createCellROIs", String.valueOf(settings.createCellROIs()));
     properties.setProperty("excludeBorderCells", String.valueOf(settings.excludeBorderCells()));
+    properties.setProperty("mergeNuclei", String.valueOf(settings.mergeNuclei()));
+    properties.setProperty("mergeThreshold", String.valueOf(settings.mergeThreshold()));
+    properties.setProperty("maxNucleiPerCell", String.valueOf(settings.maxNucleiPerCell()));
+
+    // Additional properties
     return properties;
   }
 

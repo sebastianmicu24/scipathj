@@ -41,6 +41,9 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
   private JCheckBox fillHolesCheck;
   private JCheckBox smoothBoundariesCheck;
   private JCheckBox verboseCheck;
+  private JCheckBox mergeNucleiCheck;
+  private JSpinner mergeThresholdSpinner;
+  private JSpinner maxNucleiPerCellSpinner;
 
   private boolean settingsChanged = false;
 
@@ -92,6 +95,10 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
     addSeparator(panel, gbc, "Voronoi Tessellation");
     addVoronoiRows(panel, gbc);
 
+    // Polynucleated Cells Settings
+    addSeparator(panel, gbc, "Polynucleated Cells");
+    addPolynucleatedRows(panel, gbc);
+
     // Vessel Exclusion Settings
     addSeparator(panel, gbc, "Vessel Exclusion");
     addVesselExclusionRows(panel, gbc);
@@ -120,6 +127,46 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
         new SpinnerNumberModel(5.0, 0.0, 100.0, 0.5),
         "Expansion distance for Voronoi tessellation (pixels)");
     voronoiExpansionSpinner = (JSpinner) panel.getComponent(panel.getComponentCount() - 1);
+  }
+
+  private void addPolynucleatedRows(JPanel panel, GridBagConstraints gbc) {
+    // Merge Nuclei Checkbox
+    gbc.gridx = 0;
+    gbc.gridy++;
+    gbc.gridwidth = 2;
+    mergeNucleiCheck = new JCheckBox("Merge Close Nuclei (Polynucleated Cells)");
+    mergeNucleiCheck.setToolTipText("Merge nuclei closer than threshold into a single seed for Voronoi");
+    panel.add(mergeNucleiCheck, gbc);
+    gbc.gridwidth = 1;
+
+    // Merge Threshold
+    String thresholdLabel = "Merge Threshold (" + mainSettings.scaleUnit() + "):";
+    double thresholdScaled = CytoplasmSegmentationSettings.pixelsToScaledSize(
+        CytoplasmSegmentationSettings.DEFAULT_MERGE_THRESHOLD, mainSettings);
+    
+    addSpinnerRow(
+        panel,
+        gbc,
+        thresholdLabel,
+        new SpinnerNumberModel(thresholdScaled, 0.0, 1000.0, 1.0),
+        "Distance threshold for merging nuclei in " + mainSettings.scaleUnit() + " (converted to pixels automatically)");
+    mergeThresholdSpinner = (JSpinner) panel.getComponent(panel.getComponentCount() - 1);
+
+    // Max Nuclei Per Cell
+    addSpinnerRow(
+        panel,
+        gbc,
+        "Max Nuclei Per Cell:",
+        new SpinnerNumberModel(2, 2, 10, 1),
+        "Maximum number of nuclei allowed to merge into a single cell");
+    maxNucleiPerCellSpinner = (JSpinner) panel.getComponent(panel.getComponentCount() - 1);
+    
+    // Enable/disable spinners based on checkbox
+    mergeNucleiCheck.addActionListener(e -> {
+      boolean selected = mergeNucleiCheck.isSelected();
+      mergeThresholdSpinner.setEnabled(selected);
+      maxNucleiPerCellSpinner.setEnabled(selected);
+    });
   }
 
   private void addVesselExclusionRows(JPanel panel, GridBagConstraints gbc) {
@@ -319,6 +366,17 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
     smoothBoundariesCheck.setSelected(true); // Default value
     verboseCheck.setSelected(false); // Default value
 
+    // Load polynucleated settings
+    mergeNucleiCheck.setSelected(settings.mergeNuclei());
+    double mergeThresholdScaled = CytoplasmSegmentationSettings.pixelsToScaledSize(
+        settings.mergeThreshold(), mainSettings);
+    mergeThresholdSpinner.setValue(mergeThresholdScaled);
+    maxNucleiPerCellSpinner.setValue(settings.maxNucleiPerCell());
+    
+    boolean mergeEnabled = settings.mergeNuclei();
+    mergeThresholdSpinner.setEnabled(mergeEnabled);
+    maxNucleiPerCellSpinner.setEnabled(mergeEnabled);
+
     LOGGER.debug("Loaded current cytoplasm segmentation settings into dialog");
   }
 
@@ -337,9 +395,21 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
       double gaussianBlurSigma = ((Number) gaussianBlurSigmaSpinner.getValue()).doubleValue();
       double morphClosingRadius = ((Number) morphClosingRadiusSpinner.getValue()).doubleValue();
       double watershedTolerance = ((Number) watershedToleranceSpinner.getValue()).doubleValue();
+      double mergeThreshold = ((Number) mergeThresholdSpinner.getValue()).doubleValue();
+      int maxNucleiPerCell = ((Number) maxNucleiPerCellSpinner.getValue()).intValue();
 
       if (voronoiExpansion < 0) {
         showErrorMessage("Voronoi expansion must be non-negative");
+        return false;
+      }
+
+      if (mergeThreshold < 0) {
+        showErrorMessage("Merge threshold must be non-negative");
+        return false;
+      }
+
+      if (maxNucleiPerCell < 2) {
+        showErrorMessage("Max nuclei per cell must be at least 2");
         return false;
       }
 
@@ -475,12 +545,16 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
         double maxCellPixels = CytoplasmSegmentationSettings.scaledSizeToPixels(maxCellScaled, mainSettings);
         double minCytoplasmPixels = CytoplasmSegmentationSettings.scaledSizeToPixels(minCytoplasmScaled, mainSettings);
         double maxCytoplasmPixels = CytoplasmSegmentationSettings.scaledSizeToPixels(maxCytoplasmScaled, mainSettings);
+        double mergeThresholdPixels = CytoplasmSegmentationSettings.scaledSizeToPixels(
+            ((Number) mergeThresholdSpinner.getValue()).doubleValue(), mainSettings);
+        int maxNucleiPerCell = ((Number) maxNucleiPerCellSpinner.getValue()).intValue();
 
         // Create new immutable settings instance with updated values
         // Note: CytoplasmSegmentationSettings record has specific parameters:
         // useVesselExclusion, addImageBorder, borderWidth, applyVoronoi,
         // minCellSize, maxCellSize, minCytoplasmSize, validateCellShape,
-        // maxAspectRatio, linkNucleusToCytoplasm, createCellROIs, excludeBorderCells
+        // maxAspectRatio, linkNucleusToCytoplasm, createCellROIs, excludeBorderCells,
+        // mergeNuclei, mergeThreshold, maxNucleiPerCell
         settings =
             new CytoplasmSegmentationSettings(
                 useVesselExclusionCheck.isSelected(),
@@ -494,7 +568,10 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
                 5.0, // maxAspectRatio - default
                 true, // linkNucleusToCytoplasm - default
                 true, // createCellROIs - default
-                false); // excludeBorderCells - default
+                false, // excludeBorderCells - default
+                mergeNucleiCheck.isSelected(),
+                mergeThresholdPixels,
+                maxNucleiPerCell);
 
         // Save to file
         configManager.saveCytoplasmSegmentationSettings(settings);

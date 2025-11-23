@@ -167,8 +167,10 @@ public class VesselSegmentation {
       LOGGER.info("Vessel segmentation completed. Found {} vessels", vesselROIs.size());
 
       // Clean up working image
-      workingImage.changes = false;
-      workingImage.close();
+      if (workingImage != null) {
+        workingImage.changes = false;
+        workingImage.close();
+      }
 
       return vesselROIs;
 
