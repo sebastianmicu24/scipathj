@@ -518,6 +518,26 @@ public class ConfigurationManager {
             properties,
             "maxNucleiPerCell",
             CytoplasmSegmentationSettings.DEFAULT_MAX_NUCLEI_PER_CELL);
+    double mergeMinNucleusArea =
+        getDoubleProperty(
+            properties,
+            "mergeMinNucleusArea",
+            CytoplasmSegmentationSettings.DEFAULT_MERGE_MIN_NUCLEUS_AREA);
+    double mergeMaxNucleusArea =
+        getDoubleProperty(
+            properties,
+            "mergeMaxNucleusArea",
+            CytoplasmSegmentationSettings.DEFAULT_MERGE_MAX_NUCLEUS_AREA);
+    double mergeMinCircularity =
+        getDoubleProperty(
+            properties,
+            "mergeMinCircularity",
+            CytoplasmSegmentationSettings.DEFAULT_MERGE_MIN_CIRCULARITY);
+    double mergeMaxAspectRatio =
+        getDoubleProperty(
+            properties,
+            "mergeMaxAspectRatio",
+            CytoplasmSegmentationSettings.DEFAULT_MERGE_MAX_ASPECT_RATIO);
 
     return new CytoplasmSegmentationSettings(
         useVesselExclusion,
@@ -534,7 +554,11 @@ public class ConfigurationManager {
         CytoplasmSegmentationSettings.DEFAULT_EXCLUDE_BORDER_CELLS,
         mergeNuclei,
         mergeThreshold,
-        maxNucleiPerCell);
+        maxNucleiPerCell,
+        mergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        mergeMinCircularity,
+        mergeMaxAspectRatio);
   }
 
   private Properties createCytoplasmProperties(CytoplasmSegmentationSettings settings) {
@@ -555,6 +579,10 @@ public class ConfigurationManager {
     properties.setProperty("mergeNuclei", String.valueOf(settings.mergeNuclei()));
     properties.setProperty("mergeThreshold", String.valueOf(settings.mergeThreshold()));
     properties.setProperty("maxNucleiPerCell", String.valueOf(settings.maxNucleiPerCell()));
+    properties.setProperty("mergeMinNucleusArea", String.valueOf(settings.mergeMinNucleusArea()));
+    properties.setProperty("mergeMaxNucleusArea", String.valueOf(settings.mergeMaxNucleusArea()));
+    properties.setProperty("mergeMinCircularity", String.valueOf(settings.mergeMinCircularity()));
+    properties.setProperty("mergeMaxAspectRatio", String.valueOf(settings.mergeMaxAspectRatio()));
 
     // Additional properties
     return properties;

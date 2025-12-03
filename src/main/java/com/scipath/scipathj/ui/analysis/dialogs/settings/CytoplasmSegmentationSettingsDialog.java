@@ -44,6 +44,10 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
   private JCheckBox mergeNucleiCheck;
   private JSpinner mergeThresholdSpinner;
   private JSpinner maxNucleiPerCellSpinner;
+  private JSpinner mergeMinNucleusAreaSpinner;
+  private JSpinner mergeMaxNucleusAreaSpinner;
+  private JSpinner mergeMinCircularitySpinner;
+  private JSpinner mergeMaxAspectRatioSpinner;
 
   private boolean settingsChanged = false;
 
@@ -160,12 +164,61 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
         new SpinnerNumberModel(2, 2, 10, 1),
         "Maximum number of nuclei allowed to merge into a single cell");
     maxNucleiPerCellSpinner = (JSpinner) panel.getComponent(panel.getComponentCount() - 1);
-    
+
+    // Advanced Merging Filters
+    addSeparator(panel, gbc, "Advanced Merging Filters");
+
+    // Min Nucleus Area
+    String minAreaLabel = "Min Nucleus Area (" + mainSettings.scaleUnit() + "²):";
+    double minAreaScaled = CytoplasmSegmentationSettings.pixelsToScaledSize(
+        CytoplasmSegmentationSettings.DEFAULT_MERGE_MIN_NUCLEUS_AREA, mainSettings);
+    addSpinnerRow(
+        panel,
+        gbc,
+        minAreaLabel,
+        new SpinnerNumberModel(minAreaScaled, 0.0, 10000.0, 10.0),
+        "Minimum nucleus area to be considered for merging");
+    mergeMinNucleusAreaSpinner = (JSpinner) panel.getComponent(panel.getComponentCount() - 1);
+
+    // Max Nucleus Area
+    String maxAreaLabel = "Max Nucleus Area (" + mainSettings.scaleUnit() + "²):";
+    double maxAreaScaled = CytoplasmSegmentationSettings.pixelsToScaledSize(
+        CytoplasmSegmentationSettings.DEFAULT_MERGE_MAX_NUCLEUS_AREA, mainSettings);
+    addSpinnerRow(
+        panel,
+        gbc,
+        maxAreaLabel,
+        new SpinnerNumberModel(maxAreaScaled, 0.0, 100000.0, 100.0),
+        "Maximum nucleus area to be considered for merging");
+    mergeMaxNucleusAreaSpinner = (JSpinner) panel.getComponent(panel.getComponentCount() - 1);
+
+    // Min Circularity
+    addSpinnerRow(
+        panel,
+        gbc,
+        "Min Circularity:",
+        new SpinnerNumberModel(0.0, 0.0, 1.0, 0.05),
+        "Minimum circularity (0.0-1.0) for merging (higher = rounder)");
+    mergeMinCircularitySpinner = (JSpinner) panel.getComponent(panel.getComponentCount() - 1);
+
+    // Max Aspect Ratio
+    addSpinnerRow(
+        panel,
+        gbc,
+        "Max Aspect Ratio:",
+        new SpinnerNumberModel(10.0, 1.0, 20.0, 0.1),
+        "Maximum aspect ratio for merging (lower = rounder)");
+    mergeMaxAspectRatioSpinner = (JSpinner) panel.getComponent(panel.getComponentCount() - 1);
+
     // Enable/disable spinners based on checkbox
     mergeNucleiCheck.addActionListener(e -> {
       boolean selected = mergeNucleiCheck.isSelected();
       mergeThresholdSpinner.setEnabled(selected);
       maxNucleiPerCellSpinner.setEnabled(selected);
+      mergeMinNucleusAreaSpinner.setEnabled(selected);
+      mergeMaxNucleusAreaSpinner.setEnabled(selected);
+      mergeMinCircularitySpinner.setEnabled(selected);
+      mergeMaxAspectRatioSpinner.setEnabled(selected);
     });
   }
 
@@ -372,10 +425,25 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
         settings.mergeThreshold(), mainSettings);
     mergeThresholdSpinner.setValue(mergeThresholdScaled);
     maxNucleiPerCellSpinner.setValue(settings.maxNucleiPerCell());
-    
+
+    // Load advanced merging filters
+    double mergeMinAreaScaled = CytoplasmSegmentationSettings.pixelsToScaledSize(
+        settings.mergeMinNucleusArea(), mainSettings);
+    double mergeMaxAreaScaled = CytoplasmSegmentationSettings.pixelsToScaledSize(
+        settings.mergeMaxNucleusArea(), mainSettings);
+
+    mergeMinNucleusAreaSpinner.setValue(mergeMinAreaScaled);
+    mergeMaxNucleusAreaSpinner.setValue(mergeMaxAreaScaled);
+    mergeMinCircularitySpinner.setValue(settings.mergeMinCircularity());
+    mergeMaxAspectRatioSpinner.setValue(settings.mergeMaxAspectRatio());
+
     boolean mergeEnabled = settings.mergeNuclei();
     mergeThresholdSpinner.setEnabled(mergeEnabled);
     maxNucleiPerCellSpinner.setEnabled(mergeEnabled);
+    mergeMinNucleusAreaSpinner.setEnabled(mergeEnabled);
+    mergeMaxNucleusAreaSpinner.setEnabled(mergeEnabled);
+    mergeMinCircularitySpinner.setEnabled(mergeEnabled);
+    mergeMaxAspectRatioSpinner.setEnabled(mergeEnabled);
 
     LOGGER.debug("Loaded current cytoplasm segmentation settings into dialog");
   }
@@ -397,6 +465,10 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
       double watershedTolerance = ((Number) watershedToleranceSpinner.getValue()).doubleValue();
       double mergeThreshold = ((Number) mergeThresholdSpinner.getValue()).doubleValue();
       int maxNucleiPerCell = ((Number) maxNucleiPerCellSpinner.getValue()).intValue();
+      double mergeMinNucleusArea = ((Number) mergeMinNucleusAreaSpinner.getValue()).doubleValue();
+      double mergeMaxNucleusArea = ((Number) mergeMaxNucleusAreaSpinner.getValue()).doubleValue();
+      double mergeMinCircularity = ((Number) mergeMinCircularitySpinner.getValue()).doubleValue();
+      double mergeMaxAspectRatio = ((Number) mergeMaxAspectRatioSpinner.getValue()).doubleValue();
 
       if (voronoiExpansion < 0) {
         showErrorMessage("Voronoi expansion must be non-negative");
@@ -410,6 +482,31 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
 
       if (maxNucleiPerCell < 2) {
         showErrorMessage("Max nuclei per cell must be at least 2");
+        return false;
+      }
+
+      if (mergeMinNucleusArea < 0) {
+        showErrorMessage("Merge min nucleus area must be non-negative");
+        return false;
+      }
+
+      if (mergeMaxNucleusArea < 0) {
+        showErrorMessage("Merge max nucleus area must be non-negative");
+        return false;
+      }
+
+      if (mergeMinNucleusArea > mergeMaxNucleusArea) {
+        showErrorMessage("Merge min nucleus area cannot be greater than max area");
+        return false;
+      }
+
+      if (mergeMinCircularity < 0.0 || mergeMinCircularity > 1.0) {
+        showErrorMessage("Merge min circularity must be between 0.0 and 1.0");
+        return false;
+      }
+
+      if (mergeMaxAspectRatio < 1.0) {
+        showErrorMessage("Merge max aspect ratio must be at least 1.0");
         return false;
       }
 
@@ -548,13 +645,20 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
         double mergeThresholdPixels = CytoplasmSegmentationSettings.scaledSizeToPixels(
             ((Number) mergeThresholdSpinner.getValue()).doubleValue(), mainSettings);
         int maxNucleiPerCell = ((Number) maxNucleiPerCellSpinner.getValue()).intValue();
+        double mergeMinNucleusAreaPixels = CytoplasmSegmentationSettings.scaledSizeToPixels(
+            ((Number) mergeMinNucleusAreaSpinner.getValue()).doubleValue(), mainSettings);
+        double mergeMaxNucleusAreaPixels = CytoplasmSegmentationSettings.scaledSizeToPixels(
+            ((Number) mergeMaxNucleusAreaSpinner.getValue()).doubleValue(), mainSettings);
+        double mergeMinCircularity = ((Number) mergeMinCircularitySpinner.getValue()).doubleValue();
+        double mergeMaxAspectRatio = ((Number) mergeMaxAspectRatioSpinner.getValue()).doubleValue();
 
         // Create new immutable settings instance with updated values
         // Note: CytoplasmSegmentationSettings record has specific parameters:
         // useVesselExclusion, addImageBorder, borderWidth, applyVoronoi,
         // minCellSize, maxCellSize, minCytoplasmSize, validateCellShape,
         // maxAspectRatio, linkNucleusToCytoplasm, createCellROIs, excludeBorderCells,
-        // mergeNuclei, mergeThreshold, maxNucleiPerCell
+        // mergeNuclei, mergeThreshold, maxNucleiPerCell,
+        // mergeMinNucleusArea, mergeMaxNucleusArea, mergeMinCircularity, mergeMaxAspectRatio
         settings =
             new CytoplasmSegmentationSettings(
                 useVesselExclusionCheck.isSelected(),
@@ -571,7 +675,11 @@ public class CytoplasmSegmentationSettingsDialog extends JDialog {
                 false, // excludeBorderCells - default
                 mergeNucleiCheck.isSelected(),
                 mergeThresholdPixels,
-                maxNucleiPerCell);
+                maxNucleiPerCell,
+                mergeMinNucleusAreaPixels,
+                mergeMaxNucleusAreaPixels,
+                mergeMinCircularity,
+                mergeMaxAspectRatio);
 
         // Save to file
         configManager.saveCytoplasmSegmentationSettings(settings);

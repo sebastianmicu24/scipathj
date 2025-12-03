@@ -37,7 +37,11 @@ public record CytoplasmSegmentationSettings(
     boolean excludeBorderCells,
     boolean mergeNuclei,
     double mergeThreshold,
-    int maxNucleiPerCell) {
+    int maxNucleiPerCell,
+    double mergeMinNucleusArea,
+    double mergeMaxNucleusArea,
+    double mergeMinCircularity,
+    double mergeMaxAspectRatio) {
 
   // Default values based on SCHELI implementation
   public static final boolean DEFAULT_USE_VESSEL_EXCLUSION = true;
@@ -55,6 +59,10 @@ public record CytoplasmSegmentationSettings(
   public static final boolean DEFAULT_MERGE_NUCLEI = false;
   public static final double DEFAULT_MERGE_THRESHOLD = 20.0;
   public static final int DEFAULT_MAX_NUCLEI_PER_CELL = 2;
+  public static final double DEFAULT_MERGE_MIN_NUCLEUS_AREA = 0.0;
+  public static final double DEFAULT_MERGE_MAX_NUCLEUS_AREA = 10000.0;
+  public static final double DEFAULT_MERGE_MIN_CIRCULARITY = 0.0;
+  public static final double DEFAULT_MERGE_MAX_ASPECT_RATIO = 10.0;
 
   // Additional constants needed by ConfigurationManager
   public static final double DEFAULT_VORONOI_EXPANSION = 5.0;
@@ -108,6 +116,30 @@ public record CytoplasmSegmentationSettings(
       throw new IllegalArgumentException(
           "Max nuclei per cell must be at least 2, got: " + maxNucleiPerCell);
     }
+    if (mergeMinNucleusArea < 0) {
+      throw new IllegalArgumentException(
+          "Merge min nucleus area must be non-negative, got: " + mergeMinNucleusArea);
+    }
+    if (mergeMaxNucleusArea < 0) {
+      throw new IllegalArgumentException(
+          "Merge max nucleus area must be non-negative, got: " + mergeMaxNucleusArea);
+    }
+    if (mergeMinNucleusArea > mergeMaxNucleusArea) {
+      throw new IllegalArgumentException(
+          "Merge min nucleus area ("
+              + mergeMinNucleusArea
+              + ") must be less than or equal to max ("
+              + mergeMaxNucleusArea
+              + ")");
+    }
+    if (mergeMinCircularity < 0.0 || mergeMinCircularity > 1.0) {
+      throw new IllegalArgumentException(
+          "Merge min circularity must be between 0.0 and 1.0, got: " + mergeMinCircularity);
+    }
+    if (mergeMaxAspectRatio < 1.0) {
+      throw new IllegalArgumentException(
+          "Merge max aspect ratio must be at least 1.0, got: " + mergeMaxAspectRatio);
+    }
   }
 
   /**
@@ -131,7 +163,11 @@ public record CytoplasmSegmentationSettings(
         DEFAULT_EXCLUDE_BORDER_CELLS,
         DEFAULT_MERGE_NUCLEI,
         DEFAULT_MERGE_THRESHOLD,
-        DEFAULT_MAX_NUCLEI_PER_CELL);
+        DEFAULT_MAX_NUCLEI_PER_CELL,
+        DEFAULT_MERGE_MIN_NUCLEUS_AREA,
+        DEFAULT_MERGE_MAX_NUCLEUS_AREA,
+        DEFAULT_MERGE_MIN_CIRCULARITY,
+        DEFAULT_MERGE_MAX_ASPECT_RATIO);
   }
 
   /**
@@ -174,7 +210,11 @@ public record CytoplasmSegmentationSettings(
         excludeBorderCells,
         mergeNuclei,
         mergeThreshold,
-        maxNucleiPerCell);
+        maxNucleiPerCell,
+        mergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        mergeMinCircularity,
+        mergeMaxAspectRatio);
   }
 
   /**
@@ -209,7 +249,11 @@ public record CytoplasmSegmentationSettings(
         excludeBorderCells,
         mergeNuclei,
         mergeThreshold,
-        maxNucleiPerCell);
+        maxNucleiPerCell,
+        mergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        mergeMinCircularity,
+        mergeMaxAspectRatio);
   }
 
   /**
@@ -235,7 +279,11 @@ public record CytoplasmSegmentationSettings(
         excludeBorderCells,
         mergeNuclei,
         mergeThreshold,
-        maxNucleiPerCell);
+        maxNucleiPerCell,
+        mergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        mergeMinCircularity,
+        mergeMaxAspectRatio);
   }
 
   /**
@@ -260,7 +308,11 @@ public record CytoplasmSegmentationSettings(
         excludeBorderCells,
         mergeNuclei,
         mergeThreshold,
-        maxNucleiPerCell);
+        maxNucleiPerCell,
+        mergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        mergeMinCircularity,
+        mergeMaxAspectRatio);
   }
 
   /**
@@ -286,7 +338,11 @@ public record CytoplasmSegmentationSettings(
         excludeBorderCells,
         mergeNuclei,
         mergeThreshold,
-        maxNucleiPerCell);
+        maxNucleiPerCell,
+        mergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        mergeMinCircularity,
+        mergeMaxAspectRatio);
   }
 
   /**
@@ -312,7 +368,11 @@ public record CytoplasmSegmentationSettings(
         excludeBorderCells,
         mergeNuclei,
         mergeThreshold,
-        maxNucleiPerCell);
+        maxNucleiPerCell,
+        mergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        mergeMinCircularity,
+        mergeMaxAspectRatio);
   }
 
   /**
@@ -338,7 +398,11 @@ public record CytoplasmSegmentationSettings(
         excludeBorderCells,
         mergeNuclei,
         mergeThreshold,
-        maxNucleiPerCell);
+        maxNucleiPerCell,
+        mergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        mergeMinCircularity,
+        mergeMaxAspectRatio);
   }
 
   /**
@@ -426,7 +490,11 @@ public record CytoplasmSegmentationSettings(
         excludeBorderCells,
         mergeNuclei,
         mergeThreshold,
-        maxNucleiPerCell);
+        maxNucleiPerCell,
+        mergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        mergeMinCircularity,
+        mergeMaxAspectRatio);
   }
 
   /**
@@ -452,7 +520,11 @@ public record CytoplasmSegmentationSettings(
         excludeBorderCells,
         mergeNuclei,
         mergeThreshold,
-        maxNucleiPerCell);
+        maxNucleiPerCell,
+        mergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        mergeMinCircularity,
+        mergeMaxAspectRatio);
   }
 
   /**
@@ -478,7 +550,11 @@ public record CytoplasmSegmentationSettings(
         excludeBorderCells,
         mergeNuclei,
         mergeThreshold,
-        maxNucleiPerCell);
+        maxNucleiPerCell,
+        mergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        mergeMinCircularity,
+        mergeMaxAspectRatio);
   }
 
   /**
@@ -499,11 +575,15 @@ public record CytoplasmSegmentationSettings(
         validateCellShape,
         maxAspectRatio,
         linkNucleusToCytoplasm,
-        createCellROIs,
+        newCreateCellROIs,
         excludeBorderCells,
         mergeNuclei,
         mergeThreshold,
-        maxNucleiPerCell);
+        maxNucleiPerCell,
+        mergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        mergeMinCircularity,
+        mergeMaxAspectRatio);
   }
 
   /**
@@ -528,7 +608,11 @@ public record CytoplasmSegmentationSettings(
         newExcludeBorderCells,
         mergeNuclei,
         mergeThreshold,
-        maxNucleiPerCell);
+        maxNucleiPerCell,
+        mergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        mergeMinCircularity,
+        mergeMaxAspectRatio);
   }
 
   /**
@@ -553,7 +637,11 @@ public record CytoplasmSegmentationSettings(
         excludeBorderCells,
         newMergeNuclei,
         mergeThreshold,
-        maxNucleiPerCell);
+        maxNucleiPerCell,
+        mergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        mergeMinCircularity,
+        mergeMaxAspectRatio);
   }
 
   /**
@@ -579,7 +667,11 @@ public record CytoplasmSegmentationSettings(
         excludeBorderCells,
         mergeNuclei,
         newMergeThreshold,
-        maxNucleiPerCell);
+        maxNucleiPerCell,
+        mergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        mergeMinCircularity,
+        mergeMaxAspectRatio);
   }
 
   /**
@@ -605,7 +697,127 @@ public record CytoplasmSegmentationSettings(
         excludeBorderCells,
         mergeNuclei,
         mergeThreshold,
-        newMaxNucleiPerCell);
+        newMaxNucleiPerCell,
+        mergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        mergeMinCircularity,
+        mergeMaxAspectRatio);
+  }
+
+  /**
+   * Creates a new instance with updated merge min nucleus area.
+   *
+   * @param newMergeMinNucleusArea The new minimum nucleus area for merging
+   * @return A new instance with the updated setting
+   */
+  public CytoplasmSegmentationSettings withMergeMinNucleusArea(double newMergeMinNucleusArea) {
+    return new CytoplasmSegmentationSettings(
+        useVesselExclusion,
+        addImageBorder,
+        borderWidth,
+        applyVoronoi,
+        minCellSize,
+        maxCellSize,
+        minCytoplasmSize,
+        validateCellShape,
+        maxAspectRatio,
+        linkNucleusToCytoplasm,
+        createCellROIs,
+        excludeBorderCells,
+        mergeNuclei,
+        mergeThreshold,
+        maxNucleiPerCell,
+        newMergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        mergeMinCircularity,
+        mergeMaxAspectRatio);
+  }
+
+  /**
+   * Creates a new instance with updated merge max nucleus area.
+   *
+   * @param newMergeMaxNucleusArea The new maximum nucleus area for merging
+   * @return A new instance with the updated setting
+   */
+  public CytoplasmSegmentationSettings withMergeMaxNucleusArea(double newMergeMaxNucleusArea) {
+    return new CytoplasmSegmentationSettings(
+        useVesselExclusion,
+        addImageBorder,
+        borderWidth,
+        applyVoronoi,
+        minCellSize,
+        maxCellSize,
+        minCytoplasmSize,
+        validateCellShape,
+        maxAspectRatio,
+        linkNucleusToCytoplasm,
+        createCellROIs,
+        excludeBorderCells,
+        mergeNuclei,
+        mergeThreshold,
+        maxNucleiPerCell,
+        mergeMinNucleusArea,
+        newMergeMaxNucleusArea,
+        mergeMinCircularity,
+        mergeMaxAspectRatio);
+  }
+
+  /**
+   * Creates a new instance with updated merge min circularity.
+   *
+   * @param newMergeMinCircularity The new minimum circularity for merging
+   * @return A new instance with the updated setting
+   */
+  public CytoplasmSegmentationSettings withMergeMinCircularity(double newMergeMinCircularity) {
+    return new CytoplasmSegmentationSettings(
+        useVesselExclusion,
+        addImageBorder,
+        borderWidth,
+        applyVoronoi,
+        minCellSize,
+        maxCellSize,
+        minCytoplasmSize,
+        validateCellShape,
+        maxAspectRatio,
+        linkNucleusToCytoplasm,
+        createCellROIs,
+        excludeBorderCells,
+        mergeNuclei,
+        mergeThreshold,
+        maxNucleiPerCell,
+        mergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        newMergeMinCircularity,
+        mergeMaxAspectRatio);
+  }
+
+  /**
+   * Creates a new instance with updated merge max aspect ratio.
+   *
+   * @param newMergeMaxAspectRatio The new maximum aspect ratio for merging
+   * @return A new instance with the updated setting
+   */
+  public CytoplasmSegmentationSettings withMergeMaxAspectRatio(double newMergeMaxAspectRatio) {
+    return new CytoplasmSegmentationSettings(
+        useVesselExclusion,
+        addImageBorder,
+        borderWidth,
+        applyVoronoi,
+        minCellSize,
+        maxCellSize,
+        minCytoplasmSize,
+        validateCellShape,
+        maxAspectRatio,
+        linkNucleusToCytoplasm,
+        createCellROIs,
+        excludeBorderCells,
+        mergeNuclei,
+        mergeThreshold,
+        maxNucleiPerCell,
+        mergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        mergeMinCircularity,
+        newMergeMaxAspectRatio);
   }
 
   /**
@@ -653,6 +865,22 @@ public record CytoplasmSegmentationSettings(
       throw new IllegalStateException(
           "Invalid max nuclei per cell: " + maxNucleiPerCell + " (must be >= 2)");
     }
+    if (mergeMinNucleusArea > mergeMaxNucleusArea) {
+      throw new IllegalStateException(
+          "Invalid merge nucleus area range: min ("
+              + mergeMinNucleusArea
+              + ") > max ("
+              + mergeMaxNucleusArea
+              + ")");
+    }
+    if (mergeMinCircularity < 0.0 || mergeMinCircularity > 1.0) {
+      throw new IllegalStateException(
+          "Invalid merge min circularity: " + mergeMinCircularity + " (must be 0.0-1.0)");
+    }
+    if (mergeMaxAspectRatio < 1.0) {
+      throw new IllegalStateException(
+          "Invalid merge max aspect ratio: " + mergeMaxAspectRatio + " (must be >= 1.0)");
+    }
   }
 
   /**
@@ -675,6 +903,10 @@ public record CytoplasmSegmentationSettings(
         createCellROIs,
         mergeNuclei,
         mergeThreshold,
-        maxNucleiPerCell);
+        maxNucleiPerCell,
+        mergeMinNucleusArea,
+        mergeMaxNucleusArea,
+        mergeMinCircularity,
+        mergeMaxAspectRatio);
   }
 }

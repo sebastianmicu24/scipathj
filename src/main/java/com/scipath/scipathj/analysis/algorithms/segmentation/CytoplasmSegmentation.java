@@ -293,12 +293,21 @@ public class CytoplasmSegmentation {
     double thresholdSq = threshold * threshold;
     int maxNuclei = settings.maxNucleiPerCell();
 
+    // Get morphological filters
+    double minArea = settings.mergeMinNucleusArea();
+    double maxArea = settings.mergeMaxNucleusArea();
+    double minCircularity = settings.mergeMinCircularity();
+    double maxAspectRatio = settings.mergeMaxAspectRatio();
+
     for (int i = 0; i < nucleusROIs.size(); i++) {
       if (processed[i]) continue;
 
       NucleusROI n1 = nucleusROIs.get(i);
       int[] c1 = n1.getNucleusCenter();
       if (c1 == null || c1.length < 2) continue;
+
+      // Check if n1 is eligible for merging based on morphology
+      boolean n1Eligible = isNucleusEligibleForMerging(n1, minArea, maxArea, minCircularity, maxAspectRatio);
 
       List<NucleusROI> potentialMerge = new ArrayList<>();
       potentialMerge.add(n1);
@@ -313,7 +322,14 @@ public class CytoplasmSegmentation {
 
         double distSq = Math.pow(c1[0] - c2[0], 2) + Math.pow(c1[1] - c2[1], 2);
         if (distSq <= thresholdSq) {
-          potentialMerge.add(n2);
+          // Check if n2 is eligible for merging based on morphology
+          boolean n2Eligible = isNucleusEligibleForMerging(n2, minArea, maxArea, minCircularity, maxAspectRatio);
+          
+          // Only merge if BOTH nuclei are eligible (e.g. both are hepatocyte-like)
+          // If one is not eligible (e.g. infiltrate), do not merge
+          if (n1Eligible && n2Eligible) {
+            potentialMerge.add(n2);
+          }
         }
       }
 
@@ -340,8 +356,40 @@ public class CytoplasmSegmentation {
         // This allows them to potentially form valid pairs with other neighbors
       }
     }
-
     return seeds;
+  }
+
+  /**
+   * Checks if a nucleus is eligible for merging based on morphological criteria.
+   * This helps distinguish hepatocytes (eligible) from infiltrate/other cells (not eligible).
+   */
+  private boolean isNucleusEligibleForMerging(
+      NucleusROI nucleus,
+      double minArea,
+      double maxArea,
+      double minCircularity,
+      double maxAspectRatio) {
+    
+    double area = nucleus.getNucleusArea();
+    double circularity = nucleus.getCircularity();
+    double aspectRatio = nucleus.getAspectRatio();
+
+    // Check area constraints
+    if (area < minArea || area > maxArea) {
+      return false;
+    }
+
+    // Check circularity (hepatocytes are typically rounder)
+    if (circularity < minCircularity) {
+      return false;
+    }
+
+    // Check aspect ratio (hepatocytes are typically not elongated)
+    if (aspectRatio > maxAspectRatio) {
+      return false;
+    }
+
+    return true;
   }
 
   /**
