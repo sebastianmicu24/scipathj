@@ -1,5 +1,6 @@
 package com.scipath.scipathj.analysis.pipeline;
 import com.scipath.scipathj.analysis.config.ClassificationSettings;
+import com.scipath.scipathj.analysis.config.UnsupervisedClassificationSettings;
 
 import com.scipath.scipathj.infrastructure.config.ConfigurationManager;
 import com.scipath.scipathj.analysis.config.CytoplasmSegmentationSettings;
@@ -17,6 +18,7 @@ import com.scipath.scipathj.analysis.algorithms.segmentation.NuclearSegmentation
 import com.scipath.scipathj.analysis.algorithms.segmentation.CytoplasmSegmentation;
 import com.scipath.scipathj.analysis.algorithms.classification.FeatureExtraction;
 import com.scipath.scipathj.analysis.algorithms.classification.CellClassification;
+import com.scipath.scipathj.analysis.algorithms.classification.UnsupervisedClassifier;
 import com.scipath.scipathj.ui.common.ROIManager;
 import com.scipath.scipathj.ui.utils.ImageLoader;
 import com.scipath.scipathj.infrastructure.utils.DirectFileLogger;
@@ -56,6 +58,7 @@ public class AnalysisPipeline {
   private final NuclearSegmentationSettings nuclearSettings;
   private final CytoplasmSegmentationSettings cytoplasmSettings;
   private final FeatureExtractionSettings featureExtractionSettings;
+  private final UnsupervisedClassificationSettings unsupervisedSettings;
   private final MainSettings mainSettings;
   private final ROIManager roiManager;
 
@@ -92,6 +95,7 @@ public class AnalysisPipeline {
          configurationManager.loadCytoplasmSegmentationSettings(),
          configurationManager.loadFeatureExtractionSettings(),
          configurationManager.loadClassificationSettings(),
+         configurationManager.loadUnsupervisedClassificationSettings(),
          mainSettings,
          roiManager);
    }
@@ -115,6 +119,7 @@ public class AnalysisPipeline {
       final CytoplasmSegmentationSettings cytoplasmSettings,
       final FeatureExtractionSettings featureExtractionSettings,
       final ClassificationSettings classificationSettings,
+      final UnsupervisedClassificationSettings unsupervisedSettings,
       final MainSettings mainSettings,
       final ROIManager roiManager) {
     // Defensive copying to prevent exposure of internal representation
@@ -124,6 +129,7 @@ public class AnalysisPipeline {
     this.cytoplasmSettings = cytoplasmSettings;
     this.featureExtractionSettings = featureExtractionSettings; // Settings objects are immutable by design
     this.classificationSettings = classificationSettings; // Settings objects are immutable by design
+    this.unsupervisedSettings = unsupervisedSettings; // Settings objects are immutable by design
     this.mainSettings = mainSettings; // MainSettings is immutable by design
     this.roiManager = roiManager; // ROIManager is a service object, not data
   }
@@ -439,33 +445,69 @@ public class AnalysisPipeline {
       LOGGER.info("Feature extraction completed for image: {} - extracted features for {} ROIs",
           fileName, extractedFeatures.size());
 
-     // Step 5: Cell Classification using XGBoost
-      DirectFileLogger.logPerformance("Step 5: Starting cell classification");
-      LOGGER.info("Starting cell classification for image: {}", fileName);
+      // Store extracted features in ROIManager for unsupervised analysis
+      roiManager.storeExtractedFeatures(extractedFeatures);
 
-      long classificationSetupStart = System.currentTimeMillis();
-      CellClassification cellClassification = new CellClassification(
-          fileName,
-          extractedFeatures,
-          classificationSettings.modelPath(),
-          classificationSettings.selectedFeaturesPath(),
-          classificationSettings.labelMappingPath(),
-          classificationSettings.classDetailsPath());
-      long classificationSetupTime = System.currentTimeMillis() - classificationSetupStart;
-      DirectFileLogger.logPerformance("Cell classification object setup took " + classificationSetupTime + "ms");
-
-      long classificationExecStart = System.currentTimeMillis();
-      java.util.Map<String, CellClassification.ClassificationResult> classificationResults = cellClassification.classifyCells();
-      long classificationExecTime = System.currentTimeMillis() - classificationExecStart;
-
-      if (classificationResults != null && !classificationResults.isEmpty()) {
-        DirectFileLogger.logPerformance("Cell classification execution took " + classificationExecTime + "ms - classified " + classificationResults.size() + " ROIs");
+     // Step 5: Cell Classification (Unsupervised)
+      java.util.Map<String, CellClassification.ClassificationResult> classificationResults = java.util.Map.of();
+      
+      if (unsupervisedSettings.enabled()) {
+        DirectFileLogger.logPerformance("Step 5: Starting unsupervised cell classification (clustering)");
+        LOGGER.info("Starting unsupervised classification for image: {}", fileName);
+        
+        long classificationStart = System.currentTimeMillis();
+        UnsupervisedClassifier classifier = new UnsupervisedClassifier();
+        
+        // Use configured features or all available if empty
+        List<String> featuresToUse = unsupervisedSettings.selectedFeatures();
+        if (featuresToUse.isEmpty()) {
+            featuresToUse = java.util.Arrays.asList(com.scipath.scipathj.analysis.algorithms.classification.CellFeatureAggregator.getFeatureNames());
+        }
+        
+        Map<Integer, List<CellROI>> clusters = classifier.clusterCells(
+            cellROIs,
+            extractedFeatures,
+            fileName,
+            unsupervisedSettings.k(),
+            featuresToUse,
+            unsupervisedSettings.algorithm(),
+            unsupervisedSettings.maxIterations(),
+            unsupervisedSettings.epsilon(),
+            unsupervisedSettings.minPoints()
+        );
+        
+        // Convert clusters to classification results format for compatibility
+        // We'll use "Cluster X" as the class name
+        Map<String, CellClassification.ClassificationResult> results = new java.util.HashMap<>();
+        for (Map.Entry<Integer, List<CellROI>> entry : clusters.entrySet()) {
+            int clusterId = entry.getKey();
+            String className = "Cluster " + (clusterId + 1);
+            
+            for (CellROI cell : entry.getValue()) {
+                String roiKey = fileName + "_" + cell.getName();
+                // Create a result with 100% confidence for the assigned cluster
+                results.put(roiKey, new CellClassification.ClassificationResult(className, 1.0));
+                
+                // Also update ROI color based on cluster
+                // Generate distinct colors for K clusters
+                java.awt.Color color = java.awt.Color.getHSBColor((float) clusterId / unsupervisedSettings.k(), 0.8f, 0.9f);
+                cell.setDisplayColor(color);
+                if (cell.getAssociatedNucleus() != null) {
+                    cell.getAssociatedNucleus().setDisplayColor(color);
+                }
+                if (cell.getAssociatedCytoplasm() != null) {
+                    cell.getAssociatedCytoplasm().setDisplayColor(color);
+                }
+            }
+        }
+        
+        classificationResults = results;
         roiManager.setClassificationResults(classificationResults);
-        LOGGER.info("Cell classification completed for image: {} - classified {} ROIs",
-            fileName, classificationResults.size());
+        
+        long classificationTime = System.currentTimeMillis() - classificationStart;
+        DirectFileLogger.logPerformance("Unsupervised classification completed in " + classificationTime + "ms - clustered " + cellROIs.size() + " cells into " + unsupervisedSettings.k() + " clusters");
       } else {
-        DirectFileLogger.logPerformance("Cell classification execution took " + classificationExecTime + "ms - no results generated");
-        LOGGER.warn("No classification results generated for image: {}", fileName);
+        DirectFileLogger.logPerformance("Step 5: Classification skipped (disabled)");
       }
       DirectFileLogger.logMemoryUsage();
 

@@ -184,11 +184,18 @@ public class AnalysisController {
    * @param imageName the image name (may be null)
    * @param features the extracted features
    */
-  private void handleAnalysisComplete(String imageName, Map<String, Map<String, Object>> features) {
-    storeFeatures(features);
-    LOGGER.debug("Received features from analysis completion");
-  }
-
+ /**
+  * Handles extracted features from analysis completion.
+  *
+  * @param imageName the image name (may be null)
+  * @param features the extracted features
+  */
+ private void handleAnalysisComplete(String imageName, Map<String, Map<String, Object>> features) {
+   storeFeatures(features);
+   // Also store in ROIManager for unsupervised analysis
+   com.scipath.scipathj.ui.common.ROIManager.getInstance().storeExtractedFeatures(features);
+   LOGGER.debug("Received features from analysis completion");
+ }
   /**
    * Updates the start button state based on current conditions.
    *

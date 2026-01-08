@@ -110,6 +110,7 @@ updatePaginationControls();
     columnNames.add("ROI ID");
     columnNames.add("Predicted Class");
     columnNames.add("Confidence");
+    columnNames.add("Cluster"); // New column for unsupervised clustering results
     columnNames.addAll(allFeatureNames.stream().sorted().toList());
 
     // Create table model - simplified, all columns are strings to avoid DoubleRenderer issues
@@ -140,9 +141,10 @@ updatePaginationControls();
       columnModel.getColumn(2).setMinWidth(80);  // ROI ID
       columnModel.getColumn(3).setMinWidth(120); // Predicted Class
       columnModel.getColumn(4).setMinWidth(100); // Confidence
+      columnModel.getColumn(5).setMinWidth(80);  // Cluster
 
       // Set reasonable min width for feature columns
-      for (int i = 5; i < columnModel.getColumnCount(); i++) {
+      for (int i = 6; i < columnModel.getColumnCount(); i++) {
         columnModel.getColumn(i).setMinWidth(80);
       }
     }
@@ -249,8 +251,17 @@ updatePaginationControls();
         rowData.add(""); // Empty string for confidence
       }
 
+      // Add Cluster column data
+      // Check if the predicted class is a cluster (starts with "Cluster ")
+      if (classification != null && classification.getPredictedClass() != null &&
+          classification.getPredictedClass().startsWith("Cluster ")) {
+          rowData.add(classification.getPredictedClass());
+      } else {
+          rowData.add("");
+      }
+
       // Add feature values
-      for (int j = 5; j < tableModel.getColumnCount(); j++) {
+      for (int j = 6; j < tableModel.getColumnCount(); j++) {
         String featureName = tableModel.getColumnName(j);
         Object value = roiFeatures.get(featureName);
         if (value == null) {
@@ -700,6 +711,7 @@ updatePaginationControls();
     columnNames.add("ROI ID");
     columnNames.add("Predicted Class");
     columnNames.add("Confidence");
+    columnNames.add("Cluster");
     columnNames.addAll(allFeatureNames.stream().sorted().toList());
 
     // Create table model
@@ -730,7 +742,7 @@ updatePaginationControls();
           }
         }
 
-        // For feature columns (starting at column 5), check the actual data type
+        // For feature columns (starting at column 6), check the actual data type
         for (int row = 0; row < getRowCount(); row++) {
           Object value = getValueAt(row, column);
           if (value != null) {
@@ -804,8 +816,16 @@ updatePaginationControls();
         rowData.add(""); // Use empty string instead of null for missing confidence
       }
 
-      // Add feature values in the same order as column names (starting from column 5)
-      for (int i = 5; i < columnNames.size(); i++) {
+      // Add Cluster column data
+      if (classification != null && classification.getPredictedClass() != null &&
+          classification.getPredictedClass().startsWith("Cluster ")) {
+          rowData.add(classification.getPredictedClass());
+      } else {
+          rowData.add("");
+      }
+
+      // Add feature values in the same order as column names (starting from column 6)
+      for (int i = 6; i < columnNames.size(); i++) {
         String featureName = columnNames.get(i);
         Object value = roiFeatures.get(featureName);
         if (value == null) {

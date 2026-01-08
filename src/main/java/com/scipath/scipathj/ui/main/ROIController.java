@@ -129,6 +129,14 @@ public class ROIController {
         public void onChangeROIType(String imageFileName, UserROI.ROIType newType) {
           LOGGER.debug("ROI type change requested for image {} to type {}", imageFileName, newType);
         }
+
+        @Override
+        public void onColorModeChanged(boolean clusterColoringEnabled) {
+          if (mainImageViewer != null && mainImageViewer.getROIOverlay() != null) {
+            mainImageViewer.getROIOverlay().setClusterColoringEnabled(clusterColoringEnabled);
+          }
+          LOGGER.debug("Color mode changed: cluster coloring {}", clusterColoringEnabled ? "enabled" : "disabled");
+        }
       });
     }
 

@@ -227,6 +227,12 @@
             <artifactId>gson</artifactId>
             <version>${gson.version}</version>
         </dependency>
+        <!-- Smile for Unsupervised Learning -->
+        <dependency>
+            <groupId>com.github.haifengl</groupId>
+            <artifactId>smile-core</artifactId>
+            <version>3.0.0</version>
+        </dependency>
     </dependencies>
 
     <repositories>

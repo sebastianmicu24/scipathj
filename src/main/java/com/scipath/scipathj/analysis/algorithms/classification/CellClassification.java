@@ -1606,6 +1606,16 @@ public class CellClassification {
       this.classProbabilities = classProbabilities != null ? classProbabilities : new HashMap<>();
     }
 
+    /**
+     * Simplified constructor for unsupervised classification results.
+     *
+     * @param predictedClass the predicted class name (e.g., "Cluster 1")
+     * @param confidence the confidence score (usually 1.0 for hard clustering)
+     */
+    public ClassificationResult(final String predictedClass, final double confidence) {
+      this(null, predictedClass, confidence, null);
+    }
+
     public String getRoiName() {
       return roiName;
     }

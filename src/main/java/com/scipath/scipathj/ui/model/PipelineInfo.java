@@ -37,6 +37,19 @@ public class PipelineInfo {
   }
 
   /**
+   * Creates a new PipelineInfo instance with empty steps.
+   *
+   * @param id unique identifier for the pipeline
+   * @param displayName user-friendly display name
+   * @param description detailed description of the pipeline
+   * @param enabled whether the pipeline is currently available
+   */
+  public PipelineInfo(
+      String id, String displayName, String description, boolean enabled) {
+    this(id, displayName, description, enabled, new String[0]);
+  }
+
+  /**
    * Gets the unique identifier for this pipeline.
    *
    * @return pipeline ID

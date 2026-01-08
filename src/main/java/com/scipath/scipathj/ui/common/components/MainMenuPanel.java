@@ -38,11 +38,11 @@ public class MainMenuPanel extends JPanel {
   public enum MainMenuOption {
     ANALYSIS("full_he", "Perform Analysis", "Run segmentation and classification on tissue images",
              FontAwesomeSolid.MICROSCOPE, UIConstants.SELECTION_COLOR),
-    DATASET_CREATION("dataset_creator", "Create Dataset", "Select cells and create custom classification models",
+    DATASET_CREATION("dataset_creator", "Create Dataset (Supervised Learning)", "Select cells and create custom classification models",
                     FontAwesomeSolid.PLUS_CIRCLE, new Color(34, 139, 34)),
-    VISUALIZATION("View_Results", "Visualize Results", "View and analyze previously processed data",
+    VISUALIZATION("View_Results", "Visualize Results (Supervised Learning)", "View and analyze previously processed data",
                  FontAwesomeSolid.CHART_BAR, new Color(255, 140, 0)),
-    XGBoost_TRAINING("xgboost_training", "Train XGBoost Model", "Train machine learning classifiers using XGBoost",
+    XGBoost_TRAINING("xgboost_training", "Train XGBoost Model (Supervised Learning)", "Train machine learning classifiers using XGBoost",
                     FontAwesomeSolid.COG, new Color(128, 0, 128)); // Purple color for XGBoost
 
     private final String pipelineId;
@@ -67,6 +67,10 @@ public class MainMenuPanel extends JPanel {
     public Color getColor() { return color; }
 
     public PipelineInfo getPipelineInfo() {
+      // Disable supervised learning pipelines
+      if (this == DATASET_CREATION || this == VISUALIZATION || this == XGBoost_TRAINING) {
+        return new PipelineInfo(pipelineId, displayName, description, false);
+      }
       return PipelineRegistry.getPipelineById(pipelineId);
     }
   }
@@ -182,7 +186,11 @@ public class MainMenuPanel extends JPanel {
       leftPanel.setOpaque(false);
 
       // Icon with padding
-      FontIcon icon = FontIcon.of(option.getIcon(), 32, option.getColor());
+      // Determine colors based on enabled state
+      Color iconColor = option.getPipelineInfo().isEnabled() ? option.getColor() : UIManager.getColor("Label.disabledForeground");
+      Color titleColor = option.getPipelineInfo().isEnabled() ? UIManager.getColor("Label.foreground") : UIManager.getColor("Label.disabledForeground");
+
+      FontIcon icon = FontIcon.of(option.getIcon(), 32, iconColor);
       JLabel iconLabel = new JLabel(icon);
       iconLabel.setBorder(UIUtils.createPadding(0, 0, 0, UIConstants.MEDIUM_SPACING));
       leftPanel.add(iconLabel, BorderLayout.WEST);
@@ -194,6 +202,7 @@ public class MainMenuPanel extends JPanel {
 
       JLabel titleLabel = new JLabel(option.getDisplayName());
       titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, UIConstants.LARGE_FONT_SIZE + 2));
+      titleLabel.setForeground(titleColor);
 
       JLabel descLabel = new JLabel("<html><div style='margin-top: 4px; width: 400px;'>" +
           option.getDescription() + "</div></html>");

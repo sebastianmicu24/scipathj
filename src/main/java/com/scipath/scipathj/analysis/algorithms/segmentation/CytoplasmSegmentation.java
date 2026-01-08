@@ -290,7 +290,6 @@ public class CytoplasmSegmentation {
     List<int[]> seeds = new ArrayList<>();
     boolean[] processed = new boolean[nucleusROIs.size()];
     double threshold = settings.mergeThreshold();
-    double thresholdSq = threshold * threshold;
     int maxNuclei = settings.maxNucleiPerCell();
 
     // Get morphological filters
@@ -320,8 +319,14 @@ public class CytoplasmSegmentation {
         int[] c2 = n2.getNucleusCenter();
         if (c2 == null || c2.length < 2) continue;
 
-        double distSq = Math.pow(c1[0] - c2[0], 2) + Math.pow(c1[1] - c2[1], 2);
-        if (distSq <= thresholdSq) {
+        // Optimization: Check bounding box distance first
+        if (getBoundingBoxDistanceSq(n1, n2) > threshold * threshold) {
+          continue;
+        }
+
+        // Calculate distance between borders
+        double borderDist = calculateBorderDistance(n1, n2);
+        if (borderDist <= threshold) {
           // Check if n2 is eligible for merging based on morphology
           boolean n2Eligible = isNucleusEligibleForMerging(n2, minArea, maxArea, minCircularity, maxAspectRatio);
           
@@ -357,6 +362,67 @@ public class CytoplasmSegmentation {
       }
     }
     return seeds;
+  }
+
+  /**
+   * Calculates the squared distance between the bounding boxes of two nuclei.
+   */
+  private double getBoundingBoxDistanceSq(NucleusROI n1, NucleusROI n2) {
+    Roi roi1 = n1.getImageJRoi();
+    Roi roi2 = n2.getImageJRoi();
+
+    if (roi1 == null || roi2 == null) return 0;
+
+    Rectangle r1 = roi1.getBounds();
+    Rectangle r2 = roi2.getBounds();
+
+    double dx = 0;
+    if (r1.x > r2.x + r2.width) dx = r1.x - (r2.x + r2.width);
+    else if (r2.x > r1.x + r1.width) dx = r2.x - (r1.x + r1.width);
+
+    double dy = 0;
+    if (r1.y > r2.y + r2.height) dy = r1.y - (r2.y + r2.height);
+    else if (r2.y > r1.y + r1.height) dy = r2.y - (r1.y + r1.height);
+
+    return dx * dx + dy * dy;
+  }
+
+  /**
+   * Calculates the minimum distance between the borders of two nuclei.
+   * Uses vertex-to-vertex distance as an approximation.
+   */
+  private double calculateBorderDistance(NucleusROI n1, NucleusROI n2) {
+    Roi roi1 = n1.getImageJRoi();
+    Roi roi2 = n2.getImageJRoi();
+
+    if (roi1 == null || roi2 == null) {
+      // Fallback to centroid distance if ROIs are missing
+      int[] c1 = n1.getNucleusCenter();
+      int[] c2 = n2.getNucleusCenter();
+      return Math.sqrt(Math.pow(c1[0] - c2[0], 2) + Math.pow(c1[1] - c2[1], 2));
+    }
+
+    ij.process.FloatPolygon poly1 = roi1.getFloatPolygon();
+    ij.process.FloatPolygon poly2 = roi2.getFloatPolygon();
+
+    double minDistSq = Double.MAX_VALUE;
+
+    for (int i = 0; i < poly1.npoints; i++) {
+      double x1 = poly1.xpoints[i];
+      double y1 = poly1.ypoints[i];
+
+      for (int j = 0; j < poly2.npoints; j++) {
+        double x2 = poly2.xpoints[j];
+        double y2 = poly2.ypoints[j];
+
+        double dSq = (x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2);
+        if (dSq < minDistSq) {
+          minDistSq = dSq;
+        }
+      }
+    }
+
+    return Math.sqrt(minDistSq);
   }
 
   /**

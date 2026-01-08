@@ -5,6 +5,7 @@ import com.scipath.scipathj.analysis.config.CytoplasmSegmentationSettings;
 import com.scipath.scipathj.analysis.config.FeatureExtractionSettings;
 import com.scipath.scipathj.analysis.config.NuclearSegmentationSettings;
 import com.scipath.scipathj.analysis.config.VesselSegmentationSettings;
+import com.scipath.scipathj.analysis.config.UnsupervisedClassificationSettings;
 import java.awt.*;
 import java.io.*;
 import java.nio.file.Files;
@@ -37,7 +38,8 @@ public class ConfigurationManager {
   private static final String CYTOPLASM_SETTINGS_FILE = "cytoplasm_segmentation.properties";
   private static final String FEATURE_EXTRACTION_SETTINGS_FILE = "feature_extraction.properties";
    private static final String CLASSIFICATION_SETTINGS_FILE = "classification.properties";
-  private static final String MAIN_SETTINGS_FILE = "main_settings.properties";
+   private static final String UNSUPERVISED_SETTINGS_FILE = "unsupervised_classification.properties";
+   private static final String MAIN_SETTINGS_FILE = "main_settings.properties";
 
   /**
    * Creates a new ConfigurationManager instance.
@@ -315,6 +317,41 @@ public class ConfigurationManager {
         CLASSIFICATION_SETTINGS_FILE,
         "SciPathJ Classification Settings",
         this::createClassificationProperties,
+        settings);
+  }
+
+  /**
+   * Loads unsupervised classification settings from the configuration file.
+   *
+   * @return The loaded unsupervised classification settings, or default settings if file doesn't exist
+   */
+  public UnsupervisedClassificationSettings loadUnsupervisedClassificationSettings() {
+    Path settingsFile = Paths.get(CONFIG_DIR, UNSUPERVISED_SETTINGS_FILE);
+
+    if (!Files.exists(settingsFile)) {
+      return UnsupervisedClassificationSettings.createDefault();
+    }
+
+    try (InputStream input = Files.newInputStream(settingsFile)) {
+      Properties properties = new Properties();
+      properties.load(input);
+      return loadUnsupervisedClassificationProperties(properties);
+    } catch (IOException e) {
+      LOGGER.error("Error loading unsupervised classification settings: {}", e.getMessage());
+      return UnsupervisedClassificationSettings.createDefault();
+    }
+  }
+
+  /**
+   * Save unsupervised classification settings to the properties file.
+   *
+   * @param settings The settings object to save
+   */
+  public void saveUnsupervisedClassificationSettings(UnsupervisedClassificationSettings settings) {
+    saveSettings(
+        UNSUPERVISED_SETTINGS_FILE,
+        "SciPathJ Unsupervised Classification Settings",
+        this::createUnsupervisedClassificationProperties,
         settings);
   }
 
@@ -966,6 +1003,43 @@ public class ConfigurationManager {
     properties.setProperty("selectedFeaturesPath", settings.selectedFeaturesPath());
     properties.setProperty("labelMappingPath", settings.labelMappingPath());
     properties.setProperty("classDetailsPath", settings.classDetailsPath());
+    return properties;
+  }
+  // === UNSUPERVISED CLASSIFICATION SETTINGS PROPERTY HANDLERS ===
+
+  private UnsupervisedClassificationSettings loadUnsupervisedClassificationProperties(Properties properties) {
+    int k = getIntProperty(properties, "k", 3);
+    boolean enabled = getBooleanProperty(properties, "enabled", false);
+    String algorithm = getStringProperty(properties, "algorithm", "K-Means");
+    int maxIterations = getIntProperty(properties, "maxIterations", 100);
+    double epsilon = getDoubleProperty(properties, "epsilon", 0.5);
+    int minPoints = getIntProperty(properties, "minPoints", 5);
+    
+    String featuresStr = getStringProperty(properties, "selectedFeatures", "");
+    java.util.List<String> selectedFeatures = new java.util.ArrayList<>();
+    if (!featuresStr.isEmpty()) {
+      for (String feature : featuresStr.split(",")) {
+        if (!feature.trim().isEmpty()) {
+          selectedFeatures.add(feature.trim());
+        }
+      }
+    }
+
+    return new UnsupervisedClassificationSettings(k, selectedFeatures, enabled, algorithm, maxIterations, epsilon, minPoints);
+  }
+
+  private Properties createUnsupervisedClassificationProperties(UnsupervisedClassificationSettings settings) {
+    Properties properties = new Properties();
+    properties.setProperty("k", String.valueOf(settings.k()));
+    properties.setProperty("enabled", String.valueOf(settings.enabled()));
+    properties.setProperty("algorithm", settings.algorithm());
+    properties.setProperty("maxIterations", String.valueOf(settings.maxIterations()));
+    properties.setProperty("epsilon", String.valueOf(settings.epsilon()));
+    properties.setProperty("minPoints", String.valueOf(settings.minPoints()));
+    
+    String featuresStr = String.join(",", settings.selectedFeatures());
+    properties.setProperty("selectedFeatures", featuresStr);
+    
     return properties;
   }
 }

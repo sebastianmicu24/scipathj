@@ -547,6 +547,14 @@ public class MainWindow extends JFrame {
             // This method is called when ROI types need to be changed
             // Implementation can be added later if needed
           }
+
+          @Override
+          public void onColorModeChanged(boolean clusterColoringEnabled) {
+            if (mainImageViewer != null && mainImageViewer.getROIOverlay() != null) {
+              mainImageViewer.getROIOverlay().setClusterColoringEnabled(clusterColoringEnabled);
+            }
+            LOGGER.debug("Color mode changed: cluster coloring {}", clusterColoringEnabled ? "enabled" : "disabled");
+          }
         });
 
     // Set up ROI manager listeners

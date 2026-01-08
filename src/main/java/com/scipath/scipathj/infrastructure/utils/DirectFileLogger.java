@@ -20,6 +20,7 @@ public class DirectFileLogger {
 
   private static final DateTimeFormatter TIMESTAMP_FORMAT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+  private static final boolean DEBUG_ENABLED = Boolean.parseBoolean(System.getProperty("scipath.debug", "false"));
   private static File logDir;
   private static boolean initialized = false;
 
@@ -63,6 +64,10 @@ public class DirectFileLogger {
    * Write a log message directly to a file.
    */
   public static void writeToFile(String filename, String level, String logger, String message) {
+    if (!DEBUG_ENABLED) {
+      return;
+    }
+
     if (!initialized) {
       initialize();
     }
@@ -125,14 +130,18 @@ public class DirectFileLogger {
    * Log StarDist specific information.
    */
   public static void logStarDist(String level, String message) {
-    writeToFile("stardist-direct.log", level, "StarDist", message);
+    if (DEBUG_ENABLED) {
+      writeToFile("stardist-direct.log", level, "StarDist", message);
+    }
   }
 
   /**
    * Log StarDist exception.
    */
   public static void logStarDistException(String message, Throwable throwable) {
-    writeException("stardist-direct.log", "ERROR", "StarDist", message, throwable);
+    if (DEBUG_ENABLED) {
+      writeException("stardist-direct.log", "ERROR", "StarDist", message, throwable);
+    }
   }
 
   /**

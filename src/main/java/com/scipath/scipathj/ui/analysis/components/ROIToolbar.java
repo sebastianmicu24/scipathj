@@ -39,6 +39,7 @@ public class ROIToolbar extends JPanel {
   private JCheckBox cytoplasmButton;
   private JCheckBox cellButton;
   private JCheckBox ignoreButton;
+  private JToggleButton colorModeButton;
 
 
   // Current state
@@ -74,6 +75,7 @@ public class ROIToolbar extends JPanel {
      void onChangeROIType(String imageFileName, UserROI.ROIType newType);
 
      void onShowFeatures();
+      void onColorModeChanged(boolean clusterColoringEnabled);
    }
 
   public ROIToolbar() {
@@ -233,6 +235,12 @@ public class ROIToolbar extends JPanel {
     averagesButton.setPreferredSize(new Dimension(buttonWidth, buttonHeight));
     filterPanel.add(averagesButton);
 
+    // Color mode toggle button
+    colorModeButton = createStyledToggleButton("Cluster Colors", "Toggle between standard colors and cluster-based colors",
+        e -> handleColorModeChanged(colorModeButton.isSelected()));
+    colorModeButton.setPreferredSize(new Dimension(buttonWidth, buttonHeight));
+    filterPanel.add(colorModeButton);
+
     add(filterPanel);
   }
 
@@ -258,6 +266,25 @@ public class ROIToolbar extends JPanel {
 
   private JCheckBox createStyledIgnoreButton(String text, boolean selected, ActionListener listener) {
     return createStyledFilterButton(text, selected, listener);
+  }
+
+  private JToggleButton createStyledToggleButton(String text, String tooltip, ActionListener listener) {
+    JToggleButton button = new JToggleButton(text);
+    button.setToolTipText(tooltip);
+    button.setFocusPainted(false);
+    button.addActionListener(listener);
+
+    // Same styling as filter buttons
+    button.setOpaque(false);
+    button.setBorderPainted(true);
+    button.setBorder(new RoundedBorder(Color.BLACK, 1, 8));
+
+    // Set background with 0.15 opacity (more transparent)
+    Color originalBg = button.getBackground();
+    Color semiTransparentBg = new Color(originalBg.getRed(), originalBg.getGreen(), originalBg.getBlue(), 38); // 0.15 * 255
+    button.setBackground(semiTransparentBg);
+
+    return button;
   }
 
   private JButton createStyledStatsButton() {
@@ -638,6 +665,19 @@ public class ROIToolbar extends JPanel {
     });
 
     LOGGER.debug("Requested features display");
+  }
+
+  private void handleColorModeChanged(boolean enabled) {
+    // Notify listeners
+    listeners.forEach(listener -> {
+      try {
+        listener.onColorModeChanged(enabled);
+      } catch (Exception e) {
+        LOGGER.error("Error notifying color mode change", e);
+      }
+    });
+
+    LOGGER.debug("Color mode changed: cluster coloring {}", enabled ? "enabled" : "disabled");
   }
 
 

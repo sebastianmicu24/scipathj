@@ -52,6 +52,9 @@ public class ROIOverlay extends JComponent {
   private boolean cellFilterEnabled = true;
   private boolean ignoreFilterEnabled = true;
 
+  // Coloring mode
+  private boolean clusterColoringEnabled = false;
+
   // Single-calculation shape cache - calculated once, never recalculated
   private final Map<Integer, java.awt.Shape> originalShapes = new ConcurrentHashMap<>();
 
@@ -289,7 +292,19 @@ public class ROIOverlay extends JComponent {
     } else {
       // Use normal settings for regular ROIs
       fillColor = settings.getFillColor();
-      borderColor = roi.getDisplayColor() != null ? roi.getDisplayColor() : settings.borderColor();
+      
+      // Determine border color based on coloring mode
+      if (clusterColoringEnabled) {
+          // In cluster coloring mode, use the ROI's display color (which is set to cluster color)
+          // If no display color is set, fallback to default border color
+          borderColor = roi.getDisplayColor() != null ? roi.getDisplayColor() : settings.borderColor();
+      } else {
+          // In standard mode, use the category-specific border color
+          // Unless the ROI has a specific display color set (which might be from clustering)
+          // BUT we want to override clustering colors if cluster coloring is disabled
+          borderColor = settings.borderColor();
+      }
+      
       borderWidth = settings.borderWidth();
     }
 
@@ -450,7 +465,19 @@ public class ROIOverlay extends JComponent {
     } else {
       // Use normal settings for regular ROIs
       fillColor = settings.getFillColor();
-      borderColor = roi.getDisplayColor() != null ? roi.getDisplayColor() : settings.borderColor();
+      
+      // Determine border color based on coloring mode
+      if (clusterColoringEnabled) {
+          // In cluster coloring mode, use the ROI's display color (which is set to cluster color)
+          // If no display color is set, fallback to default border color
+          borderColor = roi.getDisplayColor() != null ? roi.getDisplayColor() : settings.borderColor();
+      } else {
+          // In standard mode, use the category-specific border color
+          // Unless the ROI has a specific display color set (which might be from clustering)
+          // BUT we want to override clustering colors if cluster coloring is disabled
+          borderColor = settings.borderColor();
+      }
+      
       borderWidth = settings.borderWidth();
     }
 
@@ -585,6 +612,16 @@ public class ROIOverlay extends JComponent {
     // Trigger re-render with new filter state
     bufferValid = false;
     repaint();
+  }
+
+  /**
+   * Set whether to use cluster-based coloring or standard category-based coloring.
+   */
+  public void setClusterColoringEnabled(boolean enabled) {
+      this.clusterColoringEnabled = enabled;
+      // Trigger re-render
+      bufferValid = false;
+      repaint();
   }
 
   // ===== ROI CREATION AND SELECTION =====
@@ -733,7 +770,8 @@ public class ROIOverlay extends JComponent {
           "ROI Type: %s<br/>" +
           "ROI ID: %s<br/>" +
           "%s</html>",
-          roiType, roiId, cellType);
+          roiType, roiId,
+          cellType.startsWith("Cluster") ? "Cluster: " + cellType.replace("Cluster ", "") : cellType);
 
       // Set tooltip on the overlay
       setToolTipText(tooltipText);
