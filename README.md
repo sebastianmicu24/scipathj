@@ -1,790 +1,427 @@
 # SciPathJ
 
-**Segmentation and Classification of Images, Pipelines for the Analysis of Tissue Histopathology**
+**Segmentation and Classification of Images - Pipeline for the Analysis of Tissue Histopathology**
 
-![SciPathJ Logo](src/main/resources/icon.png)
+![SciPathJ](https://img.shields.io/badge/version-1.0.0-blue) ![License](https://img.shields.io/badge/license-GPLv3-green) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Java-lightgrey)
 
-SciPathJ is a modern, professional-grade Java software for histopathological image analysis, designed to provide automated segmentation and classification of histological images. The project builds upon proven methodologies while incorporating a modern user interface and an extensible, SOLID-compliant architecture ready for production environments.
+SciPathJ is a free, open-source software designed to help researchers and medical professionals analyze microscopy images of tissue samples. If you work with H&E stained histology images and need to count cells, measure structures, or classify different cell types, SciPathJ can automate these tasks for you.
 
 ## Table of Contents
 
-- [Project Overview](#project-overview)
-- [Key Features](#key-features)
-- [System Architecture](#system-architecture)
-- [Technologies Used](#technologies-used)
+- [What Can SciPathJ Do?](#what-can-scipathj-do)
+  - [Key Features](#key-features)
+  - [What Makes SciPathJ Different?](#what-makes-scipathj-different)
+- [Who Is SciPathJ For?](#who-is-scipathj-for)
 - [Installation](#installation)
-- [Usage](#usage)
-- [Main Functions](#main-functions)
-- [ROI Management](#roi-management)
-- [StarDist Integration](#stardist-integration)
-- [Development](#development)
+  - [System Requirements](#system-requirements)
+  - [Quick Installation](#quick-installation)
+  - [ImageJ/Fiji Plugin (Legacy)](#imagejfiji-plugin-legacy)
+- [Getting Started](#getting-started)
+  - [Your First Analysis in 5 Steps](#your-first-analysis-in-5-steps)
+  - [Understanding the Interface](#understanding-the-interface)
+  - [Color Coding](#color-coding)
+- [Analysis Pipeline](#analysis-pipeline)
+  - [1. Vessel Segmentation](#1-vessel-segmentation)
+  - [2. Nuclear Segmentation](#2-nuclear-segmentation)
+  - [3. Cell Creation](#3-cell-creation)
+  - [4. Feature Extraction](#4-feature-extraction)
+  - [5. Cell Classification](#5-cell-classification)
+- [Training Custom Classifiers](#training-custom-classifiers)
+  - [How It Works](#how-it-works)
+  - [Why This Matters](#why-this-matters)
+- [Output and Results](#output-and-results)
+  - [What You Get](#what-you-get)
+  - [Using Your Results](#using-your-results)
+- [Examples](#examples)
+  - [Liver Tissue](#liver-tissue)
+  - [Kidney Tissue](#kidney-tissue)
+  - [Pancreas Tissue](#pancreas-tissue)
+  - [More Tissue Types](#more-tissue-types)
+- [Learning Resources](#learning-resources)
+  - [Documentation](#documentation)
+  - [Video Tutorials](#video-tutorials)
+  - [Recommended Learning Path](#recommended-learning-path)
+- [Project History](#project-history)
+- [The Team](#the-team)
+  - [Lead Developer](#lead-developer)
+  - [Partner Institutions](#partner-institutions)
 - [Contributing](#contributing)
+  - [Ways to Contribute](#ways-to-contribute)
+  - [Getting Started with Contributing](#getting-started-with-contributing)
+- [Support](#support)
+  - [Need Help?](#need-help)
+  - [Frequently Asked Questions](#frequently-asked-questions)
 - [License](#license)
-- [Acknowledgments](#acknowledgments)
-- [Contact](#contact)
+- [Acknowledgements](#acknowledgements)
+- [Citation](#citation)
 
-## Project Overview
+## What Can SciPathJ Do?
 
-SciPathJ is a professional desktop application for histopathological image analysis that combines advanced image processing algorithms with an intuitive user interface. The software is designed for researchers and professionals in the digital pathology field who need automated, reliable, and extensible tools for tissue analysis.
+Imagine you have hundreds of tissue images and need to count cells, measure their size, or identify different cell types. Doing this manually would take weeks. SciPathJ can do it in minutes.
 
-### Project Vision
+### Key Features
 
-- **Automated Analysis**: Highly automated software for histopathological analysis.
-- **Batch Processing**: Process entire folders of images with comprehensive results.
-- **Modern Interface**: A clean and intuitive user interface with a professional design.
-- **Extensibility**: A plugin-ready architecture built on SOLID principles.
+- **Automatic Cell Detection**: The software automatically finds and outlines cells, nuclei, cytoplasm, and blood vessels in your tissue images
+- **Cell Classification**: Define your own cell categories (like "tumor cells" vs "normal cells") and train the software to recognize them automatically
+- **Comprehensive Measurements**: For every detected structure, SciPathJ calculates over 150 measurements including size, shape, color intensity, and texture
+- **Batch Processing**: Process entire folders of images at once with the same settings
+- **Export to Excel**: All results can be exported to CSV files for further analysis in Excel, R, Python, or any statistical software
 
-## Key Features
+### What Makes SciPathJ Different?
 
-### 🖼️ Advanced Image Management
-- Support for common formats: JPG, PNG, GIF, BMP, TIFF
-- Support for scientific formats: LSM, CZI, ND2, OIB, OIF, VSI
-- Support for microscopy formats: IMS, LIF, SCN, SVS, NDPI
-- Thumbnail gallery for efficient navigation
-- Main image viewer with metadata display
+- **Designed for H&E Stains**: Built specifically for Hematoxylin & Eosin stained images, the most common staining method in histopathology
+- **No Programming Required**: User-friendly graphical interface - no coding skills needed
+- **Works Standalone or with ImageJ**: Use it as a standalone application or as a plugin within ImageJ/Fiji
+- **Completely Free**: Open-source under GPLv3 license, free to use and modify
 
-### 🔍 Intelligent Segmentation
-- **Nuclear Segmentation**: Integration with StarDist for state-of-the-art nucleus detection.
-- **Vascular Segmentation**: Thresholding algorithms for vessel detection.
-- **Cytoplasm Segmentation**: Advanced Voronoi tessellation using nucleus center points as seeds for accurate cell boundary detection, including proper handling of touching nuclei with perpendicular bisector separation.
-- **H&E Color Deconvolution**: Separates H&E stained images into Hematoxylin, Eosin, and Background channels using Ruifrok & Johnston method.
-- Configurable parameters for different tissue types.
-- Automatic image pre-processing.
+## Who Is SciPathJ For?
 
-### 🎯 Advanced ROI (Region of Interest) System v2.0
-- **Biological Structure Focus**: Specialized ROI types for histopathological analysis (Nucleus, Cytoplasm, Cell, Vessel, Ignore).
-- **Modular Architecture**: Separate ROI managers for Analysis, Dataset, and Visualization with proper isolation.
-- **Shared Rendering Engine**: Optimized rendering with custom color schemes and performance caching.
-- **Multi-image Management**: Automatic ROI association across multiple images with robust error handling.
-- **ImageJ Compatibility**: Full import/export support for .roi and .zip formats.
-- **Context-Aware Display**: Custom colors and behaviors based on application context.
-
-### 🎨 Modern User Interface
-- Light/Dark themes with FlatLaf.
-- Professional FontAwesome icons via Ikonli.
-- Responsive design and smooth transitions.
-- Intuitive tab-based navigation.
-- Status bar with real-time feedback.
-
-### ⚙️ Extendable Pipelines
-- Modular, SOLID-compliant pipeline architecture.
-- Step-by-step configuration with clear settings dialogs.
-- Support for adding new algorithms and processing steps.
-- Batch execution with progress monitoring.
-
-## System Architecture
-
-The architecture of SciPathJ is built on modern software engineering principles, emphasizing modularity, testability, and maintainability. The system avoids Singleton patterns in favor of a centralized **Application Context** that manages object lifecycles and handles **Dependency Injection (DI)**.
-
-### Advanced Voronoi Tessellation Implementation
-
-SciPathJ features an advanced Voronoi tessellation implementation specifically designed for accurate cytoplasm segmentation in histopathological images:
-
-- **Point-Based Seeds**: Uses individual nucleus center coordinates as Voronoi seeds rather than filled regions, ensuring each nucleus gets its own distinct seed point.
-- **Touching Nuclei Handling**: Properly separates touching nuclei with perpendicular bisector boundaries, eliminating overlapping ROI regions.
-- **Performance Optimized**: Streamlined algorithm that processes 1992+ nuclei efficiently without complex distance calculations.
-- **Mathematically Correct**: Implements the fundamental Voronoi principle where each seed point generates its own Voronoi cell with proper geometric boundaries.
-
-This approach ensures accurate cell segmentation even in dense tissue regions where nuclei frequently touch or overlap, providing reliable cytoplasm ROI generation for downstream analysis.
-
-### Advanced ROI Architecture v2.0
-
-SciPathJ features a completely redesigned ROI (Region of Interest) system that addresses the limitations of traditional singleton patterns and provides robust separation of concerns across the three main application functions: Analysis, Dataset Creation, and Visualization.
-
-#### Key Architectural Improvements
-
-- **Service-Based Design**: Replaced singleton `ROIManager` with clean service interfaces
-- **Context Separation**: Independent ROI managers for each application context
-- **Shared Rendering Engine**: Optimized rendering with custom color providers
-- **Biological Structure Focus**: Specialized ROI types (Nucleus, Cytoplasm, Cell, Vessel, Ignore)
-- **Enhanced Error Handling**: Comprehensive validation and error recovery
-- **Performance Optimization**: Shape caching and buffered rendering
-
-#### Core Components
-
-**Infrastructure Layer:**
-- `ROIService`: Clean interface defining ROI operations
-- `DefaultROIService`: Robust implementation with comprehensive file I/O
-- `ROIRenderingEngine`: Shared optimized rendering engine
-- `UserROI`: Biological structure-focused ROI model
-
-- **Application-Specific Managers:**
-- `AnalysisROIManager`: Classification results, measurements, validation
-- *Dataset Context*: Handled by modular components ([`DatasetMainPanel`](src/main/java/com/scipath/scipathj/ui/dataset/DatasetMainPanel.java:1), [`NewDatasetROIOverlay`](src/main/java/com/scipath/scipathj/ui/dataset/NewDatasetROIOverlay.java:1), [`ProgressiveROILoader`](src/main/java/com/scipath/scipathj/ui/dataset/ProgressiveROILoader.java:1))
-- `VisualizationROIManager`: Custom color schemes, feature-based visualization
-
-**Rendering Components:**
-- `AnalysisROIOverlay`: Classification-based coloring and filtering
-- `DatasetROIOverlay`: Class assignment visualization
-- `ROIRenderingEngine`: Shared rendering with context-aware colors
-
-#### ROI Types and Usage
-
-The new system focuses on biological structures rather than geometric shapes:
-
-| ROI Type | Color | Usage Context | Description |
-|----------|-------|---------------|-------------|
-| **Nucleus** | Green | All contexts | Cell nuclei with morphological measurements |
-| **Cytoplasm** | Blue | All contexts | Cytoplasm regions surrounding nuclei |
-| **Cell** | Yellow | All contexts | Complete cell boundaries |
-| **Vessel** | Red | All contexts | Blood vessels and vascular structures |
-| **Ignore** | Gray | All contexts | Regions to exclude from analysis |
-
-#### Context-Specific Features
-
-**Analysis Context:**
-- Classification result visualization with confidence-based coloring
-- ROI validation status (valid/ignored)
-- Morphological measurements and statistics
-- Interactive filtering by classification status
-
-**Dataset Context:**
-- Class assignment for machine learning training
-- Batch loading from ZIP files with progress tracking
-- Statistics by class assignment
-- Validation and error recovery
-
-**Visualization Context:**
-- Multiple color schemes (Default, Heat Map, Feature-based, Custom)
-- Feature-based visualization with normalization
-- Interactive color mapping
-- Statistical analysis tools
-
-#### Usage Examples
-
-```java
-// Analysis context with classification support
-AnalysisROIManager analysisManager = new AnalysisROIManager();
-AnalysisROIOverlay analysisOverlay = new AnalysisROIOverlay(settings, analysisManager);
-
-// Dataset context with class assignment
-DatasetROIManager datasetManager = new DatasetROIManager();
-datasetManager.loadROIsFromZipFile(zipFile, imageName);
-
-// Visualization context with custom coloring
-VisualizationROIManager vizManager = new VisualizationROIManager();
-vizManager.setColorScheme(VisualizationROIManager.ColorScheme.HEAT_MAP);
-```
-
-#### Performance Optimizations
-
-- **Shape Caching**: ROI shapes calculated once and cached
-- **Buffered Rendering**: Native resolution rendering with fast copy operations
-- **Coordinate Synchronization**: Perfect overlay alignment across zoom/pan operations
-- **Memory Management**: Efficient cleanup and resource management
-
-#### Error Handling and Validation
-
-- **Robust File I/O**: Comprehensive error recovery for corrupted files
-- **Validation**: ROI integrity checks and automatic correction
-- **Logging**: Detailed operation logging with performance metrics
-- **Fallback Mechanisms**: Graceful degradation when operations fail
-
-### Project Structure
-
-```
-com.scipath.scipathj/
-├── analysis/
-│   ├── algorithms/     # Analysis algorithms (classification, segmentation, statistics)
-│   │   ├── classification/  # Feature extraction and cell classification
-│   │   ├── segmentation/    # Nuclear, vascular, cytoplasm segmentation
-│   │   └── statistics/      # Statistical analysis tools
-│   ├── config/         # Analysis-specific configuration (feature extraction, segmentation settings)
-│   └── pipeline/       # Analysis pipeline orchestration
-├── core/
-│   ├── analysis/       # Core analysis utilities (H&E deconvolution, etc.)
-│   ├── bootstrap/      # Application startup and context management
-│   ├── config/         # Configuration records and constants
-│   ├── engine/         # Core processing engine
-│   ├── events/         # Event handling system
-│   ├── pipeline/       # Pipeline system components
-│   └── utils/          # Core utility classes
-├── infrastructure/
-│   ├── bootstrap/      # Application bootstrap services (context, theme, system config)
-│   ├── config/         # Infrastructure configuration (main settings, configuration manager)
-│   ├── engine/         # Infrastructure engine components (TensorFlow wrapper, resource manager)
-│   ├── events/         # Event bus system
-│   ├── pipeline/       # Pipeline infrastructure (executor, validation, etc.)
-│   ├── roi/            # New ROI infrastructure v2.0
-│   │   ├── ROIService.java              # Core ROI service interface
-│   │   ├── DefaultROIService.java       # Default ROI service implementation
-│   │   ├── ROIRenderingEngine.java      # Shared rendering engine
-│   │   └── UserROI.java                 # Biological structure ROI model
-│   └── utils/          # Infrastructure utilities (logging, system output capture)
-├── ui/
-│   ├── main/           # Main application window and controllers
-│   ├── analysis/       # Analysis UI components
-│   │   ├── AnalysisROIManager.java     # Analysis-specific ROI manager
-│   │   ├── AnalysisROIOverlay.java     # Analysis-specific ROI overlay
-│   │   └── dialogs/                    # Analysis dialogs and settings
-│   ├── common/         # Common UI components (image viewer, ROI overlay, etc.)
-│   ├── controllers/    # UI controllers and state management
-│   ├── dataset/        # Dataset creation UI
-│   │   ├── DatasetMainPanel.java         # Main dataset orchestrator
-│   │   ├── DatasetSetupPanel.java        # Setup phase (file selection)
-│   │   ├── DatasetClassificationPanel.java # Classification phase UI
-│   │   ├── DatasetImageViewer.java       # Image viewer with ROI overlay
-│   │   ├── DatasetClassManager.java      # Class management for ROI assignment
-│   │   ├── DatasetControlsPanel.java     # UI controls for dataset operations
-│   │   ├── NewDatasetROIOverlay.java     # ROI overlay for dataset context
-│   │   ├── FastDatasetROIRenderer.java   # High-performance ROI rendering
-│   │   └── ProgressiveROILoader.java     # Asynchronous ROI loading
-│   ├── model/          # UI data models
-│   ├── themes/         # Theme management
-│   ├── utils/          # UI utilities
-│   ├── visualization/  # Results visualization components
-│   │   └── VisualizationROIManager.java # Visualization-specific ROI manager
-│   └── SciPathJApplication.java # Main application entry point
-└── SciPathJApplication.java # Main application entry point
-```
-
-### Core Components
-
-#### Core Engine & Configuration
-- **ApplicationContext**: Manages the lifecycle of all major components. It instantiates services like `ConfigurationManager` and `SciPathJEngine` and injects them where needed.
-- **SciPathJEngine**: Central coordinator for processing tasks. It receives analysis requests from the UI and delegates them to the appropriate pipelines.
-- **ConfigurationManager**: Handles the persistence (loading and saving) of application settings. It produces immutable configuration objects (Java Records).
-- **Immutable Settings Records**: Classes like `VesselSegmentationSettings`, `NuclearSegmentationSettings`, and `MainSettings` are implemented as immutable Java Records to ensure thread safety and predictability.
-
-#### UI System
-- **MainWindow**: The main application Frame, which orchestrates all UI panels.
-- **MainMenuPanel**: New streamlined entry point with three main options (Perform Analysis, Create Dataset, Visualize Results).
-- **NavigationController**: Manages transitions between different application workflows and panels.
-- **DatasetCreationPanel**: Comprehensive interface for dataset creation with ROI loading, class management, and file selection.
-- **FolderSelectionPanel**: Enhanced file selection component supporting both single files and folders with drag-and-drop.
-- **UI Panels** (`PipelineRecapPanel`, `ImageGallery`, `StatusPanel`, etc.): Self-contained Swing components responsible for displaying information. They receive dependencies, like configuration objects, via their constructors.
-
-#### ROI Management v2.0 - Advanced Architecture
-- **ROIService**: Clean service interface replacing the singleton pattern.
-- **DefaultROIService**: Robust implementation with comprehensive error handling.
-- **ROIRenderingEngine**: Shared optimized rendering engine for all contexts.
-- **AnalysisROIManager**: Analysis-specific manager with classification support.
-- **DatasetROIManager**: Dataset creation manager with class assignment (replaces DatasetROILoader).
-- **VisualizationROIManager**: Visualization manager with custom color schemes.
-- **ROIOverlay Components**: Specialized overlays for each application context.
-
-## Technologies Used
-
-### Core Java
-- **Java 23**: Latest version with modern features like Records, Sealed Classes, and Pattern Matching.
-- **Maven**: Dependency management and build automation.
-- **SLF4J + Logback**: Professional logging framework.
-
-### Image Processing
-- **ImageJ**: A comprehensive ecosystem for scientific image processing.
-- **ImgLib2**: Core library for n-dimensional image representation.
-- **CSBDeep**: Deep learning framework for microscopy.
-- **StarDist**: State-of-the-art deep learning model for nucleus detection.
-
-### Machine Learning
-- **XGBoost4J**: Machine learning algorithms for classification tasks.
-- **TensorFlow**: Backend for running neural networks (used by StarDist).
-
-### User Interface
-- **Java Swing**: The core framework for the desktop UI.
-- **FlatLaf**: A modern, clean Look and Feel for Swing applications.
-- **Ikonli**: Library for using high-quality icon fonts like FontAwesome.
-
-### Data
-- **Jackson**: High-performance JSON processing for configuration and data export.
-- **Apache Commons**: A suite of utilities for common developer tasks.
+- **Pathologists** analyzing tissue samples for diagnosis or research
+- **Research Scientists** studying tissue morphology and cell populations
+- **Medical Students** learning histopathology and tissue analysis
+- **Biologists** quantifying cell types and tissue structures
+- **Anyone** who needs to extract quantitative data from H&E stained microscopy images
 
 ## Installation
 
-### Prerequisites
-- Java 23 or later
-- Maven 3.6 or later
-- 4GB of RAM recommended
-- 500MB of disk space
-
-### Build from Source
-
-1.  Clone the repository:
-    ```bash
-    git clone https://github.com/sebastianmicu24/scipathj.git
-    cd scipathj
-    ```
-
-2.  Compile the project:
-    ```bash
-    mvn clean compile
-    ```
-
-3.  Run the application:
-    ```bash
-    mvn exec:java
-    ```
-
-### Creating an Executable
-
-To create a standalone executable JAR file:
-```bash
-mvn clean package
-```
-The executable will be located at `target/scipathj-1.0.0.jar`.
-
-## Usage
-
-### Starting the Application
-
-1.  Launch SciPathJ:
-    ```bash
-    java -jar target/scipathj-1.0.0.jar
-    ```
-2.  Choose from four main options on the main menu:
-   - **Perform Analysis**: Run segmentation and classification on tissue images
-   - **Create Dataset**: Select cells and create custom classification datasets
-   - **Visualize Results**: View and analyze previously processed data
-   - **Train XGBoost Model**: Train machine learning classifiers using XGBoost
-
-### Main Workflow
-
-1.  **Option Selection**: Choose one of the four main functions from the main menu:
-    - **Perform Analysis**: Run comprehensive segmentation and classification
-    - **Create Dataset**: Build custom datasets with ROI management and export training data
-    - **Visualize Results**: View and analyze processed data
-    - **Train XGBoost Model**: Train custom classification models using machine learning
-
-2.  **Perform Analysis Workflow**:
-    - Select a folder containing images to be analyzed
-    - Browse the thumbnail gallery and select images of interest
-    - Configure analysis parameters (nuclear, vascular, cytoplasm segmentation)
-    - Monitor progress with real-time status updates
-    - View results with interactive ROI overlays
-    - Export results and ROI data
-
-3.  **Create Dataset Workflow**:
-    - **Setup Phase**: Select ROI ZIP files and corresponding image folders
-    - **Classification Phase**: Interactive cell clicking to assign classes
-    - **Class Management**: Create and manage custom classification classes with colors
-    - **Feature Extraction**: Extract morphological and textural features using analysis pipeline
-    - **Training Data Export**: Export structured JSON datasets for machine learning
-    - **Integrated Training**: Direct integration with XGBoost training workflow
-    - **Performance**: Process large datasets (5,000+ ROIs) with optimized loading
-
-4.  **Visualize Results Workflow**:
-    - Load previously processed analysis results
-    - Browse images with thumbnail gallery
-    - View interactive ROI overlays with custom color schemes
-    - Access statistical analysis tools and feature visualization
-    - Export high-quality visualizations with metadata
-
-5.  **Train XGBoost Model Workflow**:
-    - **Data Import**: Load training data from JSON files (created in Dataset workflow)
-    - **Feature Selection**: Choose relevant features for model training
-    - **Hyperparameter Configuration**: Adjust learning rate, tree depth, regularization
-    - **Class Balancing**: Automatic detection and handling of class imbalance
-    - **Model Training**: XGBoost training with progress monitoring and evaluation
-    - **Model Export**: Save complete model bundles with metadata for deployment
-    - **Integration**: Trained models can be used in analysis workflow for classification
-
-## Main Functions
-
-SciPathJ provides four main functions accessible from the main menu:
-
-### 1. Perform Analysis
-**Status: Available**
-
-Run comprehensive segmentation and classification on tissue images using advanced algorithms:
-
-- **Nuclear Segmentation**: StarDist deep learning for accurate nucleus detection
-- **Vascular Segmentation**: Adaptive thresholding for blood vessel identification
-- **Cytoplasm Segmentation**: Advanced Voronoi tessellation using nucleus center points as seeds
-- **Feature Extraction**: Morphological analysis of segmented regions
-- **Tissue Classification**: Automated classification based on extracted features
-
-**Configuration Options**:
-- StarDist model selection (e.g., "Versatile (H&E)")
-- Probability and NMS thresholds for nucleus detection
-- Input normalization and percentile adjustments
-- Tiling parameters for large images
-- Vascular segmentation thresholds and morphological operations
-
-### 2. Create Dataset
-**Status: Available** - *High-Performance Implementation with Modular Architecture*
-
-Advanced tools for creating custom classification datasets with streamlined workflow:
-
-- **🎯 Two-Phase Workflow**: Setup phase for file selection, classification phase for ROI assignment
-- **📊 Interactive Class Assignment**: Click-to-assign classes with visual feedback via [`NewDatasetROIOverlay`](src/main/java/com/scipath/scipathj/ui/dataset/NewDatasetROIOverlay.java:1)
-- **📁 Nested ZIP Support**: Enhanced loading from nested ZIP files with progress tracking
-- **⚡ High-Performance Loading**: Asynchronous ROI loading via [`ProgressiveROILoader`](src/main/java/com/scipath/scipathj/ui/dataset/ProgressiveROILoader.java:1) with smart filtering (cells + nuclei only)
-- **🚀 Fast Rendering**: High-performance ROI rendering via [`FastDatasetROIRenderer`](src/main/java/com/scipath/scipathj/ui/dataset/FastDatasetROIRenderer.java:1)
-- **🎯 Smart ROI Display**: Z-order management with cells on top for optimal interaction
-- **🔍 Intelligent Filtering**: Selective loading reduces memory usage by 50-70%
-- **📈 Class Management**: Dynamic class creation and management via [`DatasetClassManager`](src/main/java/com/scipath/scipathj/ui/dataset/DatasetClassManager.java:1)
-- **🔬 Feature Extraction**: Full morphological and textural feature extraction using analysis pipeline
-- **💾 Training Data Export**: Export structured JSON datasets with features, labels, and class metadata
-- **🤝 XGBoost Integration**: Direct workflow integration with training functionality
-- **🛡️ Robust Error Handling**: Comprehensive validation and corrupted file recovery
-- **💾 Modular Architecture**: Clean separation of concerns with [`DatasetMainPanel`](src/main/java/com/scipath/scipathj/ui/dataset/DatasetMainPanel.java:1) orchestration
-
-### 3. Train XGBoost Model
-**Status: Available** - *Complete Machine Learning Training Pipeline*
-
-Professional machine learning model training with comprehensive feature set:
-
-- **📊 Training Data Import**: Load JSON datasets created from dataset creation workflow
-- **🎛️ Feature Selection**: Interactive selection of morphological, textural, and color features
-- **⚙️ Hyperparameter Tuning**: Comprehensive XGBoost parameter configuration
-  - Learning rate, max depth, number of trees
-  - Regularization parameters (L1/L2)
-  - Subsampling and column sampling ratios
-- **⚖️ Class Balancing**: Automatic detection and correction of class imbalance
-- **📈 Training Monitoring**: Real-time progress tracking with detailed logging
-- **🧪 Model Evaluation**: Comprehensive evaluation with accuracy, precision, recall metrics
-- **📦 Model Bundles**: Complete model packages with metadata, feature lists, and class mappings
-- **🎨 Class Visualization**: Color-coded class management with training data preservation
-- **🔄 Integration**: Trained models can be loaded in analysis workflow for classification
-- **🛠️ Advanced Features**: Feature importance analysis, class distribution monitoring
-
-**Training Workflow:**
-1. **Data Selection**: Choose JSON training data file
-2. **Feature Configuration**: Select relevant features for training
-3. **Parameter Tuning**: Adjust hyperparameters for optimal performance
-4. **Training Execution**: Monitor progress with detailed feedback
-5. **Model Export**: Save complete model bundle for deployment
-
-### 4. Visualize Results
-**Status: Available** - *Enhanced with ROI System v2.0*
-
-Advanced visualization tools with the new ROI architecture:
-
-- **🎨 VisualizationROIManager**: Dedicated manager with custom color schemes
-- **🌈 Multiple Color Schemes**: Default, Heat Map, Feature-based, Classification, Custom
-- **📊 Feature Visualization**: Visualize measurements with normalized color mapping
-- **🔍 Interactive Exploration**: Click, select, and filter ROIs dynamically
-- **📈 Statistical Analysis**: Built-in tools for ROI population analysis
-- **🎯 Context-Aware Display**: Optimized visualization for analysis results
-- **💾 Export Options**: High-quality visualization exports with metadata
-
-## ROI System v2.0 API
-
-The new ROI system provides clean APIs for each application context:
-
-### Analysis Context API
-
-```java
-// Create analysis-specific ROI manager
-AnalysisROIManager analysisManager = new AnalysisROIManager();
-
-// Set classification results for visualization
-analysisManager.setClassificationResults(classificationResults);
-
-// Set measurements for ROIs
-analysisManager.setMeasurementData(roiKey, measurements);
-
-// Create analysis overlay with classification support
-AnalysisROIOverlay analysisOverlay = new AnalysisROIOverlay(settings, analysisManager);
-
-// Apply analysis-specific filters
-analysisOverlay.setAnalysisFilters(showClassifiedOnly, showValidOnly, customFilter);
-```
-
-### Dataset Context API
-
-```java
-// Create dataset main panel (orchestrates setup and classification)
-DatasetMainPanel datasetPanel = new DatasetMainPanel(settings);
-
-// Handle ROI loading with progress tracking using NewDatasetROIOverlay
-NewDatasetROIOverlay overlay = new NewDatasetROIOverlay();
-overlay.addInteractionListener(new NewDatasetROIOverlay.InteractionListener() {
-    @Override
-    public void onROIClicked(UserROI roi, String assignedClass) {
-        // Handle ROI click for class assignment
-    }
-    
-    @Override
-    public void onProgressUpdate(int loaded, int total) {
-        updateProgressBar(loaded, total);
-    }
-});
-
-// Load ROIs asynchronously with ProgressiveROILoader
-ProgressiveROILoader loader = new ProgressiveROILoader();
-loader.addProgressListener((loaded, total, rois) -> {
-    overlay.onROIBatchLoaded(rois, loaded, total);
-});
-loader.loadROIsProgressively(zipFile, imageName);
-
-// Class management through DatasetClassManager
-DatasetClassManager classManager = new DatasetClassManager();
-classManager.addClass("Tumor");
-classManager.addClass("Normal");
-```
-
-### Visualization Context API
-
-```java
-// Create visualization-specific ROI manager
-VisualizationROIManager vizManager = new VisualizationROIManager();
-
-// Set custom color scheme
-vizManager.setColorScheme(VisualizationROIManager.ColorScheme.HEAT_MAP);
-
-// Set feature for visualization
-vizManager.setActiveFeature("area");
-
-// Apply custom color to specific ROI
-vizManager.setCustomColor(roiKey, Color.RED);
-
-// Get feature statistics
-VisualizationROIManager.FeatureStatistics stats = vizManager.getFeatureStatistics("area");
-```
-
-### Core ROI Operations
-
-```java
-// All managers support common operations through ROIService
-ROIService roiService = new DefaultROIService();
-
-// Add ROI with biological structure type
-UserROI nucleusROI = new UserROI(nucleusShape, imageFileName, "Nucleus_001", UserROI.ROIType.NUCLEUS);
-roiService.addROI(nucleusROI);
-
-// Export ROIs
-roiService.saveAllROIsToMasterZip(outputFile);
-
-// Load ROIs with error handling
-try {
-    List<UserROI> loadedROIs = roiService.loadROIsFromFile(inputFile, imageName);
-} catch (IOException e) {
-    handleError(e);
-}
-```
-
-## ROI Management v2.0
-## ROI Management v2.0
-
-### Biological Structure ROI Types
-
-The new ROI system focuses exclusively on biological structures relevant to histopathological analysis:
-
-- **🔵 Nucleus**: Cell nuclei (green) - with morphological measurements
-- **🔵 Cytoplasm**: Cytoplasm regions (blue) - surrounding nuclei
-- **🟡 Cell**: Complete cell boundaries (yellow) - encompassing nucleus and cytoplasm
-- **🔴 Vessel**: Blood vessels (red) - vascular structures
-- **⚫ Ignore**: Regions to exclude (gray) - artifacts, background, etc.
-
-### Dataset Creation Optimizations
-
-The dataset creation workflow has been significantly enhanced:
-
-- **Smart Filtering**: Only cells and nuclei are loaded for optimal performance
-- **Z-Order Management**: Cells render on top of nuclei for proper hover interaction
-- **Async Processing**: Non-blocking ROI loading with progress feedback
-- **Nested ZIP Support**: Handles complex ZIP-in-ZIP file structures automatically
-- **Memory Optimization**: 50-70% reduction in memory usage through selective loading
-### Context-Specific ROI Management
-
-#### Analysis Context
-- **Classification Integration**: ROIs display classification results with confidence-based coloring
-- **Validation Status**: Mark ROIs as valid or ignored for analysis
-- **Morphological Measurements**: Automatic calculation of area, perimeter, circularity, etc.
-- **Interactive Filtering**: Filter by classification status, validation, or custom criteria
-
-#### Dataset Context
-- **Setup Phase**: [`DatasetSetupPanel`](src/main/java/com/scipath/scipathj/ui/dataset/DatasetSetupPanel.java:1) for file selection (ROI ZIP and image folder)
-- **Classification Phase**: [`DatasetClassificationPanel`](src/main/java/com/scipath/scipathj/ui/dataset/DatasetClassificationPanel.java:1) for interactive ROI class assignment
-- **Interactive Class Assignment**: Click-to-assign classes with visual feedback via [`NewDatasetROIOverlay`](src/main/java/com/scipath/scipathj/ui/dataset/NewDatasetROIOverlay.java:1)
-- **High-Performance Loading**: Asynchronous loading with smart filtering via [`ProgressiveROILoader`](src/main/java/com/scipath/scipathj/ui/dataset/ProgressiveROILoader.java:1)
-- **Fast Rendering**: High-performance ROI rendering via [`FastDatasetROIRenderer`](src/main/java/com/scipath/scipathj/ui/dataset/FastDatasetROIRenderer.java:1)
-- **Class Management**: Dynamic class creation and management via [`DatasetClassManager`](src/main/java/com/scipath/scipathj/ui/dataset/DatasetClassManager.java:1)
-- **Z-Order Display**: Cells render on top of nuclei for optimal interaction
-- **Memory Optimization**: 50-70% reduced memory footprint through selective loading (cells + nuclei only)
-
-#### Visualization Context
-- **Color Schemes**: Multiple visualization modes (Default, Heat Map, Feature-based, Custom)
-- **Feature Visualization**: Visualize measurements with normalized color mapping
-- **Interactive Coloring**: Custom color assignment for specific ROIs
-- **Statistical Analysis**: Built-in tools for ROI population analysis
-
-### File Operations
-
-#### Export Formats
-- **Single ROI**: `.roi` file (ImageJ compatible)
-- **Multiple ROIs**: `.zip` file (compressed set of ImageJ ROIs)
-- **Master Export**: All ROIs from all images in a single ZIP file
-
-#### Import Capabilities
-- **Individual Files**: Load single `.roi` files
-- **Batch Import**: Load multiple ROIs from `.zip` files
-- **Nested ZIP Support**: Handles complex ZIP-in-ZIP directory structures
-- **High-Performance Processing**: Async loading optimized for large datasets
-- **Smart Filtering**: Selective loading of cells and nuclei only for dataset creation
-- **Automatic Matching**: Intelligent filename matching (spaces to underscores conversion)
-- **Progress Tracking**: Real-time loading progress with batch processing
-
-### Performance Features
-
-- **Async Loading**: Non-blocking ROI loading with progress feedback
-- **Smart Filtering**: Load only relevant ROIs (cells + nuclei) for 50-70% memory reduction
-- **Shape Caching**: ROI shapes calculated once and cached for performance
-- **Buffered Rendering**: Native resolution rendering with fast copy operations
-- **Memory Optimization**: Efficient resource management and selective loading
-- **Perfect Alignment**: Uniform scale transform for accurate overlay positioning
-- **Z-Order Management**: Optimized layering with cells on top for interaction
-- **Batch Processing**: ROIs processed in batches for responsive UI
-
-## StarDist Integration
-
-SciPathJ integrates StarDist, a state-of-the-art algorithm for cell nucleus detection based on deep learning.
-
-### Supported Models
-- **Versatile (fluorescent)**: General model for fluorescent images.
-- **Versatile (H&E)**: Specific model for H&E histopathological images.
-- **DSB 2018**: Model trained on the DSB 2018 dataset.
-
-### StarDist Configuration (Example)
-
-Configuration is managed through immutable Java Records, ensuring settings are thread-safe and predictable.
-
-```java
-// Example of creating a configuration record
-var nuclearSettings = new NuclearSegmentationSettings(
-    "Versatile (H&E)", // modelChoice
-    0.5,               // probThresh
-    0.4,               // nmsThresh
-    true,              // normalizeInput
-    1.0,               // percentileBottom
-    99.8,              // percentileTop
-    1024,              // normTileSize
-    "ROI Manager"      // outputType
-);
-```
-
-### Automatic Pre-processing
-- Conversion to 8-bit for compatibility.
-- Percentile-based normalization.
-- Management of RGB images with separate channels.
-- Fallback to traditional methods in case of errors.
-
-## H&E Color Deconvolution
-
-SciPathJ includes a high-performance implementation of H&E color deconvolution based on the Ruifrok & Johnston method, identical to Fiji's Color Deconvolution plugin.
-
-### Features
-- **Ultra-fast Processing**: Optimized matrix operations with pre-computed inverse matrices
-- **Standard Stain Vectors**: Uses identical vectors as Fiji for guaranteed compatibility
-- **Three Channel Output**: Hematoxylin, Eosin, and Background channels
-- **Direct Pixel Access**: Bypasses ImageJ overhead for maximum performance
-
-### Algorithm
-The deconvolution process follows these steps:
-1. **RGB to Optical Density**: Convert RGB values to optical density using `OD = -log10(RGB/255.0)`
-2. **Matrix Multiplication**: Apply the inverse stain matrix to separate stains
-3. **Back to RGB**: Convert optical densities back to transmittance values
-
-### Stain Matrix
-```
-Hematoxylin: [0.650, 0.704, 0.286] (Red, Green, Blue)
-Eosin:       [0.072, 0.990, 0.105] (Red, Green, Blue)
-Background:  [0.000, 0.000, 0.000] (computed as cross product)
-```
-
-### Usage Example
-```java
-// Create deconvolution instance
-HEDeconvolution deconvolution = new HEDeconvolution(image);
-
-// Perform deconvolution
-deconvolution.performDeconvolution();
-
-// Get individual channels
-ImagePlus hematoxylin = deconvolution.getHematoxylinImage();
-ImagePlus eosin = deconvolution.getEosinImage();
-ImagePlus background = deconvolution.getBackgroundImage();
-```
-
-### Testing
-Run the test to verify deconvolution works correctly:
-```bash
-mvn exec:java -Dexec.mainClass=com.scipath.scipathj.core.analysis.HEDeconvolutionTest
-```
+### Main Settings
+
+![Main Application Settings](https://lh3.googleusercontent.com/d/1v4uFGjdB4LNyuUqeuZCEXsKcPmsJwjJA)
+
+### System Requirements
+
+| Requirement | Minimum |
+|-------------|---------|
+| Operating System | Windows|
+| RAM | 4 GB |
+| Storage | 1.2 GB |
+| Java | JRE 11 |
+
+### Quick Installation
+
+1. **Download** the installer from the [Releases page](https://github.com/sebastianmicu24/scipathj/releases)
+2. **Run** the installer and follow the on-screen instructions
+3. **Launch** SciPathJ from your desktop or Start menu
+
+That's it! The installer handles all dependencies automatically.
+
+### ImageJ/Fiji Plugin (Legacy)
+
+The ImageJ/Fiji plugin version is available but is no longer actively maintained. For the latest features and improvements, we recommend using the standalone version.
+
+## Getting Started
+
+### Your First Analysis in 5 Steps
+
+1. **Open an Image**: Click "Open Folder" and select your H&E stained image (supports TIFF, PNG, JPEG, NDPI, SVS, and more)
+2. **Configure Settings**: Adjust detection parameters for your specific tissue type (or use the defaults)
+3. **Run Analysis**: Click "Start" and watch as SciPathJ identifies cells, nuclei, and vessels
+4. **Review Results**: View the detected structures overlaid on your image with color coding
+5. **Export Data**: Save all measurements to CSV files for further analysis
+
+### Understanding the Interface
+
+The main window is organized into intuitive sections:
+
+![SciPathJ Main Interface](https://lh3.googleusercontent.com/d/1y0WfhMlXYUYki-wQbup-D03Hw2dlsMVa)
+
+- **Top Bar**: Pipeline steps showing the analysis workflow progression
+- **Left Sidebar**: Thumbnail gallery for navigating between images
+- **Center Canvas**: Your image with segmentation overlays
+- **Bottom Toolbar**: Controls for saving, clearing, and viewing statistics
+- **Status Bar**: Real-time feedback on analysis progress
+
+### Color Coding
+
+![Display Settings](https://lh3.googleusercontent.com/d/1WsUJPLFmQARwEjDHR6sHx9qOwFWbU8D7)
+
+SciPathJ uses consistent colors to help you identify structures:
+
+| Structure | Default Color | Description |
+|-----------|-------|-------------|
+| **Nuclei** | Blue | Cell nuclei detected from hematoxylin staining |
+| **Cytoplasm** | Black | Cytoplasm regions surrounding each nucleus |
+| **Vessels** | Red | Blood vessels and vascular structures |
+| **Cells** | Yellow | Complete cell boundaries (nucleus + cytoplasm) |
+
+## Analysis Pipeline
+
+SciPathJ processes your images through a series of automated steps:
+
+### 1. Vessel Segmentation
+
+![Vessel Segmentation Settings](https://lh3.googleusercontent.com/d/1_Gvig6gdgPI9UzAILkomI8RlKAAReTAR)
+
+Detects blood vessels based on their characteristic shape and staining patterns. You can adjust:
+- Detection sensitivity (threshold)
+- Minimum and maximum vessel size
+- Smoothing and noise reduction
+
+### 2. Nuclear Segmentation
+
+![Nuclear Segmentation Settings](https://lh3.googleusercontent.com/d/1uo2SB1S37L0XicM5IgBZPFRsMUiyEzCv)
+
+Uses advanced deep learning (StarDist) to identify cell nuclei with high accuracy. Settings include:
+- Pre-trained model selection (optimized for H&E stains)
+- Detection sensitivity
+- Size filters to exclude artifacts
+
+### 3. Cell Creation
+
+![Cytoplasm Segmentation Settings](https://lh3.googleusercontent.com/d/1yvshHSpyQA-wAPUhUaVKYEm8IX6xeh7h)
+
+Combines detected nuclei with surrounding cytoplasm to define complete cells:
+- Voronoi tessellation estimates cell boundaries
+- Handles polynucleated cells (cells with multiple nuclei)
+- Excludes vessel areas from cell detection
+
+### 4. Feature Extraction
+
+![Feature Extraction Settings](https://lh3.googleusercontent.com/d/1X86OPcZqakId3WwnNJpYwxmYAHVUt1NT)
+
+Calculates over 150 measurements for each detected structure:
+
+**Shape Measurements**: Area, perimeter, circularity, aspect ratio, solidity, and more
+
+**Intensity Measurements**: Mean, median, standard deviation, minimum, maximum of staining intensity
+
+**H&E-Specific Features**: Separate measurements for hematoxylin (nuclear) and eosin (cytoplasmic) staining
+
+**Spatial Features**: Distance to nearest vessel, number of neighboring cells
+
+### 5. Cell Classification
+
+![Unsupervised Classification Settings](https://lh3.googleusercontent.com/d/1ur7IaUzLuWTH1gbfDwb2PQhyFte_OKPX)
+
+Two options for categorizing your cells:
+
+**Unsupervised Clustering**: Automatically groups cells based on similarity (K-Means algorithm)
+
+**Supervised Classification**: Train your own model by labeling example cells, then apply it to all images
+
+## Training Custom Classifiers
+
+One of SciPathJ's most powerful features is the ability to train custom cell classifiers:
+
+### How It Works
+
+1. **Create a Dataset**: Select representative cells from your images
+2. **Label Cells**: Assign each cell to a category (e.g., "Tumor", "Normal", "Inflammatory")
+3. **Train Model**: SciPathJ uses XGBoost machine learning to learn the patterns
+4. **Apply Model**: Use the trained model to classify all cells in new images automatically
+
+### Why This Matters
+
+Instead of manually counting hundreds or thousands of cells, you can:
+- Label just 100-200 example cells
+- Train a model in minutes
+- Automatically classify thousands of cells with consistent criteria
+
+## Output and Results
+
+### What You Get
+
+After analysis, SciPathJ provides:
+
+**Visual Results**:
+- Segmentation overlays on your original images
+- Color-coded classification results
+- Cluster visualization for unsupervised analysis
+
+![Extracted Features Table](https://lh3.googleusercontent.com/d/11raUcEYNlHHod5PR8bG4bf22TD3INKXD)
+
+**Data Files**:
+- CSV files with all measurements for each detected structure
+- Summary statistics per image and across batches
+- ROI files compatible with ImageJ
+
+![ROI Statistics Summary](https://lh3.googleusercontent.com/d/10A9uQ3mq3NLdCRUwP1CgkzemYyGGGSLd)
+
+**Export Options**:
+- Individual images or entire folders
+- Combined CSV files for batch analysis
+- ROI files for further processing
+
+![Cluster Visualization](https://lh3.googleusercontent.com/d/1mDbgrhLKr0Qu_kfVW6Z1n_L9QdieJB_j)
+
+### Using Your Results
+
+The CSV output can be:
+- Opened directly in Excel for filtering and basic statistics
+- Imported into R or Python for advanced analysis
+- Used for publication-ready figures and tables
+- Combined with clinical data for research studies
+
+## Examples
+
+SciPathJ has been successfully used to analyze various tissue types. Here are some before and after examples:
+
+### Liver Tissue
+![Liver Before](https://drive.google.com/thumbnail?id=1HjMpLIfhVg38-_efIvIIvIX_6H4o6Yle&sz=w600) | ![Liver After](https://drive.google.com/thumbnail?id=1Q8_kTDty2nq3GlEwl7x5N-S8dpXW6ocZ&sz=w600)
+:---:|:---:
+*Before* | *After - Vessels (red), Nuclei (blue), Cells (black)*
+
+### Kidney Tissue
+![Kidney Before](https://drive.google.com/thumbnail?id=1Pa5s4Z6xPS7wF7s1L7Ub6t75z5hRJHG_&sz=w600) | ![Kidney After](https://drive.google.com/thumbnail?id=1mcZozdUNCiiRr688xUfhPzMlYMq-AKQO&sz=w600)
+:---:|:---:
+*Before* | *After*
+
+### Pancreas Tissue
+![Pancreas Before](https://drive.google.com/thumbnail?id=1XiTgSSCmmg9cd-fHvOgKii8XKexTlqaI&sz=w600) | ![Pancreas After](https://drive.google.com/thumbnail?id=1ediNHPqwD108A9oQsz5cBOxIPEdBGfva&sz=w600)
+:---:|:---:
+*Before* | *After*
+
+### More Tissue Types
+
+| Tissue | Application |
+|--------|-------------|
+| **Liver** | Vessel detection, hepatocyte analysis |
+| **Pancreas** | Islet cell identification |
+| **Kidney** | Glomeruli detection and measurement |
+| **Spleen** | White pulp vs red pulp analysis |
+| **Lung** | Alveolar structure quantification |
+| **Skin** | Epidermal layer analysis |
+| **And more...** | Works with most H&E stained tissues |
+
+View the complete [Examples Gallery](https://scipathj.com/examples) on our website.
+
+## Learning Resources
 
 ### Documentation
-For detailed technical information, see [`HE_DECONVOLUTION.md`](HE_DECONVOLUTION.md).
 
-## Development
+Comprehensive documentation is available covering:
+- Installation guide
+- Interface overview
+- Each analysis step in detail
+- Feature reference
+- Troubleshooting
 
-The project adheres to professional Java development guidelines to ensure a high-quality, maintainable, and extensible codebase.
+Visit our [Documentation Page](https://scipathj.com/docs)
 
-### Development Environment
+### Video Tutorials
 
-- **Recommended IDE**: IntelliJ IDEA
-- **Useful Plugins**:
-  - Maven Integration
-  - Git Integration
-  - SonarLint / Checkstyle
+Watch step-by-step video tutorials:
+- Getting Started with SciPathJ
+- Image Segmentation Deep Dive
+- Training Custom Classifiers
+- Batch Processing Workflows
+- Feature Extraction & Analysis
 
-### Architectural Principles
+Visit our [Tutorials Page](https://scipathj.com/tutorials)
 
-The codebase is built upon the **SOLID** principles:
-- **(S)ingle Responsibility Principle**: Each class has a single, well-defined responsibility.
-- **(O)pen/Closed Principle**: Software entities are open for extension, but closed for modification.
-- **(L)iskov Substitution Principle**: Subtypes are substitutable for their base types.
-- **(I)nterface Segregation Principle**: Clients are not forced to depend on interfaces they do not use.
-- **(D)ependency Inversion Principle**: High-level modules do not depend on low-level modules; both depend on abstractions. Dependency Injection is used throughout the application.
+### Recommended Learning Path
 
-### Coding Practices
-- **Immutability**: Data-carrying classes are implemented as immutable Java Records where possible.
-- **Comprehensive Documentation**: JavaDoc for all public classes and methods.
-- **Robust Error Handling**: Specific, custom exceptions are used instead of generic ones.
-- **Unit Testing**: JUnit 5 with Mockito for creating robust and isolated tests.
+1. Start with the "Getting Started" tutorial
+2. Practice segmentation on sample images
+3. Explore the extracted features
+4. Learn to train custom classifiers
+5. Set up batch processing for your projects
 
-### Building and Testing
+## Project History
 
-```bash
-# Compile and run all tests
-mvn clean test
+SciPathJ was developed to solve a real problem in histopathology research: the need for accessible, automated image analysis.
 
-# Run code quality analysis
-mvn spotbugs:check pmd:check
+| Date | Milestone |
+|------|-----------|
+| **October 2024** | Project started as a Fiji/ImageJ macro using Weka segmentation |
+| **March 2025** | Evolved into "SCHELI" plugin with StarDist and XGBoost |
+| **July 2025** | Presented as a Master's Thesis at Sapienza University of Rome |
+| **August 2025** | Added graphical interface, renamed to SciPathJ, expanded to all tissue types |
+| **October 2025** | Presented at Maker Faire Rome |
 
-# Generate test coverage report
-mvn jacoco:report
-```
+## The Team
+
+### Lead Developer
+
+**Sebastian Micu** - Medical Resident in Clinical Genetics at Sapienza University of Rome with a passion for programming and machine learning. Developed SciPathJ as a continuation of thesis research.
+
+### Partner Institutions
+
+- **Sapienza University of Rome** - One of Italy's oldest and most prestigious universities
+- **Centro de Biología Molecular Severo Ochoa** (Madrid) - Molecular biology research center
 
 ## Contributing
 
-We welcome contributions! Please follow these guidelines to get started.
+We welcome contributions from the community! Here's how you can help:
 
-### Contribution Guidelines
+### Ways to Contribute
 
-1.  Fork the repository.
-2.  Create a feature branch: `git checkout -b feature/new-feature`
-3.  Commit your changes: `git commit -m 'Add new feature'`
-4.  Push to the branch: `git push origin feature/new-feature`
-5.  Open a Pull Request.
+- **Report Bugs**: Found an issue? Let us know on GitHub Issues
+- **Suggest Features**: Have ideas for improvements? We'd love to hear them
+- **Submit Code**: Pull requests are welcome
+- **Improve Documentation**: Help make our docs clearer and more complete
+- **Share Examples**: Share your analysis results to help other users
 
-### Reporting Bugs
+### Getting Started with Contributing
 
-Please use GitHub Issues to report bugs:
-- Use a descriptive title.
-- Provide steps to reproduce the issue.
-- Explain the expected vs. observed behavior.
-- Include a stack trace if available.
-- Specify your Java and operating system versions.
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/new-feature`)
+3. Make your changes
+4. Commit your changes (`git commit -m 'Add new feature'`)
+5. Push to the branch (`git push origin feature/new-feature`)
+6. Open a Pull Request
+
+## Support
+
+### Need Help?
+
+- **Documentation**: Check our comprehensive [Documentation](https://scipathj.com/docs)
+- **Tutorials**: Watch our [Video Tutorials](https://scipathj.com/tutorials)
+- **GitHub Issues**: Report bugs or request features on [GitHub Issues](https://github.com/sebastianmicu24/scipathj/issues)
+- **Discussions**: Join the conversation on [GitHub Discussions](https://github.com/sebastianmicu24/scipathj/discussions)
+
+### Frequently Asked Questions
+
+**Q: What image formats does SciPathJ support?**  
+A: Common formats (TIFF, PNG, JPEG, BMP, GIF) and microscopy formats (NDPI, SVS, LSM, CZI, ND2, and more)
+
+**Q: Can I use SciPathJ for fluorescent images?**  
+A: SciPathJ is optimized for H&E stained images. For fluorescent images, consider using the StarDist plugin directly in Fiji.
+
+**Q: How accurate is the segmentation?**  
+A: Nuclear segmentation using StarDist typically achieves >90% accuracy on good quality H&E images. Results may vary depending on image quality and tissue type.
+
+**Q: Can I use the software for commercial purposes?**  
+A: Yes, under the GPLv3 license. See the LICENSE file for details.
+
+**Q: How many cells can SciPathJ process?**  
+A: SciPathJ has been tested with images containing over 10,000 cells. Memory requirements scale with image size.
 
 ## License
 
-This project is distributed under the BSD 3-Clause License. See the [LICENSE](LICENSE) file for details.
+SciPathJ is released under the **GNU General Public License v3.0 (GPLv3)**. This means:
 
-## Acknowledgments
+- Free to use for any purpose
+- Free to study and modify the source code
+- Free to share with others
+- Any modifications must also be open source
 
-- **ImageJ Team**: For the outstanding image processing framework.
-- **StarDist Team**: For the state-of-the-art nuclear segmentation algorithm.
-- **CSBDeep Team**: For the deep learning framework for biological analysis.
-- **FlatLaf Team**: For the modern Swing Look and Feels.
+See the [LICENSE](LICENSE) file for full details.
 
-## Contact
+## Acknowledgements
 
-- **Author**: Sebastian Micu
-- **Email**: sebastian.micu@example.com
-- **Repository**: https://github.com/sebastianmicu24/scipathj
-- **Issues**: https://github.com/sebastianmicu24/scipathj/issues
+We thank:
+- **Centro de Biología Molecular Severo Ochoa** in Madrid for research support
+- **Sapienza University of Rome** for academic guidance
+- The **open-source community** for the tools and libraries that made this project possible
+- All **contributors and testers** who helped improve SciPathJ
+
+## Citation
+
+If you use SciPathJ in your research, please cite:
+
+```
+Micu, S. (2025). SciPathJ: Segmentation and Classification of Images - 
+Pipeline for the Analysis of Tissue Histopathology. 
+GitHub Repository: https://github.com/sebastianmicu24/scipathj
+```
 
 ---
 
-**SciPathJ** - A professional tool for digital histopathological analysis.
+**Links**
+
+[Website](https://scipathj.com) | [Documentation](https://scipathj.com/docs) | [Tutorials](https://scipathj.com/tutorials) | [Examples](https://scipathj.com/examples) | [Download](https://scipathj.com/download) | [GitHub](https://github.com/sebastianmicu24/scipathj)
+
+---
+
+*SciPathJ - Transforming what you see into numbers you can analyze.*
