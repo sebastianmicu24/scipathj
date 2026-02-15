@@ -50,7 +50,6 @@ SciPathJ is a free, open-source software designed to help researchers and medica
   - [Frequently Asked Questions](#frequently-asked-questions)
 - [License](#license)
 - [Acknowledgements](#acknowledgements)
-- [Citation](#citation)
 
 ## What Can SciPathJ Do?
 
@@ -379,16 +378,6 @@ We thank:
 - **Sapienza University of Rome** for academic guidance
 - The **open-source community** for the tools and libraries that made this project possible
 - All **contributors and testers** who helped improve SciPathJ
-
-## Citation
-
-If you use SciPathJ in your research, please cite:
-
-```
-Micu, S. (2025). SciPathJ: Segmentation and Classification of Images - 
-Pipeline for the Analysis of Tissue Histopathology. 
-GitHub Repository: https://github.com/sebastianmicu24/scipathj
-```
 
 ---
 
