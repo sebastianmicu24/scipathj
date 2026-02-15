@@ -45,9 +45,6 @@ SciPathJ is a free, open-source software designed to help researchers and medica
 - [The Team](#the-team)
   - [Lead Developer](#lead-developer)
   - [Partner Institutions](#partner-institutions)
-- [Contributing](#contributing)
-  - [Ways to Contribute](#ways-to-contribute)
-  - [Getting Started with Contributing](#getting-started-with-contributing)
 - [Support](#support)
   - [Need Help?](#need-help)
   - [Frequently Asked Questions](#frequently-asked-questions)
@@ -344,25 +341,6 @@ SciPathJ was developed to solve a real problem in histopathology research: the n
 
 We welcome contributions from the community! Here's how you can help:
 
-### Ways to Contribute
-
-- **Report Bugs**: Found an issue? Let us know on GitHub Issues
-- **Suggest Features**: Have ideas for improvements? We'd love to hear them
-- **Submit Code**: Pull requests are welcome
-- **Improve Documentation**: Help make our docs clearer and more complete
-- **Share Examples**: Share your analysis results to help other users
-
-### Getting Started with Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/new-feature`)
-3. Make your changes
-4. Commit your changes (`git commit -m 'Add new feature'`)
-5. Push to the branch (`git push origin feature/new-feature`)
-6. Open a Pull Request
-
-## Support
-
 ### Need Help?
 
 - **Documentation**: Check our comprehensive [Documentation](https://scipathj.com/docs)
@@ -373,7 +351,7 @@ We welcome contributions from the community! Here's how you can help:
 ### Frequently Asked Questions
 
 **Q: What image formats does SciPathJ support?**  
-A: Common formats (TIFF, PNG, JPEG, BMP, GIF) and microscopy formats (NDPI, SVS, LSM, CZI, ND2, and more)
+A: Common formats (TIFF, PNG, JPEG, BMP, GIF)
 
 **Q: Can I use SciPathJ for fluorescent images?**  
 A: SciPathJ is optimized for H&E stained images. For fluorescent images, consider using the StarDist plugin directly in Fiji.
