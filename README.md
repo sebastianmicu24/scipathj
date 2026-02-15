@@ -337,10 +337,6 @@ SciPathJ was developed to solve a real problem in histopathology research: the n
 - **Sapienza University of Rome** - One of Italy's oldest and most prestigious universities
 - **Centro de Biología Molecular Severo Ochoa** (Madrid) - Molecular biology research center
 
-## Contributing
-
-We welcome contributions from the community! Here's how you can help:
-
 ### Need Help?
 
 - **Documentation**: Check our comprehensive [Documentation](https://scipathj.com/docs)
